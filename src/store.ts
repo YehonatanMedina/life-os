@@ -193,6 +193,23 @@ const MIGRATIONS: Array<{ id: string; run: (s: AppState) => AppState }> = [
       }
     },
   },
+  {
+    // 28.8: שלב אחרון בשגרת הבוקר — לקרוא חדשות
+    id: 'morning-news-2026-08',
+    run: (s) => {
+      if (!s.tracks.some((t) => t.id === 'trk-exams' && !t.deleted)) return s
+      const now = Date.now()
+      return {
+        ...s,
+        habits: s.habits.map((h) => {
+          if (h.id !== 'hb-morning' || h.deleted) return h
+          const steps = h.steps ?? []
+          if (steps.some((x) => x.text.includes('חדשות'))) return h
+          return { ...h, steps: [...steps, { id: 'hm-news', text: 'לקרוא חדשות' }], updatedAt: now }
+        }),
+      }
+    },
+  },
 ]
 
 function applyMigrations(s: AppState): AppState {
