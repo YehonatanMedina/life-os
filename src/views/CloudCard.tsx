@@ -122,7 +122,12 @@ export default function CloudCard() {
           <ol className="small muted" style={{ margin: '0 0 10px', paddingInlineStart: 20, lineHeight: 1.9 }}>
             <li>
               פתח{' '}
-              <a href={TOKEN_URL} target="_blank" rel="noreferrer">
+              <a
+                href={TOKEN_URL}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: 'inline-block', padding: '5px 0', fontWeight: 700 }}
+              >
                 יצירת אסימון ב-GitHub
               </a>
             </li>
