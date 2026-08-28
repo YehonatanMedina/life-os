@@ -11,7 +11,7 @@
 // ---------------------------------------------------------------------------
 
 import { useSyncExternalStore } from 'react'
-import { store, mergeStates } from './store'
+import { consumeFreshInstall, store, mergeStates } from './store'
 import type { AppState } from './types'
 
 const API = 'https://api.github.com'
@@ -151,7 +151,12 @@ export async function pullOnce(): Promise<boolean> {
   const remote = await readRemote()
   if (!remote) return false
   const before = snapshotOf(store.get())
-  store.set((local) => mergeStates(local, remote))
+  if (consumeFreshInstall()) {
+    // מכשיר חדש: מה שבענן הוא התמונה, לא תוספת לתוכן הפתיחה
+    store.replace({ ...remote, timer: null })
+  } else {
+    store.set((local) => mergeStates(local, remote))
+  }
   return snapshotOf(store.get()) !== before
 }
 

@@ -225,6 +225,18 @@ function safeParse(raw: string | null, keepCopy = false): AppState | null {
   }
 }
 
+/**
+ * התקנה חדשה לגמרי — לא היה כלום באחסון. במקרה כזה המשיכה הראשונה מהענן
+ * מחליפה את תוכן הפתיחה במקום להתמזג איתו, אחרת המסלולים הגנריים היו
+ * נערמים על התוכן האמיתי.
+ */
+let freshInstall = false
+export function consumeFreshInstall(): boolean {
+  const v = freshInstall
+  freshInstall = false
+  return v
+}
+
 export function loadState(): AppState {
   let s: AppState | null = null
   try {
@@ -232,7 +244,10 @@ export function loadState(): AppState {
   } catch {
     s = null
   }
-  if (!s) s = seedState()
+  if (!s) {
+    s = seedState()
+    freshInstall = true
+  }
   // הגנות לפני מיזוג הזרע — מצב ישן או פגום לא יפיל את האפליקציה
   for (const k of ['tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits', 'weekly', 'phases'] as const) {
     if (!Array.isArray((s as any)[k])) (s as any)[k] = []
