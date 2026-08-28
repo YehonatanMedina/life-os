@@ -61,9 +61,9 @@ export default function CloudCard() {
       {connected ? (
         <>
           <p className="small muted" style={{ marginTop: 0 }}>
-            המחשב והטלפון קוראים וכותבים לאותו מחסן פרטי אצלך ב-GitHub. כל שינוי נשלח לבד
-            אחרי כמה שניות, וכל מכשיר בודק כל 10 שניות אם משהו התחדש. אין צורך שהמכשיר השני
-            יהיה דלוק.
+            המחשב והטלפון קוראים וכותבים לאותו מחסן אצלך ב-GitHub. כל שינוי נשלח לבד אחרי
+            כמה שניות, וכל מכשיר בודק כל 10 שניות אם משהו התחדש. אין צורך שהמכשיר השני יהיה
+            דלוק.
           </p>
           {status === 'error' && (
             <p className="tiny" style={{ color: 'var(--bad)', marginTop: 0 }}>
@@ -189,6 +189,9 @@ export default function CloudCard() {
           )}
           <p className="tiny faint" style={{ marginTop: 10, marginBottom: 0 }}>
             האסימון נשמר רק בדפדפן הזה. הוא לא נשלח למחסן ולא נמצא בקוד של האתר.
+            <br />
+            המחסן הוא <b>secret gist</b>: הוא לא מופיע בחיפוש ובפרופיל, אבל מי שמקבל את
+            הכתובת שלו יכול לקרוא אותה. אל תשתף את המזהה.
           </p>
         </div>
       )}
