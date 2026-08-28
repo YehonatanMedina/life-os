@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import {
-  HE_STATUS, createGist, getGistId, getToken, pullOnce, pushNow, setCredentials, useCloudState,
+  HE_STATUS, createGist, getPairing, getToken, pullOnce, pushNow, setCredentials, useCloudState,
 } from '../cloud'
 import { Field, useToast } from '../ui'
 
@@ -15,10 +15,10 @@ export default function CloudCard() {
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const [token, setToken] = useState(getToken())
-  const [gist, setGist] = useState(getGistId())
+  const [gist, setGist] = useState(getPairing())
   const [busy, setBusy] = useState(false)
 
-  const connected = !!getToken() && !!getGistId()
+  const connected = !!getToken() && !!getPairing()
 
   const save = () => {
     setCredentials(token, gist)
@@ -32,9 +32,9 @@ export default function CloudCard() {
     try {
       setCredentials(token, '')
       const id = await createGist()
-      setGist(id)
       setCredentials(token, id)
-      toast('נוצר מחסן חדש · הכל נשלח')
+      setGist(getPairing())
+      toast('נוצר מחסן מוצפן · הכל נשלח')
     } catch (e: any) {
       toast(e?.message === 'auth' ? 'האסימון נדחה — בדוק את ההרשאה' : 'לא הצליח ליצור')
     } finally {
@@ -70,8 +70,10 @@ export default function CloudCard() {
               {lastError === 'auth'
                 ? 'האסימון נדחה או פג. צור אחד חדש והדבק אותו כאן.'
                 : lastError === 'not-found'
-                  ? 'המחסן לא נמצא. בדוק את המזהה.'
-                  : `שגיאה: ${lastError}`}
+                  ? 'המחסן לא נמצא. בדוק את מזהה החיבור.'
+                  : lastError === 'no-key' || lastError === 'bad-key'
+                    ? 'המחסן מוצפן וחסר המפתח — הדבק את מזהה החיבור המלא (עם החלק שאחרי #).'
+                    : `שגיאה: ${lastError}`}
             </p>
           )}
           <div className="row" style={{ marginTop: 10 }}>
@@ -157,13 +159,13 @@ export default function CloudCard() {
               onChange={(e) => setToken(e.target.value)}
             />
           </Field>
-          <Field label="מזהה המחסן (Gist)" htmlFor="gh-gist">
+          <Field label="מזהה החיבור" htmlFor="gh-gist">
             <input
               id="gh-gist"
               className="input ltr"
               autoComplete="off"
               spellCheck={false}
-              placeholder="מדביקים כאן במכשיר השני"
+              placeholder="מזהה#מפתח — מדביקים כאן במכשיר השני"
               value={gist}
               onChange={(e) => setGist(e.target.value)}
             />
@@ -178,7 +180,7 @@ export default function CloudCard() {
           </div>
           {!!gist && (
             <div className="tiny faint" style={{ marginTop: 10 }}>
-              במכשיר השני הדבק את המזהה הזה:
+              במכשיר השני הדבק את מזהה החיבור הזה (כולל מה שאחרי ה-#):
               <div
                 className="ltr"
                 style={{ userSelect: 'all', fontWeight: 700, wordBreak: 'break-all', marginTop: 2 }}
@@ -188,10 +190,10 @@ export default function CloudCard() {
             </div>
           )}
           <p className="tiny faint" style={{ marginTop: 10, marginBottom: 0 }}>
-            האסימון נשמר רק בדפדפן הזה. הוא לא נשלח למחסן ולא נמצא בקוד של האתר.
+            האסימון והמפתח נשמרים רק בדפדפן הזה — לא בענן ולא בקוד של האתר.
             <br />
-            המחסן הוא <b>secret gist</b>: הוא לא מופיע בחיפוש ובפרופיל, אבל מי שמקבל את
-            הכתובת שלו יכול לקרוא אותה. אל תשתף את המזהה.
+            התוכן במחסן <b>מוצפן</b> (AES-256): גם מי שמגיע אליו רואה צופן חסר משמעות.
+            המפתח הוא החלק שאחרי ה-# במזהה החיבור.
           </p>
         </div>
       )}

@@ -18,6 +18,7 @@ const API = 'https://api.github.com'
 const FILE = 'life-os.json'
 const TOKEN_KEY = 'life-os-gh-token'
 const GIST_KEY = 'life-os-gist-id'
+const CRYPT_KEY = 'life-os-crypt-key'
 
 export type CloudStatus = 'off' | 'synced' | 'pending' | 'sending' | 'error' | 'offline'
 
@@ -36,18 +37,77 @@ export function getGistId(): string {
     return ''
   }
 }
-export function setCredentials(token: string, gistId: string) {
+export function getCryptKey(): string {
+  try {
+    return localStorage.getItem(CRYPT_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+/** מזהה החיבור שמעבירים בין מכשירים: מזהה־המחסן ומפתח־ההצפנה יחד */
+export function getPairing(): string {
+  const id = getGistId()
+  const k = getCryptKey()
+  return id ? (k ? `${id}#${k}` : id) : ''
+}
+export function setCredentials(token: string, pairing: string) {
+  // המזהה שמועבר בין מכשירים הוא "מזהה#מפתח" — המפתח מפענח את התוכן
+  const [gistId, key] = pairing.trim().split('#')
   try {
     if (token) localStorage.setItem(TOKEN_KEY, token.trim())
     else localStorage.removeItem(TOKEN_KEY)
     if (gistId) localStorage.setItem(GIST_KEY, gistId.trim())
     else localStorage.removeItem(GIST_KEY)
+    if (key) localStorage.setItem(CRYPT_KEY, key.trim())
+    else if (!gistId) localStorage.removeItem(CRYPT_KEY)
   } catch {
     /* ignore */
   }
   baseline = null
   setStatus(token && gistId ? 'pending' : 'off')
   void tick()
+}
+
+// -- הצפנה ------------------------------------------------------------------
+// AES-GCM עם מפתח אקראי שנוצר במכשיר. מה שיושב ב-GitHub הוא צופן חסר משמעות
+// למי שאין לו את המפתח — והמפתח עובר רק בתוך מזהה החיבור, לא נשמר בענן.
+function b64u(bytes: Uint8Array): string {
+  let s = ''
+  bytes.forEach((b) => (s += String.fromCharCode(b)))
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+function unb64u(s: string): Uint8Array {
+  const t = s.replace(/-/g, '+').replace(/_/g, '/')
+  const bin = atob(t + '='.repeat((4 - (t.length % 4)) % 4))
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0))
+}
+export function newCryptKey(): string {
+  return b64u(crypto.getRandomValues(new Uint8Array(32)))
+}
+async function aesKey(b64: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey('raw', unb64u(b64) as BufferSource, 'AES-GCM', false, [
+    'encrypt',
+    'decrypt',
+  ])
+}
+async function encryptText(plain: string, keyB64: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const key = await aesKey(keyB64)
+  const ct = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: iv as BufferSource },
+    key,
+    new TextEncoder().encode(plain),
+  )
+  return JSON.stringify({ enc: 1, iv: b64u(iv), ct: b64u(new Uint8Array(ct)) })
+}
+async function decryptText(ivB64: string, ctB64: string, keyB64: string): Promise<string> {
+  const key = await aesKey(keyB64)
+  const plain = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: unb64u(ivB64) as BufferSource },
+    key,
+    unb64u(ctB64) as BufferSource,
+  )
+  return new TextDecoder().decode(plain)
 }
 
 // -- מצב ריאקטיבי ------------------------------------------------------------
@@ -112,10 +172,20 @@ async function api(path: string, init?: RequestInit): Promise<any> {
 
 /** יוצר Gist פרטי חדש ומחזיר את המזהה */
 export async function createGist(): Promise<string> {
+  let key = getCryptKey()
+  if (!key) {
+    key = newCryptKey()
+    try {
+      localStorage.setItem(CRYPT_KEY, key)
+    } catch {
+      /* ignore */
+    }
+  }
+  const content = await encryptText(JSON.stringify(forCloud(store.get())), key)
   const body = {
-    description: 'מערכת ההפעלה — מצב מסונכרן. לא לערוך ידנית.',
+    description: 'מערכת ההפעלה — מצב מסונכרן ומוצפן. לא לערוך ידנית.',
     public: false,
-    files: { [FILE]: { content: JSON.stringify(forCloud(store.get())) } },
+    files: { [FILE]: { content } },
   }
   const r = await api('/gists', { method: 'POST', body: JSON.stringify(body) })
   return r.id as string
@@ -129,20 +199,35 @@ async function readRemote(): Promise<AppState | null> {
   if (!f) return null
   // גיסט גדול מגיע קטוע, ואז יש raw_url להורדה מלאה
   const raw: string = f.truncated ? await (await fetch(f.raw_url)).text() : f.content
+  let parsed: any
   try {
-    const parsed = JSON.parse(raw)
-    return parsed && Array.isArray(parsed.tasks) ? (parsed as AppState) : null
+    parsed = JSON.parse(raw)
   } catch {
     return null
   }
+  if (parsed && parsed.enc === 1) {
+    const key = getCryptKey()
+    if (!key) throw new Error('no-key')
+    let plain: string
+    try {
+      plain = await decryptText(parsed.iv, parsed.ct, key)
+    } catch {
+      throw new Error('bad-key')
+    }
+    parsed = JSON.parse(plain)
+  }
+  return parsed && Array.isArray(parsed.tasks) ? (parsed as AppState) : null
 }
 
 async function writeRemote(s: AppState): Promise<void> {
   const id = getGistId()
   if (!id) throw new Error('no-gist')
+  const key = getCryptKey()
+  const json = JSON.stringify(forCloud(s))
+  const content = key ? await encryptText(json, key) : json
   await api(`/gists/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ files: { [FILE]: { content: JSON.stringify(forCloud(s)) } } }),
+    body: JSON.stringify({ files: { [FILE]: { content } } }),
   })
 }
 
@@ -245,8 +330,27 @@ async function tick() {
   }
 }
 
+/**
+ * חיבור בקליק אחד: פתיחת הכתובת עם ‎#setup=…‎ מגדירה את המכשיר ונעלמת.
+ * ה-fragment אף פעם לא נשלח לשרת, והשורה מוחלפת בהיסטוריה מיד.
+ */
+function consumeSetupLink() {
+  try {
+    const m = location.hash.match(/#setup=([A-Za-z0-9\-_]+)/)
+    if (!m) return
+    const cfg = JSON.parse(new TextDecoder().decode(unb64u(m[1])))
+    if (cfg && typeof cfg.t === 'string' && typeof cfg.p === 'string') {
+      setCredentials(cfg.t, cfg.p)
+    }
+    history.replaceState(null, '', location.pathname + location.search)
+  } catch {
+    /* ignore */
+  }
+}
+
 export function startCloud() {
   if (loop) return
+  consumeSetupLink()
   loop = window.setInterval(() => void tick(), TICK_MS)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
