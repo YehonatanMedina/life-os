@@ -98,7 +98,8 @@ export default function SettingsView() {
           מתי הקיבולת יורדת
         </div>
         <div className="tiny faint" style={{ marginBottom: 10 }}>
-          היעד היומי הוא ברירת המחדל. אלה החריגים — כבוי = היעד המלא בכל יום.
+          הכל כבוי = היעד המלא בכל יום, כולל חגים וימי מבחן. ליום ספציפי עם ציפייה אחרת
+          (טיסה וכדומה) קובעים "קיבולת ליום" מתוך עריכת האירוע ביומן.
         </div>
         <div className="spread" style={{ marginBottom: 12 }}>
           <div className="grow">

@@ -82,10 +82,10 @@ export function materialize(state: AppState): AppState {
   const from = addDays(today(), -14)
   const to = addDays(today(), HORIZON_DAYS)
 
-  // ימי חג — לא מייצרים בהם בלוקים של עבודה עמוקה, וגם מנקים כאלה שנוצרו בעבר.
-  // שגרות אישיות (בוקר, אימון, ערב) כן נשארות — חג הוא לא סיבה לא לקום ולא להתאמן.
+  // ימי חג מורידים בלוקים של עבודה עמוקה רק כשמתג החגים דלוק.
+  // כרגע הוא כבוי — לומדים גם בחג. שגרות אישיות נשארות תמיד.
   const holidays = new Set<ISODate>()
-  for (const e of state.events) {
+  for (const e of state.settings.easyHoliday ? state.events : []) {
     if (e.deleted || e.kind !== 'holiday' || e.eve) continue
     let d = e.date
     const last = e.endDate ?? e.date
@@ -147,6 +147,67 @@ export function materialize(state: AppState): AppState {
 // ---------------------------------------------------------------------------
 // טעינה / שמירה
 // ---------------------------------------------------------------------------
+/**
+ * מיגרציות חד־פעמיות. רצות רק על נתונים שכבר קיימים במכשיר, מסומנות
+ * ב-migrations כדי לא לרוץ פעמיים, ומוגנות בבדיקת תוכן כדי לא לגעת
+ * בהתקנה גנרית חדשה.
+ */
+const MIGRATIONS: Array<{ id: string; run: (s: AppState) => AppState }> = [
+  {
+    // 28.8: אין ויתורים — לומדים גם בחגים וגם בימי מבחן. שלושת הבלוקים של
+    // החברה במקום פריט אחד, וטיסה 29.9–6.10 ביומן.
+    id: 'no-easy-days-2026-08',
+    run: (s) => {
+      const mine = s.tracks.some((t) => t.id === 'trk-exams' && !t.deleted)
+      if (!mine) return s
+      const now = Date.now()
+      let weekly = s.weekly
+      const gf = weekly.find((w) => w.id === 'wk-gf' && !w.deleted)
+      if (gf) {
+        const base = gf.order
+        weekly = weekly.map((w) => (w.id === 'wk-gf' ? { ...w, deleted: true, updatedAt: now } : w))
+        weekly = [
+          ...weekly,
+          { id: 'wk-gf-talk', updatedAt: now, name: 'דיברתי איתה', emoji: '💬', order: base, kind: 'check' as const, group: 'gf' },
+          { id: 'wk-gf-fun', updatedAt: now, name: 'עשיתי איתה', emoji: '💛', order: base + 0.1, kind: 'check' as const, group: 'gf' },
+          { id: 'wk-gf-init', updatedAt: now, name: 'יזמתי איתה', emoji: '✨', order: base + 0.2, kind: 'check' as const, group: 'gf' },
+        ]
+      }
+      let events = s.events
+      if (!events.some((e) => e.id === 'ev-flight-2610')) {
+        events = [
+          ...events,
+          {
+            id: 'ev-flight-2610', updatedAt: now, title: 'טיסה ✈️', date: '2026-09-29',
+            endDate: '2026-10-06', allDay: true, kind: 'personal' as const,
+            notes: 'לא ידוע כמה אפשר יהיה לעבוד — נחיה ונראה. אם תרצה ציפייה מותאמת לימים האלה, קבע "קיבולת ליום" מתוך עריכת האירוע.',
+          },
+        ]
+      }
+      return {
+        ...s,
+        weekly,
+        events,
+        settings: { ...s.settings, easyHoliday: false, easyExamDay: false },
+        settingsUpdatedAt: Date.now(),
+      }
+    },
+  },
+]
+
+function applyMigrations(s: AppState): AppState {
+  const done = new Set(s.migrations ?? [])
+  let out = s
+  let changed = false
+  for (const m of MIGRATIONS) {
+    if (done.has(m.id)) continue
+    out = m.run(out)
+    done.add(m.id)
+    changed = true
+  }
+  return changed ? { ...out, migrations: [...done] } : s
+}
+
 /** משלים שדות הגדרות חדשים בלי לגעת בתוכן — התוכן שייך למשתמש */
 function fillDefaults(s: AppState): AppState {
   return { ...s, settings: { ...DEFAULT_SETTINGS, ...s.settings }, phases: s.phases ?? [] }
@@ -248,6 +309,7 @@ export function loadState(): AppState {
     s = seedState()
     freshInstall = true
   }
+  s = applyMigrations(s)
   // הגנות לפני מיזוג הזרע — מצב ישן או פגום לא יפיל את האפליקציה
   for (const k of ['tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits', 'weekly', 'phases'] as const) {
     if (!Array.isArray((s as any)[k])) (s as any)[k] = []
@@ -481,7 +543,7 @@ export const actions = {
       const rules = upsertList(st.rules, stamp(r))
       const now = Date.now()
       const holidays = new Set<string>()
-      for (const e of st.events) {
+      for (const e of st.settings.easyHoliday ? st.events : []) {
         if (e.deleted || e.kind !== 'holiday' || e.eve) continue
         let hd = e.date
         const last = e.endDate ?? e.date
@@ -902,6 +964,11 @@ export function tasksDueOn(s: AppState, date: ISODate): Task[] {
 export function dayCapacity(s: AppState, date: ISODate): number {
   const { easyWeekend, easyHoliday, easyExamDay, dailyTokenGoal } = s.settings
   const evs = eventsOn(s, date)
+  // ציפייה מותאמת שנקבעה על אירוע (טיסה וכדומה) — גוברת על כל הכללים
+  const overrides = evs
+    .map((e) => e.capacity)
+    .filter((c): c is number => typeof c === 'number' && Number.isFinite(c) && c >= 0)
+  if (overrides.length) return Math.min(...overrides)
   const hol = easyHoliday ? evs.filter((e) => e.kind === 'holiday') : []
   // חג מלא = אפס. ערב חג = חצי יום.
   if (hol.some((e) => !e.eve)) return 0

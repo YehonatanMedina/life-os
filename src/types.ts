@@ -88,6 +88,8 @@ export interface CalEvent extends Rec {
   yearly?: boolean
   /** ערב חג: לא חג מלא — חצי יום עבודה, והבלוקים הקבועים נשארים */
   eve?: boolean
+  /** ציפייה מותאמת ליום הזה (אסימונים) — למשל טיסה. גובר על כל הכללים. */
+  capacity?: number
   notes?: string
   /** נוצר ממופע חוזר — מאפשר עריכה/מחיקה של מופע בודד */
   ruleId?: ID
@@ -180,6 +182,8 @@ export interface HabitDef extends Rec {
 }
 
 export interface WeeklyDef extends Rec {
+  /** פריטים עם אותו group מוצגים בשורה אחת במסך היום */
+  group?: string
   name: string
   emoji: string
   order: number

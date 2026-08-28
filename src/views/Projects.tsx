@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { actions, alive, capacityBetween, minutesByTrack, nextOrder, trackById, useApp, uid } from '../store'
 import { PHASES } from '../seed'
-import { countdownText, diffDays, minutesToHM, plural, shortDate, shortDateY, today as todayISO } from '../dates'
+import { addDays, countdownText, diffDays, minutesToHM, plural, shortDate, shortDateY, today as todayISO } from '../dates'
 import { Bar, Check, Confirm, DateField, Field, NumField, onColor, Sheet, useToast, vibrate } from '../ui'
 import { STATUS_LABEL, TASK_STATUSES } from '../types'
 import type { ID, SubTask, Task, TaskStatus, Track } from '../types'
@@ -348,8 +348,17 @@ function Card({
           ))}
         {t.critical && <span className="chip" style={{ background: 'var(--bad-soft)', color: 'var(--bad)' }}>קריטי</span>}
         {t.due && (
-          <span className="chip" style={late ? { background: 'var(--bad-soft)', color: 'var(--bad)' } : undefined}>
-            {shortDate(t.due)}
+          <span
+            className="chip"
+            style={
+              late
+                ? { background: 'var(--bad-soft)', color: 'var(--bad)' }
+                : t.due === todayISO()
+                  ? { background: 'var(--accent-soft, rgba(107,92,255,.15))', color: 'var(--accent)', fontWeight: 700 }
+                  : undefined
+            }
+          >
+            {t.due === todayISO() ? 'היום' : shortDate(t.due)}
           </span>
         )}
         {!!t.est && <span className="chip">{plural(t.est, 'אסימון אחד', 'אסימונים')}</span>}
@@ -484,6 +493,21 @@ export function TaskSheet({ task, onClose }: { task: Task | null; onClose: () =>
         <div className="row" style={{ marginBottom: 12 }}>
           <label className="field grow">
             <span>תאריך יעד</span>
+            <div className="row" style={{ gap: 4, marginBottom: 6 }}>
+              {([
+                ['היום', todayISO()],
+                ['מחר', addDays(todayISO(), 1)],
+                ['בלי תאריך', undefined],
+              ] as const).map(([lbl, v]) => (
+                <button
+                  key={lbl}
+                  className={`btn xs${d.due === v ? ' primary' : ''}`}
+                  onClick={() => up({ due: v })}
+                >
+                  {lbl}
+                </button>
+              ))}
+            </div>
             <DateField value={d.due} allowEmpty onChange={(v) => up({ due: v })} />
           </label>
           <label className="field" style={{ width: 110 }}>

@@ -710,6 +710,7 @@ export function EventSheet({
         yearly: ev.yearly,
         ruleId: ev.ruleId,
         deep: ev.deep,
+        capacity: ev.capacity,
       })
     } else setDraft(null)
   }, [ev])
@@ -765,6 +766,33 @@ export function EventSheet({
         <Field label="תאריך">
           <DateField value={draft.date} onChange={(v) => up({ date: v || draft.date })} />
         </Field>
+
+        {draft.allDay && (
+          <Field label="קיבולת ליום (אסימונים)">
+            <div className="tag-scroll">
+              <button
+                className={`tag${draft.capacity === undefined ? ' on' : ''}`}
+                style={draft.capacity === undefined ? { background: 'var(--accent)' } : undefined}
+                onClick={() => up({ capacity: undefined })}
+              >
+                רגיל
+              </button>
+              {[0, 1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  className={`tag${draft.capacity === n ? ' on' : ''}`}
+                  style={draft.capacity === n ? { background: 'var(--accent)' } : undefined}
+                  onClick={() => up({ capacity: n })}
+                >
+                  <span className="ltr">{n}</span>
+                </button>
+              ))}
+            </div>
+            <div className="tiny faint" style={{ marginTop: 4 }}>
+              ציפייה מותאמת לימים של האירוע — למשל טיסה. "רגיל" = היעד המלא.
+            </div>
+          </Field>
+        )}
 
         {!draft.allDay && (
           <div className="row" style={{ marginBottom: 12 }}>

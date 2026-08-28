@@ -10,6 +10,7 @@ import {
 } from '../dates'
 import { Bar, Check, DateField, NumField, onColor, Ring, Sheet, ding, useTick, useToast, vibrate } from '../ui'
 import type { CalEvent, ID, Task } from '../types'
+import { TaskSheet } from './Projects'
 
 export default function Today({ goto }: { goto: (v: string, arg?: any) => void }) {
   const s = useApp()
@@ -122,7 +123,8 @@ function Intro() {
           <ul className="small" style={{ margin: '8px 0 0', paddingInlineStart: 18, lineHeight: 1.7 }}>
             <li>
               <b>אסימון</b> = {s.settings.tokenMinutes} דקות ריכוז נטו. היעד: {s.settings.dailyTokenGoal}{' '}
-              ביום רגיל — פחות בשישי־שבת ובימי מבחן, ואפס בחג. בחר מסלול, לחץ — זה כל הסיפור.
+              ביום — כל יום. יום עם ציפייה אחרת (טיסה וכדומה) מגדירים מתוך האירוע ביומן. בחר
+              מסלול, לחץ — זה כל הסיפור.
             </li>
             <li>
               ל<b>אסימונים הצפים</b> (סבתות, חברים, גיטרה) אין שעה קבועה — רק צריך שיקרו במהלך השבוע.
@@ -819,6 +821,12 @@ function TasksToday({
   const [adding, setAdding] = useState('')
   const [showOver, setShowOver] = useState(false)
   const [showBack, setShowBack] = useState(false)
+  // תכנון: בערב את מחר, בבוקר (אם אין כלום) את היום
+  const [plan, setPlan] = useState<string | null>(null)
+  const [editTask, setEditTask] = useState<Task | null>(null)
+  const [quickTrack, setQuickTrack] = useState<ID | undefined>(undefined)
+  const [pickTrack, setPickTrack] = useState(false)
+  const hourNow = new Date().getHours()
 
   // כל מה שמוצג בכרטיס נספר — גם מה שנדחף מימים קודמים
   const planned = [...due, ...overdue].reduce((a, t) => a + (t.est ?? 0), 0)
@@ -841,7 +849,12 @@ function TasksToday({
           }}
         />
         <span className="dot" style={{ background: tr?.color ?? 'var(--line)' }} />
-        <div className="txt">
+        {/* לחיצה על הטקסט פותחת את העורך המלא — שם, מסלול, תאריך, אסימונים, תתי־משימות */}
+        <button
+          className="txt"
+          style={{ background: 'none', border: 0, textAlign: 'start', padding: '3px 0' }}
+          onClick={() => setEditTask(t)}
+        >
           <div className="ttl">{t.title}</div>
           <div className="sub2">
             {tr?.name ?? 'ללא מסלול'}
@@ -853,7 +866,7 @@ function TasksToday({
             ) : null}
             {t.est ? ` · ${plural(t.est, 'אסימון אחד', 'אסימונים')}` : ''}
           </div>
-        </div>
+        </button>
         {t.critical && <span className="chip" style={{ background: 'var(--bad-soft)', color: 'var(--bad)' }}>קריטי</span>}
         <button
           className="btn xs ghost"
@@ -874,7 +887,14 @@ function TasksToday({
   return (
     <div className="card">
       <div className="spread" style={{ padding: '12px 13px 6px' }}>
-        <b>המשימות של היום</b>
+        <div className="row" style={{ gap: 8 }}>
+          <b>המשימות של היום</b>
+          {hourNow >= 17 && (
+            <button className="btn xs" onClick={() => setPlan(addDays(date, 1))}>
+              🌙 תכנון מחר
+            </button>
+          )}
+        </div>
         <span className="tiny faint">
           {planned > 0 ? (
             <span style={planned > goal ? { color: 'var(--warn)', fontWeight: 700 } : undefined}>
@@ -936,7 +956,9 @@ function TasksToday({
           </div>
         )}
         {showOver && overdue.map((t) => row(t, true))}
-        {due.map((t) => row(t))}
+        {[...due]
+          .sort((a, b) => Number(b.critical ?? false) - Number(a.critical ?? false) || a.order - b.order)
+          .map((t) => row(t))}
         {due.length > 0 && (planned > goal || rest) && (
           <div className="item" style={{ gap: 6 }}>
             <span className="grow tiny" style={{ color: 'var(--warn)', fontWeight: 700 }}>
@@ -974,27 +996,62 @@ function TasksToday({
         )}
         {showBack && backlog.map((t) => row(t))}
         {due.length === 0 && overdue.length === 0 && backlog.length === 0 && (
-          <div className="empty">
-            {doneToday > 0
-              ? `סיימת הכל להיום. ${plural(doneToday, 'משימה אחת נסגרה', 'משימות נסגרו')}.`
-              : 'אין משימות להיום. אפשר להוסיף אחת בשורה למטה.'}
-          </div>
+          doneToday > 0 ? (
+            <div className="empty">
+              סיימת הכל להיום. {plural(doneToday, 'משימה אחת נסגרה', 'משימות נסגרו')}.
+            </div>
+          ) : hourNow < 17 ? (
+            <div className="empty" style={{ padding: '18px 13px' }}>
+              <div style={{ marginBottom: 10 }}>עוד לא נכתבו מטרות להיום.</div>
+              <button className="btn primary sm" onClick={() => setPlan(date)}>
+                ✍️ כתוב את המטרות של היום
+              </button>
+            </div>
+          ) : (
+            <div className="empty">אין משימות להיום. אפשר לתכנן את מחר בכפתור למעלה.</div>
+          )
         )}
       </div>
-      <div className="row" style={{ padding: 10, borderTop: '1px solid var(--line-soft)' }}>
-        <input
-          className="input"
-          placeholder="משימה מהירה להיום…"
-          value={adding}
-          onChange={(e) => setAdding(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && adding.trim()) {
-              actions.addTask({ title: adding.trim(), trackId: defaultTrack, due: date })
-              setAdding('')
-              toast('נוספה משימה')
-            }
-          }}
-        />
+      <PlanSheet date={plan} onClose={() => setPlan(null)} />
+      <TaskSheet task={editTask} onClose={() => setEditTask(null)} />
+      <div style={{ padding: 10, borderTop: '1px solid var(--line-soft)' }}>
+        <div className="row">
+          <input
+            className="input grow"
+            placeholder="משימה מהירה להיום…"
+            value={adding}
+            onFocus={() => setPickTrack(true)}
+            onChange={(e) => setAdding(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && adding.trim()) {
+                actions.addTask({ title: adding.trim(), trackId: quickTrack ?? defaultTrack, due: date })
+                setAdding('')
+                toast('נוספה משימה')
+              }
+            }}
+          />
+        </div>
+        {/* בוחרים מסלול פעם אחת והוא נדבק להוספות הבאות */}
+        {pickTrack && (
+          <div className="tag-scroll" style={{ marginTop: 8 }}>
+            {alive(s.tracks)
+              .sort((a, b) => a.order - b.order)
+              .map((x) => (
+                <button
+                  key={x.id}
+                  className={`tag${(quickTrack ?? defaultTrack) === x.id ? ' on' : ''}`}
+                  style={
+                    (quickTrack ?? defaultTrack) === x.id
+                      ? { background: x.color, color: onColor(x.color), borderColor: 'transparent' }
+                      : { ['--tc' as any]: x.color }
+                  }
+                  onClick={() => setQuickTrack(x.id)}
+                >
+                  {x.emoji} {x.name}
+                </button>
+              ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1006,6 +1063,7 @@ function DailyHabits({ date }: { date: string }) {
   const log = dayLog(s, date)
   const habits = alive(s.habits).sort((a, b) => a.order - b.order)
   const [openSteps, setOpenSteps] = useState<ID | null>(null)
+  const [plan, setPlan] = useState<string | null>(null)
 
   return (
     <div className="card">
@@ -1093,13 +1151,213 @@ function DailyHabits({ date }: { date: string }) {
                     >
                       {st.text}
                     </div>
+                    {/* השלב "לארגן את מחר" — קיצור ישיר לכתיבת המשימות של מחר */}
+                    {st.text.includes('מחר') && (
+                      <button className="btn xs" onClick={() => setPlan(addDays(date, 1))}>
+                        🌙 פתח
+                      </button>
+                    )}
                   </div>
                 ))}
             </React.Fragment>
           )
         })}
       </div>
+      <PlanSheet date={plan} onClose={() => setPlan(null)} />
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// תכנון יום: בערב כותבים את המשימות של מחר, ואם שכחת — בבוקר את של היום.
+// שורה, Enter, וממשיכים. כל שורה הופכת למשימה על היום הנבחר.
+// ---------------------------------------------------------------------------
+function PlanSheet({ date, onClose }: { date: string | null; onClose: () => void }) {
+  const s = useApp()
+  const [txt, setTxt] = useState('')
+  const [trk, setTrk] = useState<ID | undefined>(undefined)
+  const [editTask, setEditTask] = useState<Task | null>(null)
+  // התאריך המקורי של משימות שנמשכו — כדי שנגיעה שנייה תחזיר אותן למקום
+  const prevDue = React.useRef(new Map<string, string | undefined>())
+
+  useEffect(() => {
+    if (date) {
+      setTxt('')
+      setTrk(undefined)
+      prevDue.current = new Map()
+    }
+  }, [date])
+
+  if (!date) return null
+  const isToday = date === todayISO()
+  const tasks = alive(s.tasks)
+    .filter((t) => t.due === date && t.status !== 'done')
+    .sort((a, b) => a.order - b.order)
+  const tracks = alive(s.tracks).sort((a, b) => a.order - b.order)
+  const planned = tasks.reduce((a, t) => a + (t.est ?? 0), 0)
+  const cap = dayCapacity(s, date)
+
+  const add = () => {
+    const t = txt.trim()
+    if (!t) return
+    actions.addTask({ title: t, trackId: trk, due: date })
+    setTxt('')
+  }
+
+  // המאגר: מה שאפשר למשוך ליום הזה. "ממתין" חסום אצל מישהו אחר — לא מציעים.
+  const horizon = addDays(date, 7)
+  const candidates = alive(s.tasks)
+    .filter(
+      (t) =>
+        t.status !== 'done' &&
+        t.status !== 'waiting' &&
+        (t.due === date ||
+          !t.due ||
+          t.due < date ||
+          (t.due > date && t.due <= horizon)),
+    )
+    .filter((t) => t.due !== date || prevDue.current.has(t.id))
+    .sort((a, b) => Number(b.critical ?? false) - Number(a.critical ?? false) || a.order - b.order)
+  const byTrack = new Map<string, typeof candidates>()
+  for (const t of candidates) {
+    const k = t.trackId ?? ''
+    byTrack.set(k, [...(byTrack.get(k) ?? []), t])
+  }
+  const candidateTracks = [...byTrack.entries()]
+    .map(([k, list]) => [tracks.find((x) => x.id === k), list] as const)
+    .sort((x, y) => (x[0]?.order ?? 99) - (y[0]?.order ?? 99))
+
+  return (
+    <Sheet open onClose={onClose} title={isToday ? 'המטרות של היום' : 'תכנון מחר'}>
+      <div className="tiny faint" style={{ marginBottom: 10 }}>
+        {niceDate(date)} · קיבולת <span className="ltr">{cap}</span> אסימונים
+        {planned > 0 && (
+          <>
+            {' · מתוכנן '}
+            <span className="ltr" style={planned > cap ? { color: 'var(--warn)', fontWeight: 700 } : undefined}>
+              {planned}
+            </span>
+          </>
+        )}
+      </div>
+
+      <div className="tag-scroll" style={{ marginBottom: 10 }}>
+        {tracks.map((x) => (
+          <button
+            key={x.id}
+            className={`tag${trk === x.id ? ' on' : ''}`}
+            style={trk === x.id ? { background: x.color, color: onColor(x.color), borderColor: 'transparent' } : { ['--tc' as any]: x.color }}
+            onClick={() => setTrk(trk === x.id ? undefined : x.id)}
+          >
+            {x.emoji} {x.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="row" style={{ marginBottom: 10 }}>
+        <input
+          className="input grow"
+          autoFocus
+          value={txt}
+          placeholder={isToday ? 'מה חייב לקרות היום?' : 'מה חייב לקרות מחר?'}
+          onChange={(e) => setTxt(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+        />
+        <button className="btn" disabled={!txt.trim()} onClick={add}>
+          הוספה
+        </button>
+      </div>
+
+      {candidates.length > 0 && (
+        <>
+          <div className="section-title" style={{ margin: '4px 0 6px' }}>
+            או למשוך מהמאגר
+          </div>
+          <div className="tiny faint" style={{ marginBottom: 8 }}>
+            נגיעה מוסיפה ליום, נגיעה נוספת מחזירה. משימות "ממתין" לא מוצגות — הן חסומות.
+          </div>
+          <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 6 }}>
+            {candidateTracks.map(([tr, list]) => (
+              <div key={tr?.id ?? 'none'} style={{ marginBottom: 6 }}>
+                <div className="tiny faint" style={{ fontWeight: 700, marginBottom: 4 }}>
+                  {tr ? `${tr.emoji} ${tr.name}` : 'ללא מסלול'}
+                </div>
+                <div className="row wrap" style={{ gap: 6 }}>
+                  {list.map((t) => {
+                    const picked = t.due === date
+                    return (
+                      <button
+                        key={t.id}
+                        className={`tag${picked ? ' on' : ''}`}
+                        style={
+                          picked
+                            ? { background: tr?.color ?? 'var(--accent)', color: onColor(tr?.color ?? '#6b5cff'), borderColor: 'transparent' }
+                            : { ['--tc' as any]: tr?.color ?? 'var(--accent)' }
+                        }
+                        onClick={() => {
+                          if (picked) {
+                            actions.patchTask(t.id, { due: prevDue.current.get(t.id) })
+                          } else {
+                            prevDue.current.set(t.id, t.due)
+                            actions.patchTask(t.id, { due: date })
+                          }
+                          vibrate()
+                        }}
+                      >
+                        {picked ? '✓ ' : '+ '}
+                        {t.title.length > 34 ? t.title.slice(0, 33) + '…' : t.title}
+                        {t.est ? ` · ${t.est}` : ''}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="list" style={{ margin: '0 -4px' }}>
+        {tasks.length === 0 && (
+          <div className="empty">עוד לא נכתב כלום. שלוש עד חמש משימות זה יום טוב.</div>
+        )}
+        {tasks.map((t) => {
+          const tr = trackById(s, t.trackId)
+          return (
+            <div className="item" key={t.id} style={{ minHeight: 42 }}>
+              <span className="dot" style={{ background: tr?.color ?? 'var(--line)' }} />
+              <button
+                className="txt"
+                style={{ background: 'none', border: 0, textAlign: 'start', padding: '3px 0' }}
+                onClick={() => setEditTask(t)}
+              >
+                <div className="ttl">{t.title}</div>
+                {(t.est || tr) && (
+                  <div className="sub2">
+                    {tr?.name ?? ''}
+                    {t.est ? `${tr ? ' · ' : ''}${plural(t.est, 'אסימון אחד', 'אסימונים')}` : ''}
+                  </div>
+                )}
+              </button>
+              <button
+                className="btn ghost xs"
+                aria-label={`מחיקת ${t.title}`}
+                onClick={() => actions.deleteTask(t.id)}
+              >
+                ✕
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="sheet-actions">
+        <button className="btn primary grow" onClick={onClose}>
+          {tasks.length > 0 ? `סגור · ${plural(tasks.length, 'משימה אחת', 'משימות')} מוכנות` : 'סגור'}
+        </button>
+      </div>
+      <TaskSheet task={editTask} onClose={() => setEditTask(null)} />
+    </Sheet>
   )
 }
 
@@ -1127,8 +1385,55 @@ function WeeklyTokens({ ws }: { ws: string }) {
         </span>
       </div>
       <div className="list">
-        {visible.map((w) => {
-          if (w.kind === 'progress') {
+        {(() => {
+          // פריטים עם group מוצגים יחד בשורה אחת — שלושת הבלוקים של החברה
+          const out: React.ReactNode[] = []
+          let i = 0
+          while (i < visible.length) {
+            const w = visible[i]
+            if (w.group) {
+              const run: typeof visible = []
+              while (i < visible.length && visible[i].group === w.group) run.push(visible[i++])
+              out.push(
+                <div className="item" key={`g-${w.group}`} style={{ flexWrap: 'wrap', gap: 8 }}>
+                  <span className="tiny faint" style={{ fontWeight: 700 }}>
+                    החברה
+                  </span>
+                  <div className="row wrap grow" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                    {run.map((g) => {
+                      const gOn = !!wl.items[g.id]
+                      return (
+                        <button
+                          key={g.id}
+                          className={`tag${gOn ? ' on' : ''}`}
+                          aria-pressed={gOn}
+                          onClick={() => {
+                            actions.toggleWeeklyItem(ws, g.id)
+                            vibrate()
+                          }}
+                        >
+                          {gOn ? '✓ ' : ''}
+                          {g.emoji} {g.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>,
+              )
+              continue
+            }
+            out.push(renderItem(w))
+            i++
+          }
+          return out
+        })()}
+      </div>
+    </div>
+  )
+
+  function renderItem(w: (typeof visible)[number]): React.ReactNode {
+    {
+      if (w.kind === 'progress') {
             const cur = wl.progress[w.id] ?? 0
             const target = w.targetMinutes ?? 60
             return (
@@ -1196,10 +1501,8 @@ function WeeklyTokens({ ws }: { ws: string }) {
               {alert && <span className="chip" style={{ background: 'var(--warn-soft)', color: 'var(--warn)' }}>היום</span>}
             </div>
           )
-        })}
-      </div>
-    </div>
-  )
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -148,9 +148,11 @@ export const DEFAULT_SETTINGS: Settings = {
   name: '',
   dayStartHour: 6,
   dayEndHour: 24,
+  // "אין ויתורים" — היעד המלא בכל יום. חריגים מדליקים בהגדרות, או קובעים
+  // קיבולת מותאמת ליום ספציפי מתוך עריכת אירוע (למשל טיסה).
   easyWeekend: false,
-  easyHoliday: true,
-  easyExamDay: true,
+  easyHoliday: false,
+  easyExamDay: false,
 }
 
 export function newDeviceId(): string {
