@@ -71,14 +71,19 @@ export function buildScheduleItems(s: AppState): NotifyItem[] {
   const now = Date.now()
   const horizon = now + 36 * 3600_000
 
+  // כלל ברזל: שום התראה לפני שעת הקימה — לא מעירים אותו
+  const floorOf = (d: string) => hhmmToMs(d, s.settings.wakeTime)
+
   const add = (id: string, at: number, title: string, body: string) => {
+    const day = id.slice(0, 10)
+    if (at < floorOf(day)) return
     if (at > now - 5 * 60_000 && at < horizon) items.push({ id, at, title, body })
   }
 
   for (const d of [today(), addDays(today(), 1)]) {
-    // שגרות — לפי ההגדרות, לא לפי מופעי היומן, כדי שיעבדו גם אם היומן זז
-    add(`${d}-wake`, hhmmToMs(d, s.settings.wakeTime), 'בוקר טוב ☀️', 'שגרת בוקר — ואז הצ׳קליסט מחכה באפליקציה.')
-    add(`${d}-news`, hhmmToMs(d, s.settings.wakeTime) - 20 * 60_000, '☕ חדשות הבוקר', 'הגיליון של היום מוכן — 20 דקות האזנה.')
+    // שגרות — לפי ההגדרות, לא לפי מופעי היומן, כדי שיעבדו גם אם היומן זז.
+    // התראת הקימה כוללת את החדשות — פינג אחד, לא שניים.
+    add(`${d}-wake`, hhmmToMs(d, s.settings.wakeTime), 'בוקר טוב ☀️', 'שגרת בוקר — וגיליון החדשות של הבוקר כבר מחכה באפליקציה.')
     add(`${d}-night`, hhmmToMs(d, '23:00'), 'שגרת ערב 🌙', 'לסדר, לתכנן את מחר, ולישון בזמן.')
 
     // אירועים ובלוקים מהיומן — תזכורת 10 דקות לפני
