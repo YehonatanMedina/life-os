@@ -116,6 +116,25 @@
 
 ---
 
+## חדשות הבוקר
+
+בכל בוקר בשבע, סוכן ענן (Routine של Claude Code) חוקר את החדשות וכותב מגזין
+אישי בעברית: שלושה סיפורים על ישראל, שלושה מטכנולוגיה-מתמטיקה-כלכלה, ושלושה
+מהעולם התרבותי — כ-20 דקות, עם קריינות (edge-tts, קול עברי). הוא דוחף את
+`docs/news/latest.json` + `latest.mp3` למאגר, ו-GitHub Pages מגיש אותם לאפליקציה.
+הכרטיס מופיע במסך "היום", עם נגן; ✕ מסמן שנקרא להיום. ארכיון טקסטואלי נשמר
+ב-`docs/news/archive/`.
+
+## התראות לטלפון
+
+מדליקים פעם אחת בהגדרות ← "התראות לטלפון" (על הטלפון עצמו). מרגע זה הטלפון
+כותב לוח תזכורות מוצפן (מפתח נפרד) לקובץ `notify.json` במחסן, ו-GitHub Action
+שרץ כל עשר דקות מפענח ושולח Web Push: חדשות הבוקר, שגרת בוקר וערב, אימון,
+כל אירוע ביומן עשר דקות לפני, ותזכורת תכנון בערב אם מחר עוד ריק.
+הדיוק הוא עד כעשר דקות (קצב ה-Action). ההתראות מגיעות רק למכשיר שנרשם.
+
+---
+
 ## פיתוח
 
 ```bash
@@ -134,7 +153,9 @@ src/
   bootstrap.ts    הגדרת המסמך (עברית, RTL, viewport)
   ui.tsx          רכיבי בסיס
   App.tsx         ניווט ושלד
-  views/          Today · CalendarView · Projects · Review · Settings · CloudCard · DatesCard
+  push.ts         התראות דחיפה: מנוי, לוח תזכורות מוצפן
+  views/          Today · CalendarView · Projects · Review · Settings · CloudCard · DatesCard · NewsCard · NotifyCard
+scripts/          notify-send.mjs (השולח ב-Action) · make-edition.py
 public/           manifest, service worker, אייקונים
 ```
 
