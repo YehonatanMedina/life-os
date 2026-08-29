@@ -8,7 +8,9 @@ export default defineConfig({
   plugins: [react(), viteSingleFile()],
   build: {
     outDir: 'docs',        // GitHub Pages מוגש מהתיקייה הזו
-    emptyOutDir: true,
+    // לא מרוקנים: docs/news מתעדכן ישירות במאגר על ידי סוכן הבוקר,
+    // ובנייה מקומית לא צריכה למחוק אותו
+    emptyOutDir: false,
     target: 'es2020',
     cssCodeSplit: false,
     assetsInlineLimit: 100000000,

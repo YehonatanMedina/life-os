@@ -5,7 +5,7 @@
 // לנכסים (אייקונים, גופנים): קודם מטמון, ורשת ברקע.
 // לבקשות ל-API של GitHub: אף פעם לא נוגעים — הסנכרון חייב להיות אמיתי.
 // ---------------------------------------------------------------------------
-const VERSION = 'v1'
+const VERSION = 'v2'
 const SHELL = 'life-os-shell-' + VERSION
 const ASSETS = 'life-os-assets-' + VERSION
 
@@ -38,6 +38,8 @@ self.addEventListener('fetch', (e) => {
 
   // סנכרון — תמיד רשת אמיתית, בלי מטמון
   if (url.hostname === 'api.github.com' || url.hostname === 'gist.githubusercontent.com') return
+  // חדשות הבוקר — תמיד טריות; הטקסט ממילא נשמר ב-localStorage לאופליין
+  if (url.pathname.includes('/news/')) return
 
   // ניווט לדף — רשת קודם, מטמון כגיבוי
   if (req.mode === 'navigate') {

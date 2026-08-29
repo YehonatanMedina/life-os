@@ -11,6 +11,7 @@ import {
 import { Bar, Check, DateField, NumField, onColor, Ring, Sheet, ding, useTick, useToast, vibrate } from '../ui'
 import type { CalEvent, ID, Task } from '../types'
 import { TaskSheet } from './Projects'
+import NewsCard from './NewsCard'
 
 export default function Today({ goto }: { goto: (v: string, arg?: any) => void }) {
   const s = useApp()
@@ -77,6 +78,7 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
           <WhatNow date={date} goto={goto} />
           {showWake && <WakeCard date={date} />}
           {showSleep && <SleepCard date={date} />}
+          <NewsCard />
           <TasksToday
             due={dueToday}
             overdue={overdue}
