@@ -8,6 +8,7 @@ import Projects from './views/Projects'
 import Review, { ReviewLock } from './views/Review'
 import SettingsView from './views/Settings'
 import { HE_STATUS, installFlush, startCloud, useCloudState } from './cloud'
+import { refreshNotifySchedule } from './push'
 
 type View = 'today' | 'calendar' | 'projects' | 'review' | 'settings'
 
@@ -180,6 +181,8 @@ function Shell() {
   useEffect(() => {
     installFlush()
     startCloud()
+    // רענון לוח ההתראות בפתיחה (פועל רק במכשיר שההתראות דלוקות בו)
+    window.setTimeout(() => refreshNotifySchedule(), 4000)
   }, [])
 
   // דופק לטיימר, ויישור מיידי כשחוזרים ללשונית — כדי שטיימר שנשכח פתוח

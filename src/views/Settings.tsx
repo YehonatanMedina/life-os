@@ -12,6 +12,7 @@ import { Confirm, DateField, Field, NumField, onColor, Sheet, Switch, TimeField,
 import type { HabitDef, HabitStep, RecurRule, WeeklyDef } from '../types'
 import { saveFile } from '../cloud'
 import CloudCard from './CloudCard'
+import NotifyCard from './NotifyCard'
 import DatesCard from './DatesCard'
 
 export default function SettingsView() {
@@ -334,6 +335,9 @@ export default function SettingsView() {
 
       {/* ------------------------------------------------ סנכרון */}
       <CloudCard />
+
+      {/* ------------------------------------------------ התראות דחיפה */}
+      <NotifyCard />
 
       {/* ------------------------------------------------ גיבוי */}
       <div className="card pad">

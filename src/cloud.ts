@@ -12,6 +12,7 @@
 
 import { useSyncExternalStore } from 'react'
 import { consumeFreshInstall, store, mergeStates } from './store'
+import { refreshNotifySchedule } from './push'
 import type { AppState } from './types'
 
 const API = 'https://api.github.com'
@@ -315,6 +316,7 @@ async function tick() {
       lastPoll = Date.now()
       markSyncedAt(Date.now())
       setStatus('synced')
+      refreshNotifySchedule()
     } else {
       const changed = await pullOnce()
       baseline = snapshotOf(store.get())
@@ -341,6 +343,13 @@ function consumeSetupLink() {
     const cfg = JSON.parse(new TextDecoder().decode(unb64u(m[1])))
     if (cfg && typeof cfg.t === 'string' && typeof cfg.p === 'string') {
       setCredentials(cfg.t, cfg.p)
+      if (typeof cfg.nk === 'string' && cfg.nk) {
+        try {
+          localStorage.setItem('life-os-notify-key', cfg.nk)
+        } catch {
+          /* ignore */
+        }
+      }
     }
     history.replaceState(null, '', location.pathname + location.search)
   } catch {
