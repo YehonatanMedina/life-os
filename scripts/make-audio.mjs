@@ -47,7 +47,12 @@ async function elevenlabs() {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_64`, {
       method: 'POST',
       headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: chunk, model_id: model, language_code: undefined }),
+      body: JSON.stringify({
+        text: chunk,
+        model_id: model,
+        // v3/flash מקבלים נעילת שפה — מבטיח הגייה עברית גם למשפטים מעורבים
+        ...(model.includes('multilingual') ? {} : { language_code: 'he' }),
+      }),
     })
     if (!r.ok) {
       console.log('elevenlabs failed:', r.status, (await r.text()).slice(0, 200))
