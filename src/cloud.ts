@@ -341,14 +341,16 @@ function consumeSetupLink() {
     const m = location.hash.match(/#setup=([A-Za-z0-9\-_]+)/)
     if (!m) return
     const cfg = JSON.parse(new TextDecoder().decode(unb64u(m[1])))
+    // קישור יכול לשאת חיבור מלא (t+p), מפתח התראות (nk), או שניהם —
+    // מה שחסר לא נוגעים בו
     if (cfg && typeof cfg.t === 'string' && typeof cfg.p === 'string') {
       setCredentials(cfg.t, cfg.p)
-      if (typeof cfg.nk === 'string' && cfg.nk) {
-        try {
-          localStorage.setItem('life-os-notify-key', cfg.nk)
-        } catch {
-          /* ignore */
-        }
+    }
+    if (cfg && typeof cfg.nk === 'string' && cfg.nk) {
+      try {
+        localStorage.setItem('life-os-notify-key', cfg.nk)
+      } catch {
+        /* ignore */
       }
     }
     history.replaceState(null, '', location.pathname + location.search)
