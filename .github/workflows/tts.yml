@@ -5,7 +5,7 @@ on:
     paths:
       - 'docs/news/latest.json'
   schedule:
-    - cron: '45 4 * * *'   # רשת ביטחון אחרי סוכן הבוקר
+    - cron: '50 3 * * *'   # רשת ביטחון אחרי סוכן הבוקר (שרץ ב-03:00 UTC)
   workflow_dispatch: {}
 
 concurrency:
