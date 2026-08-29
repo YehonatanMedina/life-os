@@ -1,0 +1,56 @@
+name: tts
+
+on:
+  push:
+    paths:
+      - 'docs/news/latest.json'
+  schedule:
+    - cron: '45 4 * * *'   # רשת ביטחון אחרי סוכן הבוקר
+  workflow_dispatch: {}
+
+concurrency:
+  group: tts
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  narrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Skip if audio already fresh
+        id: fresh
+        run: |
+          J=$(git log -1 --format=%ct -- docs/news/latest.json || echo 0)
+          M=$(git log -1 --format=%ct -- docs/news/latest.mp3 || echo 0)
+          if [ "$M" -ge "$J" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "fresh=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "fresh=no" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Generate narration
+        if: steps.fresh.outputs.fresh == 'no'
+        run: node scripts/make-audio.mjs
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVEN_VOICE_ID: ${{ secrets.ELEVEN_VOICE_ID }}
+          ELEVEN_MODEL: ${{ secrets.ELEVEN_MODEL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - name: Commit
+        if: steps.fresh.outputs.fresh == 'no'
+        run: |
+          git config user.name "life-os-tts"
+          git config user.email "tts@life-os.local"
+          git add docs/news/latest.mp3
+          git diff --cached --quiet || git commit -m "קריינות הבוקר"
+          git pull --rebase origin main
+          git push origin main

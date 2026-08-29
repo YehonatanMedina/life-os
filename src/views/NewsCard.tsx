@@ -59,7 +59,8 @@ export default function NewsCard() {
     }
   })
 
-  // קריינות מקומית כשאין קובץ שמע
+  // קריינות מקומית כשאין קובץ שמע (או כשהקובץ עוד לא נוצר)
+  const [audioOk, setAudioOk] = useState<boolean | null>(null)
   const [speaking, setSpeaking] = useState(false)
   const uttRef = useRef<SpeechSynthesisUtterance | null>(null)
 
@@ -145,13 +146,14 @@ export default function NewsCard() {
       </div>
 
       <div style={{ padding: '0 13px 10px' }}>
-        {ed.audio ? (
+        {ed.audio && audioOk !== false ? (
           <audio
             controls
             preload="none"
             src={ed.audio}
             style={{ width: '100%', height: 40 }}
             onPlay={() => window.speechSynthesis?.cancel()}
+            onError={() => setAudioOk(false)}
           />
         ) : (
           <button className="btn sm" onClick={speak}>
