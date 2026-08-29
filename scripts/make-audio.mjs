@@ -42,23 +42,35 @@ async function elevenlabs() {
     console.log('elevenlabs voice:', (heb ?? all[0]).name)
   }
   const model = process.env.ELEVEN_MODEL || 'eleven_v3'
-  const bufs = []
-  for (const chunk of chunks) {
+  // v3 איטי לכל בקשה — מקבילים 3 קטעים בו־זמנית ושומרים על הסדר
+  const gen = async (chunk, i) => {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_64`, {
       method: 'POST',
       headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text: chunk,
         model_id: model,
-        // v3/flash מקבלים נעילת שפה — מבטיח הגייה עברית גם למשפטים מעורבים
         ...(model.includes('multilingual') ? {} : { language_code: 'he' }),
       }),
     })
-    if (!r.ok) {
-      console.log('elevenlabs failed:', r.status, (await r.text()).slice(0, 200))
-      return false
+    if (!r.ok) throw new Error(`chunk ${i}: ${r.status} ${(await r.text()).slice(0, 150)}`)
+    const buf = Buffer.from(await r.arrayBuffer())
+    console.log(`chunk ${i + 1}/${chunks.length} done (${buf.length}b)`)
+    return buf
+  }
+  const bufs = new Array(chunks.length)
+  try {
+    let next = 0
+    const worker = async () => {
+      while (next < chunks.length) {
+        const i = next++
+        bufs[i] = await gen(chunks[i], i)
+      }
     }
-    bufs.push(Buffer.from(await r.arrayBuffer()))
+    await Promise.all([worker(), worker(), worker()])
+  } catch (e) {
+    console.log('elevenlabs failed:', e.message)
+    return false
   }
   fs.writeFileSync(OUT, Buffer.concat(bufs))
   console.log('elevenlabs ok')
