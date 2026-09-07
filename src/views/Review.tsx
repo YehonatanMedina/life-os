@@ -367,7 +367,7 @@ function InsightsCard({ st, insights, ws }: { st: WeekStats; insights: Insight[]
 function HistoryChart() {
   const s = useApp()
   const [mode, setMode] = useState<'day' | 'week'>('week')
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
 
   const series = useMemo(() => {
     const live = alive(s.sessions)
@@ -611,6 +611,24 @@ export function WeeklyFlow({ ws, onClose }: { ws: string; onClose: () => void })
                   </div>
                 ))}
                 {!insights.length && <div className="empty">אין מספיק נתונים לשבוע הזה.</div>}
+              </div>
+              {/* לצלול פנימה: כל הנתונים של השבוע נארזים לפרומפט מוכן */}
+              <button
+                className="btn block"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(digestForClaude(s, st, wl))
+                    toast('הועתק. הדבק בשיחה עם Claude וקבל ניתוח מעמיק של השבוע')
+                  } catch {
+                    toast('ההעתקה נחסמה בדפדפן')
+                  }
+                }}
+              >
+                📋 ניתוח מעמיק עם Claude
+              </button>
+              <div className="tiny faint" style={{ marginTop: -4 }}>
+                מעתיק ללוח את כל נתוני השבוע יחד עם השאלות הנכונות. שום דבר לא נשלח מכאן —
+                אתה מדביק בשיחה מתי שבא לך.
               </div>
             </>
           )}
@@ -1006,6 +1024,7 @@ function DoneStep({
   answers: Record<string, string>
 }) {
   const s = useApp()
+  const toast = useToast()
   const clean = goals.filter((g) => g.text.trim())
   const weekEnd = addDays(nextWs, 6)
   const inWeek = alive(s.tasks).filter(
@@ -1065,6 +1084,25 @@ function DoneStep({
           </div>
         </div>
       </div>
+
+      <button
+        className="btn block"
+        onClick={async () => {
+          const wl = weekLog(s, ws)
+          const digest = digestForClaude(s, st, {
+            ...wl,
+            review: { answers, score: 0 },
+          })
+          try {
+            await navigator.clipboard.writeText(digest)
+            toast('הועתק — כולל מה שכתבת. הדבק בשיחה עם Claude')
+          } catch {
+            toast('ההעתקה נחסמה בדפדפן')
+          }
+        }}
+      >
+        📋 ניתוח מעמיק עם Claude — כולל התשובות שלי
+      </button>
 
       <p className="small muted" style={{ margin: 0 }}>
         לחיצה על "סגירת השבוע" שומרת את הסקירה, קובעת את המטרות לשבוע הבא, ומחזירה אותך למסך היום.
