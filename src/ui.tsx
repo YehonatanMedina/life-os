@@ -1,4 +1,59 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import React, {
+  createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore,
+} from 'react'
+
+// ---------------------------------------------------------------------------
+// מצב מיקוד — הטיימר על כל המסך, בלי שום דבר אחר.
+// מחוץ ל-React כדי שכל מסך יוכל לפתוח אותו בלי להעביר props דרך העץ.
+// ---------------------------------------------------------------------------
+let focusOn = false
+const focusListeners = new Set<() => void>()
+export function setFocusMode(v: boolean) {
+  if (focusOn === v) return
+  focusOn = v
+  focusListeners.forEach((l) => l())
+}
+export function useFocusMode(): boolean {
+  return useSyncExternalStore(
+    (l) => {
+      focusListeners.add(l)
+      return () => {
+        focusListeners.delete(l)
+      }
+    },
+    () => focusOn,
+    () => focusOn,
+  )
+}
+
+// ---------------------------------------------------------------------------
+// החלקה אופקית במגע.
+// בעברית הזמן זורם ימינה→שמאלה, ולכן אצבע שנעה ימינה מושכת את הבא בתור.
+// גלילה אנכית רגילה לא נחשבת החלקה.
+// ---------------------------------------------------------------------------
+export function useSwipe(onNext: () => void, onPrev: () => void, skip?: () => boolean) {
+  const start = useRef<{ x: number; y: number; t: number } | null>(null)
+  return {
+    onTouchStart: (e: React.TouchEvent) => {
+      if (e.touches.length !== 1) return (start.current = null)
+      const t = e.touches[0]
+      start.current = { x: t.clientX, y: t.clientY, t: Date.now() }
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const s0 = start.current
+      start.current = null
+      if (!s0 || Date.now() - s0.t > 800) return
+      if (skip?.()) return
+      const t = e.changedTouches[0]
+      const dx = t.clientX - s0.x
+      const dy = t.clientY - s0.y
+      if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+      vibrate(8)
+      if (dx > 0) onNext()
+      else onPrev()
+    },
+  }
+}
 
 // ---------------------------------------------------------------------------
 // גיליון / מודאל

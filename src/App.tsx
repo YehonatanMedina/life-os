@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { actions, getPersistError, subscribePersistError, useApp, weekLog } from './store'
 import { addDays, today as todayISO, weekStart, niceDate } from './dates'
-import { ToastHost, useTick } from './ui'
+import { ToastHost, setFocusMode, useTick } from './ui'
 import Today from './views/Today'
 import CalendarView from './views/CalendarView'
 import Projects from './views/Projects'
-import Review, { ReviewLock } from './views/Review'
+import Review, { ReviewLock, reviewWeekOf } from './views/Review'
 import SettingsView from './views/Settings'
+import FocusTimer from './views/FocusTimer'
 import { HE_STATUS, installFlush, startCloud, useCloudState } from './cloud'
 import { refreshNotifySchedule } from './push'
 
@@ -232,7 +233,7 @@ function Shell() {
   }, [])
 
   // נעילת סקירה שבועית — הסקירה מסכמת את השבוע שהסתיים, לא את זה שהתחיל
-  const reviewWs = addDays(weekStart(todayISO()), -7)
+  const reviewWs = reviewWeekOf(todayISO())
   const wl = weekLog(s, reviewWs)
   const isReviewDay = new Date().getDay() === s.settings.reviewDow
   const snoozed = (wl.snoozeUntil ?? 0) > Date.now()
@@ -268,7 +269,7 @@ function Shell() {
         ))}
         <div style={{ flex: 1 }} />
         <SyncDot />
-        <TimerBadge onClick={() => setView('today')} />
+        <TimerBadge onClick={() => setFocusMode(true)} />
       </nav>
 
       <header className="topbar">
@@ -277,7 +278,7 @@ function Shell() {
           <div className="sub">{niceDate(todayISO())}</div>
         </div>
         <SyncDot compact />
-        <TimerBadge onClick={() => setView('today')} compact />
+        <TimerBadge onClick={() => setFocusMode(true)} compact />
       </header>
 
       <main className="main">
@@ -307,6 +308,8 @@ function Shell() {
           </button>
         ))}
       </nav>
+
+      <FocusTimer />
     </div>
   )
 }

@@ -1,8 +1,9 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import type {
-  AppState, CalEvent, DayLog, ID, ISODate, Rec, RecurRule, Session, Task, WeekLog,
+  AppState, CalEvent, DayLog, ID, ISODate, NewsRating, Rec, RecurRule, Session, Task, WeekGoal,
+  WeekLog,
 } from './types'
-import { addDays, iso, parseISO, today, weekStart } from './dates'
+import { addDays, iso, logicalDate, parseISO, today, weekStart } from './dates'
 import { HABITS, RULES, SCHEMA_VERSION, TASKS, TRACKS, WEEKLY, EVENTS, DEFAULT_SETTINGS, seedState, newDeviceId, PHASES } from './seed'
 
 const KEY = 'life-os-v1'
@@ -59,6 +60,7 @@ export function mergeStates(local: AppState, remote: AppState): AppState {
     habits: mergeList(local.habits, remote.habits || []),
     weekly: mergeList(local.weekly, remote.weekly || []),
     phases: mergeList(local.phases, remote.phases || []),
+    news: mergeList(local.news || [], remote.news || []),
     // הטיימר הוא תמיד מקומי — buildDocument מאפס אותו לפני פרסום
     timer: local.timer,
     lastSyncAt: Math.max(local.lastSyncAt || 0, remote.lastSyncAt || 0),
@@ -227,7 +229,12 @@ function applyMigrations(s: AppState): AppState {
 
 /** משלים שדות הגדרות חדשים בלי לגעת בתוכן — התוכן שייך למשתמש */
 function fillDefaults(s: AppState): AppState {
-  return { ...s, settings: { ...DEFAULT_SETTINGS, ...s.settings }, phases: s.phases ?? [] }
+  return {
+    ...s,
+    settings: { ...DEFAULT_SETTINGS, ...s.settings },
+    phases: s.phases ?? [],
+    news: s.news ?? [],
+  }
 }
 
 /** רק בהתקנה חדשה — אחרת רשומות שנמחקו היו חוזרות לחיים בכל טעינה */
@@ -277,6 +284,7 @@ function sanitize(p: any): AppState {
     weekly: arr(p.weekly),
     phases: arr(p.phases, (x) => isDate(x.from) && isDate(x.to)),
     sessions: arr(p.sessions),
+    news: arr(p.news, (n) => isDate(n.date)),
     timer: sane(p.timer),
     days: arr(p.days, (d) => isDate(d.date)),
     weeks: arr(p.weeks, (w) => isDate(w.weekStart)),
@@ -328,7 +336,7 @@ export function loadState(): AppState {
   }
   s = applyMigrations(s)
   // הגנות לפני מיזוג הזרע — מצב ישן או פגום לא יפיל את האפליקציה
-  for (const k of ['tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits', 'weekly', 'phases'] as const) {
+  for (const k of ['tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits', 'weekly', 'phases', 'news'] as const) {
     if (!Array.isArray((s as any)[k])) (s as any)[k] = []
   }
   s = fillDefaults(s)
@@ -458,6 +466,7 @@ export const actions = {
       // חייב לבוא אחרי הפריסה — אחרת טיוטה עם id ריק דורסת את המזהה
       id: uid('t'),
       updatedAt: Date.now(),
+      createdAt: Date.now(),
     } as Task
     store.set((s) => ({ ...s, tasks: [...s.tasks, t] }))
     return t
@@ -724,6 +733,43 @@ export const actions = {
     const val = !(cur?.items?.[itemId])
     actions.patchWeek(ws, { items: { ...(cur?.items ?? {}), [itemId]: val } })
   },
+  /** מטרות־העל של שבוע. נקבעות בסקירה, מוצגות במסך היום כל השבוע. */
+  setWeekGoals(ws: ISODate, goals: WeekGoal[]) {
+    actions.patchWeek(ws, { goals })
+  },
+  toggleWeekGoal(ws: ISODate, goalId: ID) {
+    const cur = store.get().weeks.find((w) => w.weekStart === ws)
+    const goals = (cur?.goals ?? []).map((g) => (g.id === goalId ? { ...g, done: !g.done } : g))
+    actions.patchWeek(ws, { goals })
+  },
+
+  // ---- משוב על החדשות ----
+  /** אהבתי / לא אהבתי סיפור. לחיצה שנייה על אותו כפתור מבטלת. */
+  rateNewsStory(
+    date: ISODate,
+    key: string,
+    v: 1 | -1,
+    meta: { headline: string; section: string },
+  ) {
+    store.set((s) => {
+      const list = s.news ?? []
+      const cur = list.find((n) => n.date === date && !n.deleted)
+      const votes = { ...(cur?.votes ?? {}) }
+      if (votes[key]?.v === v) delete votes[key]
+      else votes[key] = { v, headline: meta.headline, section: meta.section }
+      const base: NewsRating = cur ?? { id: `news-${date}`, updatedAt: 0, date, votes: {} }
+      return { ...s, news: upsertList(list, { ...base, votes, updatedAt: Date.now() }) }
+    })
+  },
+  setNewsNote(date: ISODate, note: string) {
+    store.set((s) => {
+      const list = s.news ?? []
+      const cur = list.find((n) => n.date === date && !n.deleted)
+      const base: NewsRating = cur ?? { id: `news-${date}`, updatedAt: 0, date, votes: {} }
+      return { ...s, news: upsertList(list, { ...base, note, updatedAt: Date.now() }) }
+    })
+  },
+
   /** מחזיר את השינוי שבאמת בוצע (אחרי חסימה באפס) */
   addWeeklyProgress(ws: ISODate, itemId: string, minutes: number): number {
     const cur = store.get().weeks.find((w) => w.weekStart === ws)
@@ -833,7 +879,7 @@ export const actions = {
             !x.deleted &&
             x.trackId === trackId &&
             (label === undefined || x.label === label) &&
-            iso(new Date(x.endedAt)) === d,
+            logicalDate(x.endedAt) === d,
         )
         .sort((a, b) => b.endedAt - a.endedAt)
       const last = list[0]
@@ -865,7 +911,7 @@ export const actions = {
   /** בודק ומנרמל קובץ גיבוי לפני ייבוא. מחזיר null אם הוא לא תקין. */
   normalizeImport(raw: any): AppState | null {
     if (!raw || typeof raw !== 'object') return null
-    const keys = ['tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits', 'weekly'] as const
+    const keys = ['tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits', 'weekly', 'news'] as const
     if (!Array.isArray(raw.tasks) || !Array.isArray(raw.events)) return null
     const out: any = { ...raw }
     for (const k of keys) if (!Array.isArray(out[k])) out[k] = []
@@ -897,7 +943,7 @@ export const actions = {
 // סלקטורים
 // ---------------------------------------------------------------------------
 export function sessionsOn(s: AppState, date: ISODate): Session[] {
-  return alive(s.sessions).filter((x) => iso(new Date(x.endedAt)) === date)
+  return alive(s.sessions).filter((x) => logicalDate(x.endedAt) === date)
 }
 
 export function minutesOn(s: AppState, date: ISODate): number {
@@ -908,7 +954,7 @@ export function minutesOn(s: AppState, date: ISODate): number {
 export function weekSessions(s: AppState, ws: ISODate): Session[] {
   const we = addDays(ws, 7)
   return alive(s.sessions).filter((x) => {
-    const d = iso(new Date(x.endedAt))
+    const d = logicalDate(x.endedAt)
     return d >= ws && d < we
   })
 }
@@ -968,6 +1014,14 @@ export function eventsOn(s: AppState, date: ISODate): CalEvent[] {
     if (e.endDate) return date >= e.date && date <= e.endDate
     return e.date === date
   })
+}
+
+/** התאריך הבא שבו האירוע קורה — ליום הולדת חוזר זה המופע הקרוב */
+export function nextOccurrence(e: CalEvent, from: ISODate): ISODate {
+  if (!e.yearly) return e.date
+  const y = Number(from.slice(0, 4))
+  const cand = `${y}-${e.date.slice(5)}`
+  return cand >= from ? cand : `${y + 1}-${e.date.slice(5)}`
 }
 
 export function tasksDueOn(s: AppState, date: ISODate): Task[] {

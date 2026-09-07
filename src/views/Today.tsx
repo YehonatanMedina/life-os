@@ -1,17 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  actions, alive, dayCapacity, dayLog, defaultTrackId, eventsOn, minutesOn, periodicDue, plannedOn,
-  hasSpreadRoom, sessionsOn, spreadTasks, store, tasksDueOn, trackById, useApp, weekLog,
-  weekMinutes,
+  actions, alive, dayCapacity, dayLog, defaultTrackId, eventsOn, minutesOn, nextOccurrence,
+  periodicDue, hasSpreadRoom, sessionsOn, spreadTasks, store, tasksDueOn, trackById, useApp,
+  weekLog, weekMinutes,
 } from '../store'
 import {
-  HE_DAYS_SHORT, addDays, countdownText, diffDays, dow, hhmm, iso, minutesToHM, niceDate,
-  plural, shortDate, timeToMinutes, today as todayISO, weekStart,
+  HE_DAYS_SHORT, addDays, countdownText, diffDays, dow, hhmm, isAfterMidnight, logicalDate,
+  minutesToHM, niceDate, plural, shortDate, timeToMinutes, today as todayISO, weekStart,
 } from '../dates'
-import { Bar, Check, DateField, NumField, onColor, Ring, Sheet, ding, useTick, useToast, vibrate } from '../ui'
+import {
+  Bar, Check, DateField, NumField, onColor, Ring, Sheet, ding, setFocusMode, useTick, useToast,
+  vibrate,
+} from '../ui'
 import type { CalEvent, ID, Task } from '../types'
 import { TaskSheet } from './Projects'
 import NewsCard from './NewsCard'
+import { GoalsCard, WeeklyFlow, reviewPending } from './Review'
 
 export default function Today({ goto }: { goto: (v: string, arg?: any) => void }) {
   const s = useApp()
@@ -36,7 +40,7 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
     [s.tasks],
   )
   const doneToday = useMemo(
-    () => alive(s.tasks).filter((t) => t.status === 'done' && t.doneAt && iso(new Date(t.doneAt)) === date),
+    () => alive(s.tasks).filter((t) => t.status === 'done' && t.doneAt && logicalDate(t.doneAt) === date),
     [s.tasks, date],
   )
 
@@ -44,10 +48,12 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
   const greet =
     hour < 5 ? 'לילה טוב' : hour < 12 ? 'בוקר טוב' : hour < 17 ? 'צהריים טובים' : hour < 21 ? 'ערב טוב' : 'לילה טוב'
 
-  const showWake = !log.wake && hour < 13
+  // רק בשעות הבוקר האמיתיות — ב-01:00 היום הלוגי הוא עדיין אתמול, ואין מה לשאול
+  const morning = hour >= 4 && hour < 13
+  const showWake = !log.wake && morning
   // שאלת השינה נשאלת בבוקר על הלילה שעבר
   const yLog = dayLog(s, addDays(date, -1))
-  const showSleep = !yLog.sleep && hour < 13
+  const showSleep = !yLog.sleep && morning
   const birthdays = eventsOn(s, date).filter((e) => e.kind === 'birthday')
 
   return (
@@ -58,11 +64,14 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
         </h1>
         <div className="sub">
           {niceDate(date)}{phase ? ` · ${phase.name}` : ''}
+          {/* אחרי חצות היום הלוגי הוא עדיין של אתמול — אומרים את זה במפורש */}
+          {isAfterMidnight() && ' · היום מתחלף ב־03:30'}
         </div>
       </div>
 
       {!s.settings.onboarded && <Intro />}
 
+      <ReviewNudge />
       <PhaseStrip />
 
       {birthdays.length > 0 && (
@@ -71,6 +80,8 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
           <div className="tiny muted">אל תשכח להרים טלפון.</div>
         </div>
       )}
+
+      <Reminders date={date} />
 
       <div className="grid2">
         <div className="stack">
@@ -91,6 +102,7 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
 
         <div className="stack">
           <Countdowns date={date} />
+          <GoalsCard ws={ws} title="מטרות־העל של השבוע" />
           <DailyHabits date={date} />
           <WeeklyTokens ws={ws} />
           <FocusCard />
@@ -112,6 +124,69 @@ export function kindColor(k: string): string {
     case 'personal': return '#5b5bd6'
     default: return '#8b8d98'
   }
+}
+
+// ---------------------------------------------------------------------------
+/** תזכורות מראש שהוגדרו על אירועים — "שבועיים ליום ההולדת של…" */
+function Reminders({ date }: { date: string }) {
+  const s = useApp()
+  const list = useMemo(() => {
+    const out: Array<{ id: string; days: number; title: string; when: string }> = []
+    for (const e of alive(s.events)) {
+      if (!e.remind?.length) continue
+      const occ = nextOccurrence(e, date)
+      for (const n of e.remind) {
+        if (addDays(occ, -n) === date) out.push({ id: `${e.id}-${n}`, days: n, title: e.title, when: occ })
+      }
+    }
+    return out.sort((a, b) => a.days - b.days)
+  }, [s.events, date])
+
+  if (!list.length) return null
+  return (
+    <div className="card pad" style={{ background: 'var(--accent-soft)', borderColor: 'transparent' }}>
+      {list.map((r) => (
+        <div key={r.id} style={{ marginBottom: 2 }}>
+          <b>🎁 {countdownText(r.days)}: {r.title}</b>
+          <div className="tiny muted">
+            <span className="ltr">{shortDate(r.when)}</span> · יש עוד זמן לארגן משהו, וזה בדיוק העניין.
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** סגירת השבוע שהסתיים — נשארת על המסך עד שממלאים אותה */
+function ReviewNudge() {
+  const s = useApp()
+  const [open, setOpen] = useState(false)
+  const ws = reviewPending(s)
+  if (!ws) return null
+  const daysLate = diffDays(addDays(ws, 7), todayISO())
+
+  return (
+    <>
+      <button
+        className="card pad rail"
+        style={{ ['--rail' as any]: 'var(--accent)', textAlign: 'start', width: '100%' }}
+        onClick={() => setOpen(true)}
+      >
+        <div className="spread">
+          <div className="grow" style={{ minWidth: 0 }}>
+            <b>🧭 המעבר השבועי מחכה</b>
+            <div className="tiny faint">
+              לסגור את השבוע <span className="ltr">{shortDate(ws)}–{shortDate(addDays(ws, 6))}</span>,
+              ולהגדיר את מטרות השבוע הזה.
+              {daysLate >= 2 ? ` כבר ${daysLate} ימים.` : ''}
+            </div>
+          </div>
+          <span className="chip on">פתיחה ←</span>
+        </div>
+      </button>
+      {open && <WeeklyFlow ws={ws} onClose={() => setOpen(false)} />}
+    </>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -326,7 +401,14 @@ function DeepWork({ date, ws }: { date: string; ws: string }) {
 
           <div className="grow" style={{ minWidth: 0 }}>
             {t ? (
-              <>
+              <button
+                style={{ background: 'none', border: 0, padding: 0, textAlign: 'start', width: '100%' }}
+                aria-label="פתיחת הטיימר על כל המסך"
+                onClick={() => {
+                  setFocusMode(true)
+                  vibrate()
+                }}
+              >
                 <span className="chip tinted" style={{ ['--c' as any]: tr?.color ?? 'var(--accent)' }}>
                   {tr?.emoji} {tr?.name ?? 'ללא מסלול'}
                 </span>
@@ -335,8 +417,10 @@ function DeepWork({ date, ws }: { date: string; ws: string }) {
                 </div>
                 <div className="tiny faint">
                   {reached ? 'היעד הושלם — כל דקה נוספת נספרת' : `${Math.floor(elapsedMin)} מתוך ${target} דק׳`}
+                  {' · '}
+                  <span style={{ color: 'var(--accent)', fontWeight: 700 }}>למסך מלא ⤢</span>
                 </div>
-              </>
+              </button>
             ) : (
               <>
                 <div className="tiny faint" style={{ marginBottom: 8 }}>
@@ -584,6 +668,8 @@ function WhatNow({ date, goto }: { date: string; goto: (v: string, arg?: any) =>
             onClick={() => {
               actions.startTimer(e.trackId ?? alive(s.tracks)[0]?.id ?? '', e.title)
               vibrate()
+              // בלוק עבודה עמוקה נפתח ישר על כל המסך — זו כל המטרה שלו
+              setFocusMode(true)
             }}
           >
             התחל
@@ -791,7 +877,10 @@ function DaySchedule({ date, goto }: { date: string; goto: (v: string, arg?: any
               {e.deep && !s.timer && (
                 <button
                   className="btn xs primary"
-                  onClick={() => actions.startTimer(e.trackId ?? alive(s.tracks)[0]?.id ?? '', e.title)}
+                  onClick={() => {
+                    actions.startTimer(e.trackId ?? alive(s.tracks)[0]?.id ?? '', e.title)
+                    setFocusMode(true)
+                  }}
                 >
                   התחל
                 </button>
@@ -821,7 +910,6 @@ function TasksToday({
   const s = useApp()
   const toast = useToast()
   const [adding, setAdding] = useState('')
-  const [showOver, setShowOver] = useState(false)
   const [showBack, setShowBack] = useState(false)
   // תכנון: בערב את מחר, בבוקר (אם אין כלום) את היום
   const [plan, setPlan] = useState<string | null>(null)
@@ -830,16 +918,30 @@ function TasksToday({
   const [pickTrack, setPickTrack] = useState(false)
   const hourNow = new Date().getHours()
 
+  // הצ׳קליסט של היום: מה שנקבע להיום ומה שנשאר פתוח מימים קודמים, ברשימה אחת.
+  // קריטי קודם, ואחריו הוותיק ביותר — מה שנגרר הכי הרבה זמן נמצא למעלה.
+  const items = useMemo(
+    () =>
+      [...overdue, ...due].sort(
+        (a, b) =>
+          Number(b.critical ?? false) - Number(a.critical ?? false) ||
+          (a.due ?? '').localeCompare(b.due ?? '') ||
+          a.order - b.order,
+      ),
+    [due, overdue],
+  )
   // כל מה שמוצג בכרטיס נספר — גם מה שנדחף מימים קודמים
-  const planned = [...due, ...overdue].reduce((a, t) => a + (t.est ?? 0), 0)
+  const planned = items.reduce((a, t) => a + (t.est ?? 0), 0)
   const goal = dayCapacity(s, date)
   const rest = goal === 0
-  const open = due.length + overdue.length
-  const noEst = [...due, ...overdue].filter((t) => !t.est).length
+  const open = items.length
+  const noEst = items.filter((t) => !t.est).length
   const defaultTrack = defaultTrackId(s)
 
-  const row = (t: Task, late?: boolean) => {
+  const row = (t: Task) => {
     const tr = trackById(s, t.trackId)
+    // משימה שלא סומנה ממשיכה להופיע בכל יום שאחריה, עם התאריך המקורי שלה
+    const lateDays = t.due && t.due < date ? diffDays(t.due, date) : 0
     return (
       <div className="item" key={t.id}>
         <Check
@@ -859,13 +961,15 @@ function TasksToday({
         >
           <div className="ttl">{t.title}</div>
           <div className="sub2">
-            {tr?.name ?? 'ללא מסלול'}
-            {late && t.due ? (
-              <>
+            {lateDays > 0 && (
+              <span style={{ color: 'var(--bad)', fontWeight: 700 }}>
+                באיחור <span className="ltr">{lateDays}</span> {lateDays === 1 ? 'יום' : 'ימים'}
                 {' · מ־'}
-                <span className="ltr">{shortDate(t.due)}</span>
-              </>
-            ) : null}
+                <span className="ltr">{shortDate(t.due as string)}</span>
+                {' · '}
+              </span>
+            )}
+            {tr?.name ?? 'ללא מסלול'}
             {t.est ? ` · ${plural(t.est, 'אסימון אחד', 'אסימונים')}` : ''}
           </div>
         </button>
@@ -902,6 +1006,9 @@ function TasksToday({
             <span style={planned > goal ? { color: 'var(--warn)', fontWeight: 700 } : undefined}>
               {plural(planned, 'אסימון אחד מתוכנן', 'אסימונים מתוכננים')} ·{' '}
               {rest ? 'חג — אין קיבולת' : <>קיבולת <span className="ltr">{goal}</span></>}
+              {overdue.length > 0 && (
+                <span style={{ color: 'var(--bad)' }}> · {overdue.length} באיחור</span>
+              )}
               {noEst > 0 && <span className="faint"> · {noEst} בלי הערכה</span>}
             </span>
           ) : open > 0 ? (
@@ -916,52 +1023,9 @@ function TasksToday({
         </span>
       </div>
       <div className="list">
-        {overdue.length > 0 && (
-          <div className="item" style={{ gap: 6 }}>
-            <button
-              className="grow"
-              style={{
-                fontWeight: 700,
-                fontSize: 13,
-                background: 'none',
-                border: 0,
-                textAlign: 'start',
-                color: 'var(--text-dim)',
-              }}
-              onClick={() => setShowOver((v) => !v)}
-            >
-              {overdue.length === 1 ? 'משימה אחת מחכה' : `${overdue.length} משימות מחכות`} מימים קודמים{' '}
-              {showOver ? '▾' : '◂'}
-            </button>
-            <button
-              className="btn xs"
-              onClick={() => {
-                if (!hasSpreadRoom(date)) {
-                  toast('אין יום פנוי בשלושת השבועות הקרובים — צריך להוריד משהו')
-                  return
-                }
-                const before = spreadTasks(overdue.map((t) => t.id), date)
-                toast(`${plural(overdue.length, 'משימה אחת פוזרה', 'משימות פוזרו')} על הימים הקרובים`, {
-                  label: 'ביטול',
-                  run: () => before.forEach((x) => actions.patchTask(x.id, { due: x.due })),
-                })
-              }}
-            >
-              פזר קדימה
-            </button>
-          </div>
-        )}
-        {overdue.length > 0 && showOver && (
-          <div className="tiny faint" style={{ padding: '2px 13px 8px' }}>
-            "פזר קדימה" מחלק אותן על הימים הקרובים לפי הקיבולת של כל יום — בחג אפס, בערב חג וביום
-            מבחן מעט, בשישי־שבת פחות מיום רגיל.
-          </div>
-        )}
-        {showOver && overdue.map((t) => row(t, true))}
-        {[...due]
-          .sort((a, b) => Number(b.critical ?? false) - Number(a.critical ?? false) || a.order - b.order)
-          .map((t) => row(t))}
-        {due.length > 0 && (planned > goal || rest) && (
+        {/* משימות שלא נסגרו מתגלגלות לכאן מעצמן, עם סימון איחור — לא נעלמות ולא נדרסות */}
+        {items.map((t) => row(t))}
+        {items.length > 0 && (planned > goal || rest) && (
           <div className="item" style={{ gap: 6 }}>
             <span className="grow tiny" style={{ color: 'var(--warn)', fontWeight: 700 }}>
               {rest ? 'זה יום מנוחה — ואלה מתוכננות עליו' : 'העומס של היום עובר את הקיבולת'}
@@ -969,7 +1033,7 @@ function TasksToday({
             <button
               className="btn xs"
               onClick={() => {
-                const ids = rest ? [...due, ...overdue].map((t) => t.id) : due.map((t) => t.id)
+                const ids = items.map((t) => t.id)
                 if (!hasSpreadRoom(addDays(date, 1))) {
                   toast('אין יום פנוי בשלושת השבועות הקרובים — צריך להוריד משהו')
                   return
@@ -997,7 +1061,7 @@ function TasksToday({
           </button>
         )}
         {showBack && backlog.map((t) => row(t))}
-        {due.length === 0 && overdue.length === 0 && backlog.length === 0 && (
+        {items.length === 0 && backlog.length === 0 && (
           doneToday > 0 ? (
             <div className="empty">
               סיימת הכל להיום. {plural(doneToday, 'משימה אחת נסגרה', 'משימות נסגרו')}.

@@ -53,6 +53,8 @@ export interface Task extends Rec {
   /** על הנתיב הקריטי */
   critical?: boolean
   doneAt?: number
+  /** מתי נוצרה — לניתוח השבועי (כמה נכנס מול כמה נסגר) */
+  createdAt?: number
 }
 
 export type EventKind =
@@ -97,6 +99,8 @@ export interface CalEvent extends Rec {
   touched?: boolean
   /** האם הבלוק הזה מיועד ל-Deep Work */
   deep?: boolean
+  /** תזכורות מראש, בימים לפני האירוע — למשל [14, 3] */
+  remind?: number[]
 }
 
 /** כלל חזרה — האפליקציה מייצרת ממנו אירועים אמיתיים לאופק של 120 יום */
@@ -149,6 +153,34 @@ export interface WeekLog extends Rec {
   review?: Review
   /** דחיית הסקירה עד לחותמת זמן */
   snoozeUntil?: number
+  /**
+   * מטרות־העל של השבוע הזה. נקבעות בשלב "להגדיר את השבוע" של הסקירה
+   * שסוגרת את השבוע הקודם, ומוצגות במסך היום לאורך כל השבוע.
+   */
+  goals?: WeekGoal[]
+  /** מתי הושלם שלב תכנון השבוע הזה */
+  plannedAt?: number
+}
+
+/** מטרת־על שבועית — לא משימה. שלוש כאלה זה הרבה. */
+export interface WeekGoal {
+  id: ID
+  text: string
+  trackId?: ID
+  done?: boolean
+}
+
+/**
+ * מה שהוא חשב על מהדורת חדשות אחת. נשמר במכשיר ומסונכרן, ומיוצא
+ * למחסן כדי שעורך הבוקר יוכל ללמוד מזה לאורך זמן.
+ */
+export interface NewsRating extends Rec {
+  /** תאריך המהדורה */
+  date: ISODate
+  /** מפתח הסיפור -> אהבתי/לא אהבתי, עם הכותרת כדי שהמשוב יהיה מובן */
+  votes: Record<string, { v: 1 | -1; headline: string; section: string }>
+  /** הערה חופשית על המהדורה */
+  note?: string
 }
 
 export interface Review {
@@ -266,6 +298,8 @@ export interface AppState {
   habits: HabitDef[]
   weekly: WeeklyDef[]
   phases: Phase[]
+  /** משוב על מהדורות החדשות */
+  news: NewsRating[]
   timer: Timer | null
   deviceId: string
   lastSyncAt: number

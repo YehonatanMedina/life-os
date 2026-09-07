@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { plural } from '../dates'
-import { useToast } from '../ui'
+import { useToast, vibrate } from '../ui'
+import { actions, useApp } from '../store'
+import { queueNewsFeedback } from '../cloud'
 
 // ---------------------------------------------------------------------------
 // חדשות הבוקר — מגזין יומי שנכתב בכל בוקר על ידי סוכן ענן ומתפרסם לצד האתר.
@@ -48,9 +50,12 @@ function fullText(ed: Edition): string {
 
 export default function NewsCard() {
   const toast = useToast()
+  const s = useApp()
   const [ed, setEd] = useState<Edition | null>(null)
   const [open, setOpen] = useState(false)
   const [openStory, setOpenStory] = useState<string | null>(null)
+  const [noteOpen, setNoteOpen] = useState(false)
+  const [note, setNote] = useState('')
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem(READ_KEY) ?? ''
@@ -93,7 +98,21 @@ export default function NewsCard() {
 
   useEffect(() => () => window.speechSynthesis?.cancel(), [])
 
+  // ההערה נטענת מהמצב השמור כשמזהים את המהדורה
+  const rating = ed ? (s.news ?? []).find((n) => n.date === ed.date && !n.deleted) : undefined
+  useEffect(() => {
+    setNote(rating?.note ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ed?.date])
+
   if (!ed || dismissed === ed.date) return null
+
+  const voteCount = Object.keys(rating?.votes ?? {}).length
+  const vote = (key: string, v: 1 | -1, headline: string, section: string) => {
+    actions.rateNewsStory(ed.date, key, v, { headline, section })
+    vibrate()
+    queueNewsFeedback()
+  }
 
   const speak = () => {
     const synth = window.speechSynthesis
@@ -177,39 +196,85 @@ export default function NewsCard() {
             {sec.stories.map((st, i) => {
               const id = `${sec.key}-${i}`
               const expanded = open || openStory === id
+              const v = rating?.votes?.[id]?.v
               return (
-                <button
-                  key={id}
-                  className="item"
-                  style={{ textAlign: 'start', alignItems: 'flex-start' }}
-                  onClick={() => setOpenStory(expanded && !open ? null : id)}
-                >
+                <div key={id} className="item" style={{ alignItems: 'flex-start' }}>
                   <div className="txt">
-                    <div className="ttl" style={{ fontWeight: 700 }}>
-                      {st.headline}
-                    </div>
-                    {expanded && (
-                      <div
-                        className="small muted"
-                        style={{ whiteSpace: 'pre-wrap', marginTop: 6, lineHeight: 1.75 }}
-                      >
-                        {st.body}
+                    <button
+                      style={{ background: 'none', border: 0, padding: 0, textAlign: 'start', width: '100%' }}
+                      onClick={() => setOpenStory(expanded && !open ? null : id)}
+                    >
+                      <div className="ttl" style={{ fontWeight: 700 }}>
+                        {st.headline}
                       </div>
-                    )}
+                      {expanded && (
+                        <div
+                          className="small muted"
+                          style={{ whiteSpace: 'pre-wrap', marginTop: 6, lineHeight: 1.75 }}
+                        >
+                          {st.body}
+                        </div>
+                      )}
+                    </button>
                   </div>
-                  {!expanded && <span className="faint">◂</span>}
-                </button>
+                  {/* דירוג לכל כותרת — זה מה שמלמד את עורך הבוקר מה מעניין אותך */}
+                  <div className="row" style={{ gap: 3, flexShrink: 0 }}>
+                    <button
+                      className={`vote${v === 1 ? ' up' : ''}`}
+                      aria-label="אהבתי"
+                      aria-pressed={v === 1}
+                      onClick={() => vote(id, 1, st.headline, sec.title)}
+                    >
+                      ▲
+                    </button>
+                    <button
+                      className={`vote${v === -1 ? ' down' : ''}`}
+                      aria-label="לא אהבתי"
+                      aria-pressed={v === -1}
+                      onClick={() => vote(id, -1, st.headline, sec.title)}
+                    >
+                      ▼
+                    </button>
+                  </div>
+                </div>
               )
             })}
           </React.Fragment>
         ))}
       </div>
 
-      <div className="row" style={{ padding: '8px 13px 12px' }}>
+      <div className="row" style={{ padding: '8px 13px 4px', flexWrap: 'wrap' }}>
         <button className="btn sm ghost" onClick={() => setOpen((v) => !v)}>
           {open ? 'צמצם' : 'פתח את כל הכתבות'}
         </button>
+        <button className="btn sm ghost" onClick={() => setNoteOpen((v) => !v)}>
+          {noteOpen ? 'סגור' : '✍️ הערה למהדורה'}
+        </button>
+        {voteCount > 0 && (
+          <span className="tiny faint">
+            {voteCount === 1 ? 'סימון אחד' : `${voteCount} סימונים`} נשמרו
+          </span>
+        )}
       </div>
+
+      {noteOpen && (
+        <div style={{ padding: '0 13px 12px' }}>
+          <textarea
+            className="textarea"
+            style={{ minHeight: 64 }}
+            value={note}
+            placeholder="מה לשפר במהדורה של מחר? אורך, נושאים, סגנון, כמה הסבר רקע…"
+            onChange={(e) => setNote(e.target.value)}
+            onBlur={() => {
+              actions.setNewsNote(ed.date, note.trim())
+              queueNewsFeedback()
+            }}
+          />
+          <div className="tiny faint" style={{ marginTop: 4 }}>
+            הסימונים וההערה נשמרים אצלך ונקראים על ידי עורך הבוקר לפני הגיליון הבא.
+          </div>
+        </div>
+      )}
     </div>
   )
 }

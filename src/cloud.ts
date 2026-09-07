@@ -373,6 +373,57 @@ export function startCloud() {
   void tick()
 }
 
+// ---------------------------------------------------------------------------
+// משוב על החדשות — קובץ נפרד וקריא במחסן.
+//
+// בכוונה לא מוצפן: זה הקובץ היחיד שעורך הבוקר בענן צריך לקרוא כדי ללמוד מה
+// אהבת ומה לא. הוא מכיל כותרות והערות על מהדורות — לא נתונים אישיים.
+// ---------------------------------------------------------------------------
+const FEEDBACK_FILE = 'news-feedback.json'
+let feedbackTimer: number | undefined
+
+export async function writeNewsFeedback(): Promise<boolean> {
+  const id = getGistId()
+  if (!id || !getToken()) return false
+  const list = (store.get().news ?? [])
+    .filter((n) => !n.deleted)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-21)
+  const editions = list.map((n) => {
+    const votes = Object.values(n.votes ?? {})
+    return {
+      date: n.date,
+      liked: votes.filter((v) => v.v === 1).map((v) => `[${v.section}] ${v.headline}`),
+      disliked: votes.filter((v) => v.v === -1).map((v) => `[${v.section}] ${v.headline}`),
+      note: n.note || undefined,
+    }
+  })
+  const content = JSON.stringify(
+    {
+      about: 'משוב של יהונתן על מהדורות הבוקר. נכתב על ידי האפליקציה, נקרא על ידי עורך החדשות.',
+      updatedAt: new Date().toISOString(),
+      editions,
+    },
+    null,
+    2,
+  )
+  try {
+    await api(`/gists/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ files: { [FEEDBACK_FILE]: { content } } }),
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** נקרא אחרי כל דירוג — כותב פעם אחת אחרי שהמשתמש הפסיק לגעת */
+export function queueNewsFeedback() {
+  if (feedbackTimer) clearTimeout(feedbackTimer)
+  feedbackTimer = window.setTimeout(() => void writeNewsFeedback(), 3500)
+}
+
 /** הורדת קובץ גיבוי */
 export async function saveFile(filename: string, data: string): Promise<boolean> {
   try {

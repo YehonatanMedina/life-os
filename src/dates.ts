@@ -22,8 +22,26 @@ export function parseISO(s: ISODate): Date {
   return new Date(y, (m || 1) - 1, d || 1)
 }
 
+/**
+ * היום מתחלף ב-03:30 ולא בחצות.
+ * מי שעובד עד אחת בלילה עדיין נמצא ביום שהתחיל בבוקר — הסשן, המשימות
+ * וסימון ההרגלים צריכים ליפול על התאריך הנכון ולא לקפוץ יום קדימה.
+ */
+export const DAY_SWITCH_MIN = 3 * 60 + 30
+
+/** התאריך הלוגי של רגע מסוים (ברירת מחדל: עכשיו) */
+export function logicalDate(ms: number = Date.now()): ISODate {
+  return iso(new Date(ms - DAY_SWITCH_MIN * 60_000))
+}
+
 export function today(): ISODate {
-  return iso(new Date())
+  return logicalDate()
+}
+
+/** האם אנחנו בשעות הקטנות — היום הלוגי הוא עדיין של אתמול */
+export function isAfterMidnight(ms: number = Date.now()): boolean {
+  const d = new Date(ms)
+  return d.getHours() * 60 + d.getMinutes() < DAY_SWITCH_MIN
 }
 
 export function addDays(s: ISODate, n: number): ISODate {

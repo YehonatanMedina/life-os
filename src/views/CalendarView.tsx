@@ -5,7 +5,9 @@ import {
   monthLabel, niceDate, parseISO, plural, shortDate, timeToMinutes, today as todayISO, weekDates,
   weekStart,
 } from '../dates'
-import { Check, Confirm, DateField, Field, onColor, Sheet, TimeField, useToast, vibrate } from '../ui'
+import {
+  Check, Confirm, DateField, Field, onColor, Sheet, TimeField, useSwipe, useToast, vibrate,
+} from '../ui'
 import type { CalEvent, EventKind, ID } from '../types'
 import { BulkDates } from './DatesCard'
 import { KIND_LABEL } from '../types'
@@ -22,16 +24,27 @@ export default function CalendarView({ initialDate }: { initialDate?: string }) 
   const [anchor, setAnchor] = useState<string>(initialDate ?? todayISO())
   const [editing, setEditing] = useState<CalEvent | null>(null)
   const [creating, setCreating] = useState<Partial<CalEvent> | null>(null)
+  // כיוון המעבר האחרון — רק בשביל האנימציה
+  const [dir, setDir] = useState<1 | -1>(1)
 
   useEffect(() => {
     if (initialDate) setAnchor(initialDate)
   }, [initialDate])
 
-  const step = (dir: number) => {
-    if (mode === 'month') setAnchor(addMonths(anchor, dir))
-    else if (mode === 'week') setAnchor(addDays(anchor, dir * 7))
-    else setAnchor(addDays(anchor, dir))
+  const step = (d: number) => {
+    setDir(d >= 0 ? 1 : -1)
+    if (mode === 'month') setAnchor(addMonths(anchor, d))
+    else if (mode === 'week') setAnchor(addDays(anchor, d * 7))
+    else setAnchor(addDays(anchor, d))
   }
+
+  // בעברית הזמן זורם שמאלה: אצבע ימינה = קדימה, אצבע שמאלה = אחורה.
+  // בזמן גרירת אירוע לא מחליפים תקופה.
+  const swipe = useSwipe(
+    () => step(1),
+    () => step(-1),
+    () => !!document.querySelector('.ev.drag'),
+  )
 
   const label =
     mode === 'month'
@@ -48,11 +61,12 @@ export default function CalendarView({ initialDate }: { initialDate?: string }) 
 
       <div className="spread" style={{ flexWrap: 'wrap', rowGap: 8 }}>
         <div className="row grow" style={{ minWidth: 0 }}>
+          {/* בעברית הזמן זורם שמאלה — החץ ימינה חוזר אחורה */}
           <button className="btn sm ghost" onClick={() => step(-1)} aria-label="הקודם">
-            ‹
+            ›
           </button>
           <button className="btn sm ghost" onClick={() => step(1)} aria-label="הבא">
-            ›
+            ‹
           </button>
           <b className="truncate" style={{ fontSize: 16, unicodeBidi: 'plaintext' }}>{label}</b>
         </div>
@@ -74,31 +88,34 @@ export default function CalendarView({ initialDate }: { initialDate?: string }) 
         </div>
       </div>
 
-      {mode === 'month' ? (
-        <MonthGrid
-          anchor={anchor}
-          onPick={(d) => {
-            setAnchor(d)
-            setMode('day')
-          }}
-          onNew={(d) => setCreating({ date: d, allDay: true, kind: 'personal' })}
-          onOpen={(e) => setEditing(e)}
-        />
-      ) : (
-        <HourGrid
-          dates={mode === 'week' ? weekDates(anchor) : [anchor]}
-          onOpen={(e) => setEditing(e)}
-          onNew={(d, start) =>
-            setCreating({
-              date: d,
-              start,
-              end: minutesToTime(Math.min(timeToMinutes(start) + 60, 24 * 60 - 1)),
-              allDay: false,
-              kind: 'personal',
-            })
-          }
-        />
-      )}
+      {/* החלקה אופקית מחליפה יום / שבוע / חודש */}
+      <div {...swipe} key={`${mode}-${anchor}`} className={`swipe-in ${dir > 0 ? 'fwd' : 'back'}`}>
+        {mode === 'month' ? (
+          <MonthGrid
+            anchor={anchor}
+            onPick={(d) => {
+              setAnchor(d)
+              setMode('day')
+            }}
+            onNew={(d) => setCreating({ date: d, allDay: true, kind: 'personal' })}
+            onOpen={(e) => setEditing(e)}
+          />
+        ) : (
+          <HourGrid
+            dates={mode === 'week' ? weekDates(anchor) : [anchor]}
+            onOpen={(e) => setEditing(e)}
+            onNew={(d, start) =>
+              setCreating({
+                date: d,
+                start,
+                end: minutesToTime(Math.min(timeToMinutes(start) + 60, 24 * 60 - 1)),
+                allDay: false,
+                kind: 'personal',
+              })
+            }
+          />
+        )}
+      </div>
 
       <DayList
         date={anchor}
@@ -711,6 +728,7 @@ export function EventSheet({
         ruleId: ev.ruleId,
         deep: ev.deep,
         capacity: ev.capacity,
+        remind: ev.remind,
       })
     } else setDraft(null)
   }, [ev])
@@ -864,6 +882,35 @@ export function EventSheet({
             <button className="switch" role="switch" aria-checked={!!draft.yearly} onClick={() => up({ yearly: !draft.yearly })} />
           </div>
         )}
+
+        {/* תזכורת מראש — כרטיס במסך היום והתראה לטלפון, כמה ימים לפני */}
+        <Field label="תזכורת מראש">
+          <div className="tag-scroll">
+            {[
+              { n: 14, l: 'שבועיים לפני' },
+              { n: 7, l: 'שבוע לפני' },
+              { n: 3, l: '3 ימים לפני' },
+              { n: 1, l: 'יום לפני' },
+            ].map((o) => {
+              const on = (draft.remind ?? []).includes(o.n)
+              return (
+                <button
+                  key={o.n}
+                  className={`tag${on ? ' on' : ''}`}
+                  aria-pressed={on}
+                  style={on ? { background: 'var(--accent)' } : undefined}
+                  onClick={() => {
+                    const cur = draft.remind ?? []
+                    const next = on ? cur.filter((x) => x !== o.n) : [...cur, o.n].sort((a, b) => b - a)
+                    up({ remind: next.length ? next : undefined })
+                  }}
+                >
+                  {o.l}
+                </button>
+              )
+            })}
+          </div>
+        </Field>
 
         <Field label="הערות">
           <textarea className="textarea" value={draft.notes ?? ''} onChange={(e) => up({ notes: e.target.value })} />

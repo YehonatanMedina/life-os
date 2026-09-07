@@ -7,9 +7,9 @@
 // ההתראות מגיעות רק למכשיר שנרשם — הטלפון.
 // ---------------------------------------------------------------------------
 
-import { store, dayCapacity, eventsOn } from './store'
+import { store, alive, dayCapacity, eventsOn, nextOccurrence } from './store'
 import type { AppState } from './types'
-import { addDays, today } from './dates'
+import { addDays, parseISO, today, weekStart } from './dates'
 
 const VAPID_PUBLIC =
   'BDGc0I1zDheeMwCmxAcYYG7MjeCyNUfcjHHbYlTzuNYMoawFcSaVPGCQ0B5XxMGhFwQNvm7iwllvknJna3n6tes'
@@ -86,8 +86,44 @@ export function buildScheduleItems(s: AppState): NotifyItem[] {
     add(`${d}-wake`, hhmmToMs(d, s.settings.wakeTime), 'בוקר טוב ☀️', 'שגרת בוקר — וגיליון החדשות של הבוקר כבר מחכה באפליקציה.')
     add(`${d}-night`, hhmmToMs(d, '23:00'), 'שגרת ערב 🌙', 'לסדר, לתכנן את מחר, ולישון בזמן.')
 
-    // אירועים ובלוקים מהיומן — תזכורת 10 דקות לפני
+    // מה שקורה היום בלי שעה — יום הולדת, חג, טיסה. פינג אחד, אחרי הקימה.
     const evs = eventsOn(s, d)
+    const allDay = evs.filter((e) => e.allDay)
+    if (allDay.length) {
+      const bd = allDay.filter((e) => e.kind === 'birthday')
+      add(
+        `${d}-allday`,
+        hhmmToMs(d, s.settings.wakeTime) + 15 * 60_000,
+        bd.length ? '🎂 יום הולדת היום' : 'היום ביומן',
+        allDay.map((e) => e.title).join(' · '),
+      )
+    }
+
+    // תזכורות מראש שהוגדרו על אירוע — "שבועיים ליום ההולדת של…"
+    for (const e of alive(s.events)) {
+      if (!e.remind?.length) continue
+      const occ = nextOccurrence(e, d)
+      for (const n of e.remind) {
+        if (addDays(occ, -n) !== d) continue
+        add(
+          `${d}-rm-${e.id}-${n}`,
+          hhmmToMs(d, s.settings.wakeTime) + 20 * 60_000,
+          n >= 14 ? `🎁 עוד שבועיים: ${e.title}` : n === 7 ? `🎁 עוד שבוע: ${e.title}` : `🎁 עוד ${n} ימים: ${e.title}`,
+          'יש עוד זמן לארגן משהו — וזה בדיוק העניין.',
+        )
+      }
+    }
+
+    // סגירת השבוע — ביום הסקירה, אם עוד לא מולאה
+    if (parseISO(d).getDay() === s.settings.reviewDow) {
+      const lastWs = addDays(weekStart(d), -7)
+      const wl = s.weeks.find((w) => w.weekStart === lastWs && !w.deleted)
+      if (!wl?.review) {
+        add(`${d}-review`, hhmmToMs(d, '10:00'), '🧭 המעבר השבועי', 'לסגור את השבוע שהיה ולהגדיר את המטרות של זה שמתחיל.')
+      }
+    }
+
+    // אירועים ובלוקים מהיומן — תזכורת 10 דקות לפני
     for (const e of evs) {
       if (e.allDay || !e.start) continue
       // שגרות כבר מכוסות למעלה — לא כפול

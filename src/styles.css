@@ -1077,6 +1077,137 @@ label.field > span, .field > span {
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
 /* =========================================================================
+   תובנות, מעבר שבועי, מצב מיקוד, גרפים
+   ========================================================================= */
+.ins {
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  background: var(--bg-elev);
+}
+.ins b { display: block; font-size: 14px; margin-bottom: 2px; }
+.ins .small { color: var(--text-dim); line-height: 1.6; }
+.ins.good { border-inline-start-color: var(--good); }
+.ins.good b { color: var(--good); }
+.ins.warn { border-inline-start-color: var(--warn); }
+.ins.warn b { color: var(--warn); }
+.ins.bad { border-inline-start-color: var(--bad); background: var(--bad-soft); }
+.ins.bad b { color: var(--bad); }
+
+/* המעבר השבועי — מסך מלא עם ראש קבוע ופס שלבים */
+.flow {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+.flow-head {
+  padding: calc(12px + env(safe-area-inset-top)) 14px 10px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.flow-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px;
+  -webkit-overflow-scrolling: touch;
+}
+.flow-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+  flex-shrink: 0;
+}
+.steps { display: flex; gap: 4px; margin-top: 10px; }
+.steps i { flex: 1; height: 3px; border-radius: 2px; background: var(--line); transition: background .2s; }
+.steps i.on { background: var(--accent); }
+
+/* מצב מיקוד — רק הזמן שנשאר */
+.focus {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.focus-x {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top));
+  inset-inline-end: 14px;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--text-faint);
+  font-size: 15px;
+}
+.focus-mid { text-align: center; }
+.focus-track { font-size: 15px; font-weight: 700; color: var(--text-dim); margin-bottom: 12px; }
+.focus-time {
+  font-family: var(--font-num);
+  font-size: clamp(60px, 21vw, 150px);
+  font-weight: 700;
+  letter-spacing: -.045em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.focus-time.over { color: var(--good); }
+.focus-sub { margin-top: 14px; color: var(--text-faint); font-size: 13px; }
+.focus-paused { margin-top: 8px; color: var(--warn); font-weight: 800; font-size: 13px; }
+.focus-actions {
+  position: absolute;
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  display: flex;
+  gap: 10px;
+}
+.focus-bar { position: absolute; inset-inline: 0; bottom: 0; height: 3px; background: var(--line-soft); }
+.focus-bar i { display: block; height: 100%; background: var(--accent); transition: width 1s linear; }
+
+/* עמודות ימי השבוע */
+.daybars { display: flex; align-items: flex-end; gap: 6px; }
+.daybar { flex: 1; min-width: 0; text-align: center; }
+.daybar .col { position: relative; height: 104px; display: flex; align-items: flex-end; }
+.daybar .fill { width: 100%; border-radius: 6px; }
+.daybar .goal { position: absolute; inset-inline: -3px; border-top: 1px dashed var(--text-faint); opacity: .55; }
+
+/* היסטוריה ארוכה — עמודה לכל יום או שבוע */
+.hist { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 124px; }
+.hist i { flex: 1 1 0; min-width: 2px; border-radius: 2px; }
+.hist .goal-line { position: absolute; inset-inline: 0; border-top: 1px dashed var(--text-faint); opacity: .5; }
+
+/* דירוג כתבה */
+.vote {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1;
+}
+.vote.up { background: var(--good-soft); border-color: var(--good); color: var(--good); }
+.vote.down { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+
+/* החלפת תקופה ביומן */
+.swipe-in { animation: swipe-fwd .18s ease-out; }
+.swipe-in.back { animation-name: swipe-back; }
+@keyframes swipe-fwd { from { transform: translateX(-16px); opacity: .5 } }
+@keyframes swipe-back { from { transform: translateX(16px); opacity: .5 } }
+
+/* =========================================================================
    פריסת מחשב — בסוף הקובץ כדי שכללי הבסיס לא יבטלו אותה
    ========================================================================= */
 @media (min-width: 900px) {
