@@ -321,17 +321,23 @@ function TrackSplit({ st }: { st: WeekStats }) {
  * הניתוח שהסוכן בענן כתב בבוקר הסקירה. מגיע מוצפן מהמאגר ומפוענח כאן.
  * אם עוד לא נכתב ניתוח — פשוט לא מציגים כלום.
  */
-function ClaudeInsight({ ws }: { ws: string }) {
+function useAiInsight(): AiInsight | null {
   const [ins, setIns] = useState<AiInsight | null>(null)
   useEffect(() => {
-    let alive = true
-    fetchInsight().then((x) => alive && setIns(x))
+    let live = true
+    fetchInsight().then((x) => live && setIns(x))
     return () => {
-      alive = false
+      live = false
     }
   }, [])
-  if (!ins || !ins.sections?.length) return null
-  const stale = ins.week !== ws
+  return ins && ins.sections?.length ? ins : null
+}
+
+function ClaudeInsight({ ws, ins }: { ws: string; ins?: AiInsight | null }) {
+  const loaded = useAiInsight()
+  const use = ins !== undefined ? ins : loaded
+  if (!use) return null
+  const stale = use.week !== ws
 
   return (
     <div className="card pad rail" style={{ ['--rail' as any]: 'var(--accent)' }}>
@@ -340,28 +346,28 @@ function ClaudeInsight({ ws }: { ws: string }) {
         <span className="tiny faint">
           {stale ? (
             <>
-              על שבוע <span className="ltr">{shortDate(ins.week)}</span>
+              על שבוע <span className="ltr">{shortDate(use.week)}</span>
             </>
           ) : (
             'על השבוע הזה'
           )}
         </span>
       </div>
-      {ins.headline && (
-        <div className="small" style={{ fontWeight: 700, marginBottom: 10 }}>{ins.headline}</div>
+      {use.headline && (
+        <div className="small" style={{ fontWeight: 700, marginBottom: 10 }}>{use.headline}</div>
       )}
       <div className="stack" style={{ gap: 10 }}>
-        {ins.sections.map((sec, i) => (
+        {use.sections!.map((sec, i) => (
           <div key={i}>
             <div className="tiny" style={{ fontWeight: 800, color: 'var(--accent)' }}>{sec.title}</div>
             <div className="small" style={{ lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{sec.text}</div>
           </div>
         ))}
       </div>
-      {ins.questions && ins.questions.length > 0 && (
+      {use.questions && use.questions.length > 0 && (
         <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line-soft)' }}>
           <div className="tiny faint" style={{ fontWeight: 700, marginBottom: 4 }}>לחשוב על זה</div>
-          {ins.questions.map((q, i) => (
+          {use.questions.map((q, i) => (
             <div key={i} className="small" style={{ marginBottom: 3 }}>
               · {q}
             </div>
@@ -594,6 +600,7 @@ export function WeeklyFlow({ ws, onClose }: { ws: string; onClose: () => void })
 
   const st = useMemo(() => buildWeekStats(s, ws), [s, ws])
   const insights = useMemo(() => buildInsights(s, st), [s, st])
+  const ai = useAiInsight()
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: 0 })
@@ -661,8 +668,8 @@ export function WeeklyFlow({ ws, onClose }: { ws: string; onClose: () => void })
               <p className="small muted" style={{ margin: 0 }}>
                 מה שהמספרים אומרים, בלי לרכך.
               </p>
-              <ClaudeInsight ws={ws} />
-              <div className="section-title">מה שהמכשיר מצא בעצמו</div>
+              {ai && <ClaudeInsight ws={ws} ins={ai} />}
+              {ai && <div className="section-title">מה שהמכשיר מצא בעצמו</div>}
               <div className="stack" style={{ gap: 8 }}>
                 {insights.map((i) => (
                   <div key={i.id} className={`ins ${i.tone}`}>
