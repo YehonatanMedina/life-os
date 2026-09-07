@@ -10,6 +10,7 @@ import {
 } from '../dates'
 import { Bar, Check, Ring, Sheet, onColor, useToast, vibrate } from '../ui'
 import { buildInsights, buildWeekStats, digestForClaude, type Insight, type WeekStats } from '../insights'
+import { fetchInsight, type Insight as AiInsight } from '../ai'
 import type { ID, Review as ReviewT, Task, WeekGoal } from '../types'
 
 // ---------------------------------------------------------------------------
@@ -112,6 +113,7 @@ export default function Review() {
       <WeekNumbers st={st} />
       <WeekBars st={st} />
       <TrackSplit st={st} />
+      <ClaudeInsight ws={ws} />
       <InsightsCard st={st} insights={insights} ws={ws} />
       <HistoryChart />
 
@@ -310,6 +312,62 @@ function TrackSplit({ st }: { st: WeekStats }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+/**
+ * הניתוח שהסוכן בענן כתב בבוקר הסקירה. מגיע מוצפן מהמאגר ומפוענח כאן.
+ * אם עוד לא נכתב ניתוח — פשוט לא מציגים כלום.
+ */
+function ClaudeInsight({ ws }: { ws: string }) {
+  const [ins, setIns] = useState<AiInsight | null>(null)
+  useEffect(() => {
+    let alive = true
+    fetchInsight().then((x) => alive && setIns(x))
+    return () => {
+      alive = false
+    }
+  }, [])
+  if (!ins || !ins.sections?.length) return null
+  const stale = ins.week !== ws
+
+  return (
+    <div className="card pad rail" style={{ ['--rail' as any]: 'var(--accent)' }}>
+      <div className="spread" style={{ marginBottom: 8 }}>
+        <b>הניתוח של Claude</b>
+        <span className="tiny faint">
+          {stale ? (
+            <>
+              על שבוע <span className="ltr">{shortDate(ins.week)}</span>
+            </>
+          ) : (
+            'על השבוע הזה'
+          )}
+        </span>
+      </div>
+      {ins.headline && (
+        <div className="small" style={{ fontWeight: 700, marginBottom: 10 }}>{ins.headline}</div>
+      )}
+      <div className="stack" style={{ gap: 10 }}>
+        {ins.sections.map((sec, i) => (
+          <div key={i}>
+            <div className="tiny" style={{ fontWeight: 800, color: 'var(--accent)' }}>{sec.title}</div>
+            <div className="small" style={{ lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{sec.text}</div>
+          </div>
+        ))}
+      </div>
+      {ins.questions && ins.questions.length > 0 && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line-soft)' }}>
+          <div className="tiny faint" style={{ fontWeight: 700, marginBottom: 4 }}>לחשוב על זה</div>
+          {ins.questions.map((q, i) => (
+            <div key={i} className="small" style={{ marginBottom: 3 }}>
+              · {q}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -601,8 +659,10 @@ export function WeeklyFlow({ ws, onClose }: { ws: string; onClose: () => void })
           {step === 1 && (
             <>
               <p className="small muted" style={{ margin: 0 }}>
-                מה שהמספרים אומרים, בלי לרכך. הכל מחושב מהנתונים שלך במכשיר.
+                מה שהמספרים אומרים, בלי לרכך.
               </p>
+              <ClaudeInsight ws={ws} />
+              <div className="section-title">מה שהמכשיר מצא בעצמו</div>
               <div className="stack" style={{ gap: 8 }}>
                 {insights.map((i) => (
                   <div key={i.id} className={`ins ${i.tone}`}>

@@ -72,12 +72,12 @@ export function setCredentials(token: string, pairing: string) {
 // -- הצפנה ------------------------------------------------------------------
 // AES-GCM עם מפתח אקראי שנוצר במכשיר. מה שיושב ב-GitHub הוא צופן חסר משמעות
 // למי שאין לו את המפתח — והמפתח עובר רק בתוך מזהה החיבור, לא נשמר בענן.
-function b64u(bytes: Uint8Array): string {
+export function b64u(bytes: Uint8Array): string {
   let s = ''
   bytes.forEach((b) => (s += String.fromCharCode(b)))
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
-function unb64u(s: string): Uint8Array {
+export function unb64u(s: string): Uint8Array {
   const t = s.replace(/-/g, '+').replace(/_/g, '/')
   const bin = atob(t + '='.repeat((4 - (t.length % 4)) % 4))
   return Uint8Array.from(bin, (c) => c.charCodeAt(0))
@@ -91,7 +91,7 @@ async function aesKey(b64: string): Promise<CryptoKey> {
     'decrypt',
   ])
 }
-async function encryptText(plain: string, keyB64: string): Promise<string> {
+export async function encryptText(plain: string, keyB64: string): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const key = await aesKey(keyB64)
   const ct = await crypto.subtle.encrypt(
@@ -101,7 +101,7 @@ async function encryptText(plain: string, keyB64: string): Promise<string> {
   )
   return JSON.stringify({ enc: 1, iv: b64u(iv), ct: b64u(new Uint8Array(ct)) })
 }
-async function decryptText(ivB64: string, ctB64: string, keyB64: string): Promise<string> {
+export async function decryptText(ivB64: string, ctB64: string, keyB64: string): Promise<string> {
   const key = await aesKey(keyB64)
   const plain = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: unb64u(ivB64) as BufferSource },

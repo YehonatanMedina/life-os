@@ -10,6 +10,7 @@ import SettingsView from './views/Settings'
 import FocusTimer from './views/FocusTimer'
 import { HE_STATUS, installFlush, startCloud, useCloudState } from './cloud'
 import { refreshNotifySchedule } from './push'
+import { writeWeekDigest } from './ai'
 
 type View = 'today' | 'calendar' | 'projects' | 'review' | 'settings'
 
@@ -184,6 +185,8 @@ function Shell() {
     startCloud()
     // רענון לוח ההתראות בפתיחה (פועל רק במכשיר שההתראות דלוקות בו)
     window.setTimeout(() => refreshNotifySchedule(), 4000)
+    // חבילת הנתונים לניתוח השבועי — נכתבת מוצפנת, לכל היותר פעם בשש שעות
+    window.setTimeout(() => void writeWeekDigest().catch(() => undefined), 9000)
   }, [])
 
   // דופק לטיימר, ויישור מיידי כשחוזרים ללשונית — כדי שטיימר שנשכח פתוח

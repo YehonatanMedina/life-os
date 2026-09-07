@@ -268,6 +268,12 @@ export interface Settings {
   easyExamDay: boolean
   /** האם כרטיס ההסבר הראשוני נסגר */
   onboarded?: boolean
+  /**
+   * מפתח הצפנה לצינור הניתוח השבועי. יושב כאן (ולכן מסונכרן ומוצפן יחד עם
+   * שאר המצב) ובפרומפט הפרטי של הסוכן — כך שהנתונים שעוברים ביניהם לא
+   * מונחים גלויים בשום מקום.
+   */
+  aiKey?: string
 }
 
 export interface Timer {
