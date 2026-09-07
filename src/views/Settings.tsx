@@ -11,6 +11,7 @@ function everyText(days: number): string {
 import { Confirm, DateField, Field, NumField, onColor, Sheet, Switch, TimeField, useToast } from '../ui'
 import type { HabitDef, HabitStep, RecurRule, WeeklyDef } from '../types'
 import { saveFile } from '../cloud'
+import { promptInstall, useInstallState } from '../install'
 import CloudCard from './CloudCard'
 import NotifyCard from './NotifyCard'
 import DatesCard from './DatesCard'
@@ -333,6 +334,9 @@ export default function SettingsView() {
         </Field>
       </div>
 
+      {/* ------------------------------------------------ התקנה */}
+      <InstallCard />
+
       {/* ------------------------------------------------ סנכרון */}
       <CloudCard />
 
@@ -432,6 +436,53 @@ export default function SettingsView() {
           toast('הכל אופס להתחלה')
         }}
       />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+/** התקנה כאפליקציה — חלון עצמאי עם אייקון, שעובד גם בלי רשת */
+function InstallCard() {
+  const { canInstall, installed } = useInstallState()
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+
+  return (
+    <div className="card pad">
+      <div className="section-title" style={{ marginBottom: 8 }}>התקנה כאפליקציה</div>
+      {installed ? (
+        <div className="small" style={{ color: 'var(--good)', fontWeight: 700 }}>
+          ✓ פועל כאפליקציה מותקנת על המכשיר הזה
+        </div>
+      ) : (
+        <>
+          <p className="small muted" style={{ marginTop: 0 }}>
+            אחרי ההתקנה זה חלון עצמאי עם אייקון משלו — בלי סרגל כתובת, נפתח מהשולחן או ממסך
+            הבית, ועובד גם כשאין אינטרנט. הנתונים אותם נתונים, והם מסתנכרנים חזרה ברגע שיש קליטה.
+          </p>
+          {canInstall ? (
+            <button
+              className="btn primary block"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                const r = await promptInstall()
+                setBusy(false)
+                if (r === 'accepted') toast('מותקן. אפשר לפתוח מהאייקון')
+                else if (r === 'dismissed') toast('ההתקנה בוטלה')
+                else toast('הדפדפן לא מציע התקנה כרגע')
+              }}
+            >
+              התקנה על המכשיר הזה
+            </button>
+          ) : (
+            <div className="tiny faint">
+              הדפדפן לא מציע התקנה כרגע. במחשב: תפריט שלוש הנקודות ← "שידור, שמירה ושיתוף" ←
+              "התקנת דף כאפליקציה". בטלפון: תפריט הדפדפן ← "הוספה למסך הבית".
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

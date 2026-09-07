@@ -5,7 +5,7 @@
 // לנכסים (אייקונים, גופנים): קודם מטמון, ורשת ברקע.
 // לבקשות ל-API של GitHub: אף פעם לא נוגעים — הסנכרון חייב להיות אמיתי.
 // ---------------------------------------------------------------------------
-const VERSION = 'v3'
+const VERSION = 'v4'
 const SHELL = 'life-os-shell-' + VERSION
 const ASSETS = 'life-os-assets-' + VERSION
 
