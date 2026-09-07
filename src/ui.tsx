@@ -37,6 +37,8 @@ export function useSwipe(onNext: () => void, onPrev: () => void, skip?: () => bo
     onTouchStart: (e: React.TouchEvent) => {
       if (e.touches.length !== 1) return (start.current = null)
       const t = e.touches[0]
+      // מקצה המסך זו מחוות "חזור" של המערכת — לא נוגעים בה
+      if (t.clientX < 26 || t.clientX > window.innerWidth - 26) return (start.current = null)
       start.current = { x: t.clientX, y: t.clientY, t: Date.now() }
     },
     onTouchEnd: (e: React.TouchEvent) => {
