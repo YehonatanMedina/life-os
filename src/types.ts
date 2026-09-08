@@ -139,6 +139,9 @@ export interface DayLog extends Rec {
   habits: Record<string, boolean>
   /** צעדים בתוך שגרות: stepId -> בוצע */
   steps: Record<string, boolean>
+  /** חותמת לכל הרגל ולכל צעד בנפרד — כדי ששני מכשירים לא ידרסו זה את זה */
+  habitsAt?: Record<string, number>
+  stepsAt?: Record<string, number>
   workout?: 'run' | 'strength' | 'other'
   /** נבחר Power Nap אחרי קימה מאוחרת */
   nap?: boolean
@@ -150,6 +153,9 @@ export interface WeekLog extends Rec {
   items: Record<string, boolean>
   /** פריטי progress: id -> דקות */
   progress: Record<string, number>
+  /** חותמת לכל פריט בנפרד — למיזוג בטוח בין מכשירים */
+  itemsAt?: Record<string, number>
+  progressAt?: Record<string, number>
   review?: Review
   /** דחיית הסקירה עד לחותמת זמן */
   snoozeUntil?: number

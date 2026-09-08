@@ -43,6 +43,97 @@ function mergeList<T extends Rec>(a: T[], b: T[]): T[] {
 }
 
 /**
+ * מיזוג מפה לפי מפתח: לכל מפתח בנפרד מנצחת החותמת החדשה יותר.
+ * זה מה שמונע ממכשיר אחד למחוק את מה שהשני רשם באותה רשומה — הרגל,
+ * צעד בשגרה, פריט שבועי או תרגיל. רשומות ישנות בלי חותמות נופלות חזרה
+ * ל-updatedAt של הרשומה, וזה מספיק כדי לאחות מה שכבר נשבר.
+ */
+type Keyed<T> = { map?: Record<string, T>; at?: Record<string, number>; updatedAt?: number }
+
+function mergeKeyed<T>(a: Keyed<T>, b: Keyed<T>): { map: Record<string, T>; at: Record<string, number> } {
+  const stamp = (r: Keyed<T>, k: string) => r.at?.[k] ?? r.updatedAt ?? 0
+  const map: Record<string, T> = {}
+  const at: Record<string, number> = {}
+  for (const k of new Set([...Object.keys(a.map ?? {}), ...Object.keys(b.map ?? {})])) {
+    // בדיקת נוכחות ולא בדיקת אמת — הערך false הוא ערך, לא היעדר
+    const inA = !!a.map && k in a.map
+    const inB = !!b.map && k in b.map
+    const win = !inB ? a : !inA ? b : stamp(a, k) >= stamp(b, k) ? a : b
+    map[k] = (win.map as Record<string, T>)[k]
+    at[k] = stamp(win, k)
+  }
+  return { map, at }
+}
+
+function mergeDayLogs(a: DayLog[], b: DayLog[]): DayLog[] {
+  const map = new Map<string, DayLog>()
+  for (const x of a) map.set(x.id, x)
+  for (const y of b) {
+    const x = map.get(y.id)
+    if (!x) {
+      map.set(y.id, y)
+      continue
+    }
+    const newer = (x.updatedAt || 0) >= (y.updatedAt || 0) ? x : y
+    const older = newer === x ? y : x
+    const h = mergeKeyed<boolean>(
+      { map: x.habits, at: x.habitsAt, updatedAt: x.updatedAt },
+      { map: y.habits, at: y.habitsAt, updatedAt: y.updatedAt },
+    )
+    const st = mergeKeyed<boolean>(
+      { map: x.steps, at: x.stepsAt, updatedAt: x.updatedAt },
+      { map: y.steps, at: y.stepsAt, updatedAt: y.updatedAt },
+    )
+    map.set(y.id, {
+      ...newer,
+      habits: h.map,
+      habitsAt: h.at,
+      steps: st.map,
+      stepsAt: st.at,
+      sleep: newer.sleep ?? older.sleep,
+      wake: newer.wake ?? older.wake,
+      wakeTime: newer.wakeTime ?? older.wakeTime,
+      workout: newer.workout ?? older.workout,
+      nap: newer.nap ?? older.nap,
+    })
+  }
+  return [...map.values()]
+}
+
+function mergeWeekLogs(a: WeekLog[], b: WeekLog[]): WeekLog[] {
+  const map = new Map<string, WeekLog>()
+  for (const x of a) map.set(x.id, x)
+  for (const y of b) {
+    const x = map.get(y.id)
+    if (!x) {
+      map.set(y.id, y)
+      continue
+    }
+    const newer = (x.updatedAt || 0) >= (y.updatedAt || 0) ? x : y
+    const older = newer === x ? y : x
+    const it = mergeKeyed<boolean>(
+      { map: x.items, at: x.itemsAt, updatedAt: x.updatedAt },
+      { map: y.items, at: y.itemsAt, updatedAt: y.updatedAt },
+    )
+    const pr = mergeKeyed<number>(
+      { map: x.progress, at: x.progressAt, updatedAt: x.updatedAt },
+      { map: y.progress, at: y.progressAt, updatedAt: y.updatedAt },
+    )
+    map.set(y.id, {
+      ...newer,
+      items: it.map,
+      itemsAt: it.at,
+      progress: pr.map,
+      progressAt: pr.at,
+      review: newer.review ?? older.review,
+      goals: newer.goals ?? older.goals,
+      plannedAt: newer.plannedAt ?? older.plannedAt,
+    })
+  }
+  return [...map.values()]
+}
+
+/**
  * מיזוג יומן אימון אחד. הסטים של כל תרגיל מתמזגים בנפרד לפי החותמת שלהם,
  * כך ששני מכשירים שרשמו באותו אימון — אחד את המתח והשני את הסקוואט —
  * מקבלים בסוף את שניהם. רשומות ישנות בלי setsAt נופלות חזרה ל-updatedAt
@@ -51,20 +142,14 @@ function mergeList<T extends Rec>(a: T[], b: T[]): T[] {
 function mergeWorkoutLog(x: WorkoutLog, y: WorkoutLog): WorkoutLog {
   const newer = (x.updatedAt || 0) >= (y.updatedAt || 0) ? x : y
   const older = newer === x ? y : x
-  const at = (r: WorkoutLog, k: string) => r.setsAt?.[k] ?? r.updatedAt ?? 0
-  const sets: Record<string, SetLog[]> = {}
-  const setsAt: Record<string, number> = {}
-  for (const k of new Set([...Object.keys(x.sets ?? {}), ...Object.keys(y.sets ?? {})])) {
-    const hasX = !!x.sets?.[k]
-    const hasY = !!y.sets?.[k]
-    const win = !hasY ? x : !hasX ? y : at(x, k) >= at(y, k) ? x : y
-    sets[k] = win.sets[k]
-    setsAt[k] = at(win, k)
-  }
+  const merged = mergeKeyed<SetLog[]>(
+    { map: x.sets, at: x.setsAt, updatedAt: x.updatedAt },
+    { map: y.sets, at: y.setsAt, updatedAt: y.updatedAt },
+  )
   return {
     ...newer,
-    sets,
-    setsAt,
+    sets: merged.map,
+    setsAt: merged.at,
     // מספרים שנרשמו רק בצד אחד לא הולכים לאיבוד
     km: newer.km ?? older.km,
     minutes: newer.minutes ?? older.minutes,
@@ -96,8 +181,8 @@ export function mergeStates(local: AppState, remote: AppState): AppState {
     events: mergeList(local.events, remote.events || []),
     rules: mergeList(local.rules, remote.rules || []),
     sessions: mergeList(local.sessions, remote.sessions || []),
-    days: mergeList(local.days, remote.days || []),
-    weeks: mergeList(local.weeks, remote.weeks || []),
+    days: mergeDayLogs(local.days, remote.days || []),
+    weeks: mergeWeekLogs(local.weeks, remote.weeks || []),
     habits: mergeList(local.habits, remote.habits || []),
     weekly: mergeList(local.weekly, remote.weekly || []),
     phases: mergeList(local.phases, remote.phases || []),
@@ -753,12 +838,18 @@ export const actions = {
   toggleHabit(date: ISODate, habitId: string) {
     const cur = store.get().days.find((d) => d.date === date)
     const val = !(cur?.habits?.[habitId])
-    actions.patchDay(date, { habits: { ...(cur?.habits ?? {}), [habitId]: val } })
+    actions.patchDay(date, {
+      habits: { ...(cur?.habits ?? {}), [habitId]: val },
+      habitsAt: { ...(cur?.habitsAt ?? {}), [habitId]: Date.now() },
+    })
   },
   toggleStep(date: ISODate, stepId: string) {
     const cur = store.get().days.find((d) => d.date === date)
     const val = !(cur?.steps?.[stepId])
-    actions.patchDay(date, { steps: { ...(cur?.steps ?? {}), [stepId]: val } })
+    actions.patchDay(date, {
+      steps: { ...(cur?.steps ?? {}), [stepId]: val },
+      stepsAt: { ...(cur?.stepsAt ?? {}), [stepId]: Date.now() },
+    })
   },
 
   // ---- יומן שבועי ----
@@ -778,7 +869,10 @@ export const actions = {
   toggleWeeklyItem(ws: ISODate, itemId: string) {
     const cur = store.get().weeks.find((w) => w.weekStart === ws)
     const val = !(cur?.items?.[itemId])
-    actions.patchWeek(ws, { items: { ...(cur?.items ?? {}), [itemId]: val } })
+    actions.patchWeek(ws, {
+      items: { ...(cur?.items ?? {}), [itemId]: val },
+      itemsAt: { ...(cur?.itemsAt ?? {}), [itemId]: Date.now() },
+    })
   },
   // ---- אימונים ----
   /** יוצר או מעדכן יום בתוכנית */
@@ -927,7 +1021,10 @@ export const actions = {
     const cur = store.get().weeks.find((w) => w.weekStart === ws)
     const before = cur?.progress?.[itemId] ?? 0
     const now = Math.max(0, before + minutes)
-    actions.patchWeek(ws, { progress: { ...(cur?.progress ?? {}), [itemId]: now } })
+    actions.patchWeek(ws, {
+      progress: { ...(cur?.progress ?? {}), [itemId]: now },
+      progressAt: { ...(cur?.progressAt ?? {}), [itemId]: Date.now() },
+    })
     return now - before
   },
 

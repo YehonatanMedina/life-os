@@ -186,6 +186,7 @@ export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => v
       const cur = s.days.find((x) => x.date === date)
       actions.patchDay(date, {
         habits: { ...(cur?.habits ?? {}), [hb.id]: true },
+        habitsAt: { ...(cur?.habitsAt ?? {}), [hb.id]: Date.now() },
         workout: day?.kind === 'run' || day?.kind === 'walk' ? 'run' : 'strength',
       })
     }
