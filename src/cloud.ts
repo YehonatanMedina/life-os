@@ -232,6 +232,22 @@ async function writeRemote(s: AppState): Promise<void> {
   })
 }
 
+/**
+ * ספירת הרשומות בכל רשימה. משמש כדי לזהות מצב שבו במחסן יש פחות ממה
+ * שיש אצלנו — למשל מכשיר עם גרסה ישנה שכתב מצב בלי שדה שהוא לא מכיר.
+ * במקרה כזה המיזוג מחזיר לנו את מה שחסר, ואנחנו כותבים אותו בחזרה.
+ */
+function listSizes(s: Partial<AppState>): string {
+  const keys = [
+    'tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits',
+    'weekly', 'phases', 'news', 'workoutPlan', 'workouts',
+  ] as const
+  return keys.map((k) => ((s as any)[k] ?? []).length).join(',')
+}
+
+/** המחסן מפגר אחרינו — הפעם הבאה שנתעורר תכתוב אליו */
+let remoteBehind = false
+
 /** משיכה + מיזוג. מחזיר true אם משהו השתנה מקומית. */
 export async function pullOnce(): Promise<boolean> {
   const remote = await readRemote()
@@ -243,6 +259,7 @@ export async function pullOnce(): Promise<boolean> {
   } else {
     store.set((local) => mergeStates(local, remote))
   }
+  remoteBehind = listSizes(store.get()) !== listSizes(remote)
   return snapshotOf(store.get()) !== before
 }
 
@@ -302,7 +319,7 @@ async function tick() {
   }
   if (!dirty) dirtySince = 0
 
-  const shouldPush = dirty && Date.now() - dirtySince >= QUIET_MS
+  const shouldPush = (dirty && Date.now() - dirtySince >= QUIET_MS) || remoteBehind
   const shouldPoll = !dirty && Date.now() - lastPoll >= POLL_MS
   if (!shouldPush && !shouldPoll) return
 
@@ -311,6 +328,7 @@ async function tick() {
     if (shouldPush) {
       setStatus('sending')
       await pushNow()
+      remoteBehind = false
       baseline = snapshotOf(store.get())
       dirtySince = 0
       lastPoll = Date.now()
