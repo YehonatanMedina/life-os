@@ -7,7 +7,7 @@
 // ההתראות מגיעות רק למכשיר שנרשם — הטלפון.
 // ---------------------------------------------------------------------------
 
-import { store, alive, dayCapacity, eventsOn, nextOccurrence } from './store'
+import { store, alive, dayCapacity, eventsOn, nextOccurrence, planForDow } from './store'
 import type { AppState } from './types'
 import { addDays, parseISO, today, weekStart } from './dates'
 
@@ -130,11 +130,17 @@ export function buildScheduleItems(s: AppState): NotifyItem[] {
       if (e.ruleId === 'rl-morning' || e.ruleId === 'rl-night') continue
       const at = hhmmToMs(d, e.start) - 10 * 60_000
       const isWorkout = e.ruleId === 'rl-workout'
+      // באימון מזכירים מה מתוכנן היום — זה מה שמוריד את החיכוך לצאת
+      const plan = isWorkout ? planForDow(s, parseISO(d).getDay()) : undefined
       add(
         `${d}-${e.id}`,
         at,
         isWorkout ? 'אימון בעוד 10 דקות 🏃' : `בעוד 10 דקות: ${e.title}`,
-        isWorkout ? '40 דקות. ריצה או כוח — העיקר שקורה.' : `מתחיל ב־${e.start}.`,
+        isWorkout
+          ? plan
+            ? `${plan.title}. הכל כבר מחכה באפליקציה — רק לסמן.`
+            : 'ריצה או כוח — העיקר שקורה.'
+          : `מתחיל ב־${e.start}.`,
       )
     }
 
