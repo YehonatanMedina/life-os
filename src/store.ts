@@ -42,6 +42,47 @@ function mergeList<T extends Rec>(a: T[], b: T[]): T[] {
   return [...map.values()]
 }
 
+/**
+ * מיזוג יומן אימון אחד. הסטים של כל תרגיל מתמזגים בנפרד לפי החותמת שלהם,
+ * כך ששני מכשירים שרשמו באותו אימון — אחד את המתח והשני את הסקוואט —
+ * מקבלים בסוף את שניהם. רשומות ישנות בלי setsAt נופלות חזרה ל-updatedAt
+ * של הרשומה, וזה מספיק כדי לאחות אימון שכבר נשבר.
+ */
+function mergeWorkoutLog(x: WorkoutLog, y: WorkoutLog): WorkoutLog {
+  const newer = (x.updatedAt || 0) >= (y.updatedAt || 0) ? x : y
+  const older = newer === x ? y : x
+  const at = (r: WorkoutLog, k: string) => r.setsAt?.[k] ?? r.updatedAt ?? 0
+  const sets: Record<string, SetLog[]> = {}
+  const setsAt: Record<string, number> = {}
+  for (const k of new Set([...Object.keys(x.sets ?? {}), ...Object.keys(y.sets ?? {})])) {
+    const hasX = !!x.sets?.[k]
+    const hasY = !!y.sets?.[k]
+    const win = !hasY ? x : !hasX ? y : at(x, k) >= at(y, k) ? x : y
+    sets[k] = win.sets[k]
+    setsAt[k] = at(win, k)
+  }
+  return {
+    ...newer,
+    sets,
+    setsAt,
+    // מספרים שנרשמו רק בצד אחד לא הולכים לאיבוד
+    km: newer.km ?? older.km,
+    minutes: newer.minutes ?? older.minutes,
+    note: newer.note || older.note,
+    finishedAt: newer.finishedAt ?? older.finishedAt,
+  }
+}
+
+function mergeWorkouts(a: WorkoutLog[], b: WorkoutLog[]): WorkoutLog[] {
+  const map = new Map<string, WorkoutLog>()
+  for (const x of a) map.set(x.id, x)
+  for (const y of b) {
+    const x = map.get(y.id)
+    map.set(y.id, x ? mergeWorkoutLog(x, y) : y)
+  }
+  return [...map.values()]
+}
+
 export function mergeStates(local: AppState, remote: AppState): AppState {
   // ההגדרות הן אובייקט אחד בלי חותמת לכל שדה, ולכן מנצחת מי שנערכה לאחרונה
   const useRemote =
@@ -62,7 +103,7 @@ export function mergeStates(local: AppState, remote: AppState): AppState {
     phases: mergeList(local.phases, remote.phases || []),
     news: mergeList(local.news || [], remote.news || []),
     workoutPlan: mergeList(local.workoutPlan || [], remote.workoutPlan || []),
-    workouts: mergeList(local.workouts || [], remote.workouts || []),
+    workouts: mergeWorkouts(local.workouts || [], remote.workouts || []),
     // הטיימר הוא תמיד מקומי — buildDocument מאפס אותו לפני פרסום
     timer: local.timer,
     lastSyncAt: Math.max(local.lastSyncAt || 0, remote.lastSyncAt || 0),
@@ -831,7 +872,9 @@ export const actions = {
     if (val === null) arr.splice(idx, 1)
     else arr[idx] = val
     sets[exId] = arr
-    actions.patchWorkout(date, { sets })
+    // חותמת לתרגיל הזה בלבד — כדי שמכשיר אחר שרשם תרגיל אחר לא יידרס
+    const setsAt = { ...(cur?.setsAt ?? {}), [exId]: Date.now() }
+    actions.patchWorkout(date, { sets, setsAt })
   },
   deleteWorkout(date: ISODate) {
     store.set((s) => ({

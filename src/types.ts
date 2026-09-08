@@ -270,6 +270,11 @@ export interface WorkoutLog extends Rec {
   kind: WorkoutKind
   /** מזהה תרגיל -> הסטים שבוצעו */
   sets: Record<string, SetLog[]>
+  /**
+   * חותמת זמן לכל תרגיל בנפרד. בלעדיה שני מכשירים שרשמו באותו אימון
+   * דורסים זה את זה — מי שכתב אחרון מוחק את כל מה שהשני רשם.
+   */
+  setsAt?: Record<string, number>
   km?: number
   minutes?: number
   note?: string
