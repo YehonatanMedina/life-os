@@ -1261,3 +1261,87 @@ label.field > span, .field > span {
   .topbar { display: none; }
   .desk-head { display: block; padding: 22px 0 4px; }
 }
+
+/* =========================================================================
+   אימונים
+   ========================================================================= */
+.wk-strip { display: flex; gap: 4px; padding: 6px 13px 10px; }
+.wk-strip .wd {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  min-width: 0;
+}
+.wk-strip .wd .l { font-size: 10.5px; color: var(--text-faint); font-weight: 700; }
+.wk-strip .wd .i { font-size: 14px; line-height: 1; }
+.wk-strip .wd.now { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.wk-strip .wd.ok { background: var(--good-soft); border-color: var(--good); }
+.wk-strip .wd.part { background: var(--warn-soft); border-color: var(--warn); }
+.wk-strip .wd:disabled { opacity: 1; }
+
+.sets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.setchip {
+  position: relative;
+  min-width: 74px;
+  padding: 9px 10px 9px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--text-faint);
+  font-weight: 700;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.setchip .n {
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 6px;
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--text-faint);
+  opacity: .8;
+}
+.setchip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.setchip.edit { box-shadow: 0 0 0 2px var(--accent); }
+.setchip.add { min-width: 46px; color: var(--text-dim); font-size: 15px; }
+
+.set-edit {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+}
+.stepper { display: flex; align-items: center; gap: 8px; }
+.stepper .lbl { font-size: 12.5px; font-weight: 700; color: var(--text-dim); flex: 1; min-width: 0; }
+.stepper .val {
+  min-width: 78px;
+  text-align: center;
+  font-family: var(--font-num);
+  font-size: 19px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.stepper .pm {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.stepper .pm:active { background: var(--bg-sunk); }
+
+.col-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.col-btns .btn { padding: 2px 6px; font-size: 10px; line-height: 1.2; }

@@ -16,6 +16,7 @@ import type { CalEvent, ID, Task } from '../types'
 import { TaskSheet } from './Projects'
 import NewsCard from './NewsCard'
 import { GoalsCard, WeeklyFlow, reviewPending } from './Review'
+import { WorkoutCard } from './Workout'
 
 export default function Today({ goto }: { goto: (v: string, arg?: any) => void }) {
   const s = useApp()
@@ -103,6 +104,7 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
         <div className="stack">
           <Countdowns date={date} />
           <GoalsCard ws={ws} title="מטרות־העל של השבוע" />
+          <WorkoutCard />
           <DailyHabits date={date} />
           <WeeklyTokens ws={ws} />
           <FocusCard />

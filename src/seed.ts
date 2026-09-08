@@ -178,6 +178,9 @@ export function seedState(): AppState {
     weekly: WEEKLY.map((w) => ({ ...w })),
     phases: PHASES.map((p) => ({ ...p })),
     news: [],
+    // התוכנית שלך — נבנית באפליקציה, לא בקוד (המאגר ציבורי)
+    workoutPlan: [],
+    workouts: [],
     timer: null,
     deviceId: newDeviceId(),
     lastSyncAt: 0,

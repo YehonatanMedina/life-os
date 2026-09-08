@@ -1,7 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import type {
-  AppState, CalEvent, DayLog, ID, ISODate, NewsRating, Rec, RecurRule, Session, Task, WeekGoal,
-  WeekLog,
+  AppState, CalEvent, DayLog, Exercise, ID, ISODate, NewsRating, Rec, RecurRule, Session, SetLog,
+  Task, WeekGoal, WeekLog, WorkoutDay, WorkoutLog,
 } from './types'
 import { addDays, iso, logicalDate, parseISO, today, weekStart } from './dates'
 import { HABITS, RULES, SCHEMA_VERSION, TASKS, TRACKS, WEEKLY, EVENTS, DEFAULT_SETTINGS, seedState, newDeviceId, PHASES } from './seed'
@@ -61,6 +61,8 @@ export function mergeStates(local: AppState, remote: AppState): AppState {
     weekly: mergeList(local.weekly, remote.weekly || []),
     phases: mergeList(local.phases, remote.phases || []),
     news: mergeList(local.news || [], remote.news || []),
+    workoutPlan: mergeList(local.workoutPlan || [], remote.workoutPlan || []),
+    workouts: mergeList(local.workouts || [], remote.workouts || []),
     // הטיימר הוא תמיד מקומי — buildDocument מאפס אותו לפני פרסום
     timer: local.timer,
     lastSyncAt: Math.max(local.lastSyncAt || 0, remote.lastSyncAt || 0),
@@ -234,6 +236,8 @@ function fillDefaults(s: AppState): AppState {
     settings: { ...DEFAULT_SETTINGS, ...s.settings },
     phases: s.phases ?? [],
     news: s.news ?? [],
+    workoutPlan: s.workoutPlan ?? [],
+    workouts: s.workouts ?? [],
   }
 }
 
@@ -285,6 +289,8 @@ function sanitize(p: any): AppState {
     phases: arr(p.phases, (x) => isDate(x.from) && isDate(x.to)),
     sessions: arr(p.sessions),
     news: arr(p.news, (n) => isDate(n.date)),
+    workoutPlan: arr(p.workoutPlan, (w) => Array.isArray(w.exercises)),
+    workouts: arr(p.workouts, (w) => isDate(w.date)),
     timer: sane(p.timer),
     days: arr(p.days, (d) => isDate(d.date)),
     weeks: arr(p.weeks, (w) => isDate(w.weekStart)),
@@ -336,7 +342,7 @@ export function loadState(): AppState {
   }
   s = applyMigrations(s)
   // הגנות לפני מיזוג הזרע — מצב ישן או פגום לא יפיל את האפליקציה
-  for (const k of ['tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits', 'weekly', 'phases', 'news'] as const) {
+  for (const k of ['tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits', 'weekly', 'phases', 'news', 'workoutPlan', 'workouts'] as const) {
     if (!Array.isArray((s as any)[k])) (s as any)[k] = []
   }
   s = fillDefaults(s)
@@ -733,6 +739,109 @@ export const actions = {
     const val = !(cur?.items?.[itemId])
     actions.patchWeek(ws, { items: { ...(cur?.items ?? {}), [itemId]: val } })
   },
+  // ---- אימונים ----
+  /** יוצר או מעדכן יום בתוכנית */
+  upsertWorkoutDay(d: WorkoutDay) {
+    store.set((s) => ({ ...s, workoutPlan: upsertList(s.workoutPlan ?? [], stamp(d)) }))
+  },
+  patchWorkoutDay(id: ID, patch: Partial<WorkoutDay>) {
+    store.set((s) => ({
+      ...s,
+      workoutPlan: (s.workoutPlan ?? []).map((d) =>
+        d.id === id ? { ...d, ...patch, updatedAt: Date.now() } : d,
+      ),
+    }))
+  },
+  deleteWorkoutDay(id: ID) {
+    actions.patchWorkoutDay(id, { deleted: true })
+  },
+  /** מוסיף תרגיל בשורה אחת — השאר נערך אחר כך */
+  addExercise(dayId: ID, name: string, partial: Partial<Exercise> = {}): ID {
+    const ex: Exercise = { id: uid('ex'), name, sets: 3, reps: '10', metric: 'weight', ...partial }
+    store.set((s) => ({
+      ...s,
+      workoutPlan: (s.workoutPlan ?? []).map((d) =>
+        d.id === dayId ? { ...d, exercises: [...d.exercises, ex], updatedAt: Date.now() } : d,
+      ),
+    }))
+    return ex.id
+  },
+  patchExercise(dayId: ID, exId: ID, patch: Partial<Exercise>) {
+    store.set((s) => ({
+      ...s,
+      workoutPlan: (s.workoutPlan ?? []).map((d) =>
+        d.id === dayId
+          ? {
+              ...d,
+              exercises: d.exercises.map((x) => (x.id === exId ? { ...x, ...patch } : x)),
+              updatedAt: Date.now(),
+            }
+          : d,
+      ),
+    }))
+  },
+  deleteExercise(dayId: ID, exId: ID) {
+    store.set((s) => ({
+      ...s,
+      workoutPlan: (s.workoutPlan ?? []).map((d) =>
+        d.id === dayId
+          ? { ...d, exercises: d.exercises.filter((x) => x.id !== exId), updatedAt: Date.now() }
+          : d,
+      ),
+    }))
+  },
+  /** הזזת תרגיל למעלה או למטה ברשימה */
+  moveExercise(dayId: ID, exId: ID, dir: -1 | 1) {
+    store.set((s) => ({
+      ...s,
+      workoutPlan: (s.workoutPlan ?? []).map((d) => {
+        if (d.id !== dayId) return d
+        const list = [...d.exercises]
+        const i = list.findIndex((x) => x.id === exId)
+        const j = i + dir
+        if (i === -1 || j < 0 || j >= list.length) return d
+        ;[list[i], list[j]] = [list[j], list[i]]
+        return { ...d, exercises: list, updatedAt: Date.now() }
+      }),
+    }))
+  },
+
+  /** יומן האימון של יום מסוים — נוצר בפעם הראשונה שנוגעים בו */
+  patchWorkout(date: ISODate, patch: Partial<WorkoutLog>) {
+    store.set((s) => {
+      const list = s.workouts ?? []
+      const cur = list.find((w) => w.date === date && !w.deleted)
+      const base: WorkoutLog = cur ?? {
+        id: `w-${date}`,
+        updatedAt: 0,
+        date,
+        title: '',
+        kind: 'gym',
+        sets: {},
+      }
+      return { ...s, workouts: upsertList(list, { ...base, ...patch, updatedAt: Date.now() }) }
+    })
+  },
+  /** רישום סט בודד. null מוחק אותו. */
+  setWorkoutSet(date: ISODate, exId: ID, idx: number, val: SetLog | null) {
+    const cur = (store.get().workouts ?? []).find((w) => w.date === date && !w.deleted)
+    const sets = { ...(cur?.sets ?? {}) }
+    const arr = [...(sets[exId] ?? [])]
+    while (arr.length < idx) arr.push({})
+    if (val === null) arr.splice(idx, 1)
+    else arr[idx] = val
+    sets[exId] = arr
+    actions.patchWorkout(date, { sets })
+  },
+  deleteWorkout(date: ISODate) {
+    store.set((s) => ({
+      ...s,
+      workouts: (s.workouts ?? []).map((w) =>
+        w.date === date ? { ...w, deleted: true, updatedAt: Date.now() } : w,
+      ),
+    }))
+  },
+
   /** מטרות־העל של שבוע. נקבעות בסקירה, מוצגות במסך היום כל השבוע. */
   setWeekGoals(ws: ISODate, goals: WeekGoal[]) {
     actions.patchWeek(ws, { goals })
@@ -911,7 +1020,7 @@ export const actions = {
   /** בודק ומנרמל קובץ גיבוי לפני ייבוא. מחזיר null אם הוא לא תקין. */
   normalizeImport(raw: any): AppState | null {
     if (!raw || typeof raw !== 'object') return null
-    const keys = ['tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits', 'weekly', 'news'] as const
+    const keys = ['tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits', 'weekly', 'news', 'workoutPlan', 'workouts'] as const
     if (!Array.isArray(raw.tasks) || !Array.isArray(raw.events)) return null
     const out: any = { ...raw }
     for (const k of keys) if (!Array.isArray(out[k])) out[k] = []
@@ -1160,3 +1269,59 @@ export function periodicDue(def: { everyDays?: number; anchorDate?: ISODate }, w
   return diffWeeks % periodWeeks === 0
 }
 
+
+// ---------------------------------------------------------------------------
+// אימונים
+// ---------------------------------------------------------------------------
+/** יום התוכנית של יום בשבוע מסוים */
+export function planForDow(s: AppState, dow: number): WorkoutDay | undefined {
+  return alive(s.workoutPlan ?? []).find((d) => d.dow === dow)
+}
+
+export function workoutOn(s: AppState, date: ISODate): WorkoutLog | undefined {
+  return (s.workouts ?? []).find((w) => w.date === date && !w.deleted)
+}
+
+/** האם נרשם משהו באימון הזה — סט אחד, קילומטר אחד או דקה אחת */
+export function workoutHasData(w?: WorkoutLog): boolean {
+  if (!w) return false
+  if (w.km || w.minutes) return true
+  return Object.values(w.sets ?? {}).some((arr) => arr.some((x) => x && (x.kg || x.reps || x.sec)))
+}
+
+/**
+ * ניקוד של סט — כדי שאפשר יהיה להשוות בין סטים ולצייר מגמה.
+ * במשקל (כולל תוספת על משקל גוף) המשקל קובע והחזרות שוברות שוויון:
+ * 47.5×9 חזק מ-45×10, ו-0×10 חזק מ-0×8.
+ */
+export function setScore(v: SetLog | undefined, metric: string): number {
+  if (!v) return 0
+  if (metric === 'time') return v.sec ?? 0
+  if (metric === 'reps') return v.reps ?? 0
+  return (v.kg ?? 0) + (v.reps ?? 0) / 100
+}
+
+/** הסט הטוב ביותר בקבוצת סטים, לפי אופן המדידה */
+export function bestSet(sets: SetLog[] | undefined, metric: string): SetLog | undefined {
+  if (!sets?.length) return undefined
+  return sets
+    .filter((x) => x && (x.kg || x.reps || x.sec))
+    .sort((a, b) => setScore(b, metric) - setScore(a, metric))[0]
+}
+
+/** כל הפעמים שתרגיל מסוים בוצע, מהישן לחדש */
+export function exerciseHistory(
+  s: AppState,
+  exId: ID,
+): Array<{ date: ISODate; sets: SetLog[] }> {
+  return (s.workouts ?? [])
+    .filter((w) => !w.deleted && w.sets?.[exId]?.some((x) => x && (x.kg || x.reps || x.sec)))
+    .map((w) => ({ date: w.date, sets: w.sets[exId].filter((x) => x && (x.kg || x.reps || x.sec)) }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+/** מה עשית בפעם הקודמת בתרגיל הזה (לא כולל היום) */
+export function lastSetsOf(s: AppState, exId: ID, before: ISODate): { date: ISODate; sets: SetLog[] } | undefined {
+  const h = exerciseHistory(s, exId).filter((x) => x.date < before)
+  return h[h.length - 1]
+}

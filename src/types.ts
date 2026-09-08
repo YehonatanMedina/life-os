@@ -213,6 +213,69 @@ export interface HabitDef extends Rec {
   steps?: HabitStep[]
 }
 
+// ---------------------------------------------------------------------------
+// אימונים — התוכנית השבועית, ומה שבאמת בוצע
+// ---------------------------------------------------------------------------
+export type WorkoutKind = 'gym' | 'run' | 'walk' | 'home' | 'rest'
+
+export const WORKOUT_KIND_LABEL: Record<WorkoutKind, string> = {
+  gym: 'חדר כושר',
+  run: 'ריצה',
+  walk: 'הליכה',
+  home: 'בית',
+  rest: 'מנוחה',
+}
+
+/**
+ * איך מודדים את התרגיל:
+ * weight — משקל חיצוני · bodyweight — משקל גוף, והק״ג הוא תוספת
+ * time — שניות החזקה · reps — חזרות בלבד
+ */
+export type ExMetric = 'weight' | 'bodyweight' | 'time' | 'reps'
+
+export interface Exercise {
+  id: ID
+  name: string
+  /** מספר הסטים המתוכנן */
+  sets?: number
+  /** טווח החזרות כפי שנכתב בתוכנית — "8-10", "מקסימום" */
+  reps?: string
+  metric: ExMetric
+  note?: string
+}
+
+/** יום בתוכנית השבועית (0 = ראשון) */
+export interface WorkoutDay extends Rec {
+  dow: number
+  title: string
+  kind: WorkoutKind
+  focus?: string
+  exercises: Exercise[]
+}
+
+/** סט בודד שבוצע */
+export interface SetLog {
+  /** משקל בק״ג. ב־bodyweight זו התוספת, ו-0 הוא משקל גוף. */
+  kg?: number
+  reps?: number
+  sec?: number
+}
+
+/** אימון שבוצע ביום מסוים */
+export interface WorkoutLog extends Rec {
+  date: ISODate
+  /** היום בתוכנית שממנו נגזר האימון */
+  dayId?: ID
+  title: string
+  kind: WorkoutKind
+  /** מזהה תרגיל -> הסטים שבוצעו */
+  sets: Record<string, SetLog[]>
+  km?: number
+  minutes?: number
+  note?: string
+  finishedAt?: number
+}
+
 export interface WeeklyDef extends Rec {
   /** פריטים עם אותו group מוצגים בשורה אחת במסך היום */
   group?: string
@@ -306,6 +369,10 @@ export interface AppState {
   phases: Phase[]
   /** משוב על מהדורות החדשות */
   news: NewsRating[]
+  /** התוכנית השבועית של האימונים */
+  workoutPlan: WorkoutDay[]
+  /** מה שבאמת בוצע */
+  workouts: WorkoutLog[]
   timer: Timer | null
   deviceId: string
   lastSyncAt: number
