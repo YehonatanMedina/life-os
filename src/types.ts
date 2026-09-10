@@ -110,8 +110,12 @@ export interface RecurRule extends Rec {
   trackId?: ID
   start: HHMM
   end: HHMM
-  /** ימים בשבוע (0 = ראשון) */
+  /** ימים בשבוע (0 = ראשון) — לחזרה שבועית */
   days: number[]
+  /** שבועי (ברירת מחדל) או חודשי */
+  freq?: 'weekly' | 'monthly'
+  /** לחזרה חודשית: היום בחודש. בחודש קצר יותר — היום האחרון שלו. */
+  monthDay?: number
   from: ISODate
   until?: ISODate
   active: boolean

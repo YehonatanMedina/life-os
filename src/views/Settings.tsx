@@ -174,7 +174,10 @@ export default function SettingsView() {
                   {r.title} {!r.active && <span className="chip">כבוי</span>}
                 </div>
                 <div className="sub2">
-                  <span className="ltr">{r.start}–{r.end}</span> · {r.days.map((d) => HE_DAYS_SHORT[d]).join(' ')}
+                  <span className="ltr">{r.start}–{r.end}</span> ·{' '}
+                  {r.freq === 'monthly'
+                    ? `כל חודש ב־${r.monthDay ?? Number(r.from.slice(8, 10))} בו`
+                    : r.days.map((d) => HE_DAYS_SHORT[d]).join(' ')}
                 </div>
               </div>
               <span className="faint">›</span>
@@ -772,24 +775,54 @@ function RuleSheet({ rule, onClose }: { rule: RecurRule | null; onClose: () => v
         </label>
       </div>
 
-      <Field label="ימים">
-        <div className="row wrap">
-          {HE_DAYS.map((n, i) => (
-            <button
-              key={i}
-              className={`btn xs${d.days.includes(i) ? ' primary' : ''}`}
-              onClick={() =>
-                setD((x) =>
-                  x
-                    ? { ...x, days: x.days.includes(i) ? x.days.filter((y) => y !== i) : [...x.days, i].sort() }
-                    : x,
-                )
-              }
-            >
-              {HE_DAYS_SHORT[i]}
-            </button>
-          ))}
+      <Field label="תדירות">
+        <div className="row">
+          <button
+            className={`btn sm grow${(d.freq ?? 'weekly') === 'weekly' ? ' primary' : ''}`}
+            onClick={() => up({ freq: 'weekly' })}
+          >
+            כל שבוע
+          </button>
+          <button
+            className={`btn sm grow${d.freq === 'monthly' ? ' primary' : ''}`}
+            onClick={() => up({ freq: 'monthly', monthDay: d.monthDay ?? Number(d.from.slice(8, 10)) })}
+          >
+            כל חודש
+          </button>
         </div>
+      </Field>
+
+      {d.freq === 'monthly' ? (
+        <Field label="ביום בחודש">
+          <NumField value={d.monthDay ?? 1} min={1} max={31} onChange={(v) => up({ monthDay: v })} />
+          <div className="tiny faint" style={{ marginTop: 4 }}>
+            בחודש שאין בו את היום הזה (למשל 31 בפברואר) — נופל על היום האחרון בחודש.
+          </div>
+        </Field>
+      ) : (
+        <Field label="ימים">
+          <div className="row wrap">
+            {HE_DAYS.map((n, i) => (
+              <button
+                key={i}
+                className={`btn xs${d.days.includes(i) ? ' primary' : ''}`}
+                onClick={() =>
+                  setD((x) =>
+                    x
+                      ? { ...x, days: x.days.includes(i) ? x.days.filter((y) => y !== i) : [...x.days, i].sort() }
+                      : x,
+                  )
+                }
+              >
+                {HE_DAYS_SHORT[i]}
+              </button>
+            ))}
+          </div>
+        </Field>
+      )}
+
+      <Field label="מתאריך">
+        <DateField value={d.from} onChange={(v) => up({ from: v || d.from })} />
       </Field>
 
       <Field label="מסלול (לא חובה)">
@@ -833,7 +866,7 @@ function RuleSheet({ rule, onClose }: { rule: RecurRule | null; onClose: () => v
           className="btn primary grow"
           onClick={() => {
             if (!d.title.trim()) return toast('צריך שם')
-            if (!d.days.length) return toast('בחר לפחות יום אחד')
+            if (d.freq !== 'monthly' && !d.days.length) return toast('בחר לפחות יום אחד')
             if (timeToMinutes(d.end) <= timeToMinutes(d.start)) return toast('שעת הסיום חייבת להיות אחרי ההתחלה')
             actions.upsertRule({ ...d, title: d.title.trim() })
             toast('נשמר · היומן עודכן מהיום והלאה')

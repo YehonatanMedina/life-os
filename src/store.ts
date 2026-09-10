@@ -203,6 +203,17 @@ export function ruleEventId(ruleId: ID, date: ISODate): string {
   return `${ruleId}@${date}`
 }
 
+/** האם כלל חזרה חל בתאריך נתון — שבועי לפי ימים, חודשי לפי היום בחודש */
+export function ruleMatches(r: RecurRule, d: ISODate): boolean {
+  const dt = parseISO(d)
+  if (r.freq === 'monthly') {
+    const want = r.monthDay ?? parseISO(r.from).getDate()
+    const lastOfMonth = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate()
+    return dt.getDate() === Math.min(want, lastOfMonth)
+  }
+  return r.days.includes(dt.getDay())
+}
+
 /**
  * מייצר אירועים אמיתיים מכל כלל חזרה פעיל, עד לאופק של 120 יום.
  * המזהה קבוע (rule@date-מקורי) — ולכן גרירה, עריכה או מחיקה של מופע
@@ -245,8 +256,7 @@ export function materialize(state: AppState): AppState {
     const end = rule.until && rule.until < to ? rule.until : to
     let guard = 0
     while (d <= end && guard++ < 400) {
-      const dowN = parseISO(d).getDay()
-      if (rule.days.includes(dowN) && !(rule.deep && holidays.has(d))) {
+      if (ruleMatches(rule, d) && !(rule.deep && holidays.has(d))) {
         const id = ruleEventId(rule.id, d)
         if (!existing.has(id)) {
           added.push({
@@ -718,7 +728,7 @@ export const actions = {
         let d = r.from > from ? r.from : from
         let guard = 0
         while (d <= end && guard++ < 400) {
-          if (r.days.includes(parseISO(d).getDay()) && !(r.deep && holidays.has(d))) wanted.add(d)
+          if (ruleMatches(r, d) && !(r.deep && holidays.has(d))) wanted.add(d)
           d = addDays(d, 1)
         }
       }
