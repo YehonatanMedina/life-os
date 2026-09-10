@@ -19,7 +19,7 @@
 // ---------------------------------------------------------------------------
 
 import { useSyncExternalStore } from 'react'
-import { consumeFreshInstall, store, mergeStates } from './store'
+import { actions, consumeFreshInstall, store, mergeStates } from './store'
 import { refreshNotifySchedule } from './push'
 import { decryptText, encryptText, newCryptKey, stableStringify } from './crypto'
 import { aiKey, buildAtlasContext, buildPulse, buildWeekDigest } from './ai'
@@ -329,8 +329,9 @@ export async function pullOnce(): Promise<boolean> {
   if (!remote) return false
   const before = snapshotOf(store.get())
   if (consumeFreshInstall()) {
-    // מכשיר חדש: מה שבענן הוא התמונה, לא תוספת לתוכן הפתיחה
-    store.replace({ ...remote, timer: null })
+    // מכשיר חדש: מה שבענן הוא התמונה, לא תוספת לתוכן הפתיחה.
+    // מזהה המכשיר נשאר שלנו — אחרת כל המכשירים היו נקראים באותו שם.
+    store.replace({ ...remote, timer: null, deviceId: store.get().deviceId })
   } else {
     store.set((local) => mergeStates(local, remote))
   }
@@ -498,6 +499,8 @@ function consumeSetupLink() {
         /* ignore */
       }
     }
+    // מפתח הניתוח נכנס להגדרות דרך הפעולה הרגילה — כך הוא מקבל חותמת ומסתנכרן לכל מכשיר
+    if (cfg && typeof cfg.ak === 'string' && cfg.ak) actions.setSettings({ aiKey: cfg.ak })
     history.replaceState(null, '', location.pathname + location.search)
   } catch {
     /* ignore */
