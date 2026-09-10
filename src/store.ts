@@ -189,6 +189,8 @@ export function mergeStates(local: AppState, remote: AppState): AppState {
     news: mergeList(local.news || [], remote.news || []),
     workoutPlan: mergeList(local.workoutPlan || [], remote.workoutPlan || []),
     workouts: mergeWorkouts(local.workouts || [], remote.workouts || []),
+    // איחוד — פקודה שבוצעה באחד המכשירים בוצעה
+    atlasApplied: { ...(remote.atlasApplied || {}), ...(local.atlasApplied || {}) },
     // הטיימר הוא תמיד מקומי — buildDocument מאפס אותו לפני פרסום
     timer: local.timer,
     lastSyncAt: Math.max(local.lastSyncAt || 0, remote.lastSyncAt || 0),
@@ -374,6 +376,7 @@ function fillDefaults(s: AppState): AppState {
     news: s.news ?? [],
     workoutPlan: s.workoutPlan ?? [],
     workouts: s.workouts ?? [],
+    atlasApplied: s.atlasApplied ?? {},
   }
 }
 
@@ -640,6 +643,18 @@ export const actions = {
       tasks: s.tasks.map((t) => (t.id === id ? { ...t, deleted: true, updatedAt: Date.now() } : t)),
     }))
   },
+  /** הכנסה של משימה עם מזהה נתון — לאטלס, שמזהיו נגזרים מהפקודה */
+  putTask(t: Omit<Task, 'updatedAt' | 'order'> & Partial<Pick<Task, 'order'>>) {
+    const s = store.get()
+    const full = {
+      order: nextOrder(s.tasks),
+      createdAt: Date.now(),
+      ...t,
+      trackId: t.trackId || defaultTrackId(s) || '',
+      updatedAt: Date.now(),
+    } as Task
+    store.set((st) => ({ ...st, tasks: upsertList(st.tasks, full) }))
+  },
   restoreTask(id: ID) {
     store.set((s) => ({
       ...s,
@@ -677,6 +692,10 @@ export const actions = {
     } as CalEvent
     store.set((s) => ({ ...s, events: [...s.events, e] }))
     return e
+  },
+  /** הכנסה של אירוע עם מזהה נתון — לאטלס */
+  putEvent(e: Omit<CalEvent, 'updatedAt'>) {
+    store.set((s) => ({ ...s, events: upsertList(s.events, { ...e, updatedAt: Date.now() } as CalEvent) }))
   },
   patchEvent(id: ID, patch: Partial<CalEvent>) {
     store.set((s) => ({
@@ -987,6 +1006,11 @@ export const actions = {
         w.date === date ? { ...w, deleted: true, updatedAt: Date.now() } : w,
       ),
     }))
+  },
+
+  /** פקודות של אטלס שבוצעו במכשיר הזה — מצטרף למפה המסונכרנת */
+  markAtlasApplied(ids: Record<string, number>) {
+    store.set((s) => ({ ...s, atlasApplied: { ...(s.atlasApplied ?? {}), ...ids } }))
   },
 
   /** מטרות־העל של שבוע. נקבעות בסקירה, מוצגות במסך היום כל השבוע. */

@@ -8,18 +8,26 @@ import Projects from './views/Projects'
 import Review, { ReviewLock, reviewWeekOf } from './views/Review'
 import SettingsView from './views/Settings'
 import FocusTimer from './views/FocusTimer'
+import AtlasView from './views/Atlas'
+import { startAtlas } from './atlas'
 import { HE_STATUS, buildId, installFlush, safeToReload, startCloud, useCloudState } from './cloud'
 import { refreshNotifySchedule } from './push'
 
-type View = 'today' | 'calendar' | 'projects' | 'review' | 'settings'
+type View = 'today' | 'atlas' | 'calendar' | 'projects' | 'review' | 'settings'
 
-type IconName = 'today' | 'calendar' | 'projects' | 'review' | 'settings'
+type IconName = View
 
 const PATHS: Record<IconName, React.ReactNode> = {
   today: (
     <>
       <circle cx="12" cy="12" r="8.2" />
       <path d="M12 7.6V12l2.8 1.7" />
+    </>
+  ),
+  atlas: (
+    <>
+      <circle cx="12" cy="12" r="8.4" />
+      <path d="M12 6.6l1.7 3.7 3.7 1.7-3.7 1.7L12 17.4l-1.7-3.7-3.7-1.7 3.7-1.7z" />
     </>
   ),
   calendar: (
@@ -67,6 +75,7 @@ function Icon({ name }: { name: IconName }) {
 
 const NAV: Array<{ id: View; label: string }> = [
   { id: 'today', label: 'היום' },
+  { id: 'atlas', label: 'אטלס' },
   { id: 'calendar', label: 'יומן' },
   { id: 'projects', label: 'פרויקטים' },
   { id: 'review', label: 'סקירה' },
@@ -182,6 +191,7 @@ function Shell() {
   useEffect(() => {
     installFlush()
     startCloud()
+    startAtlas()
     // רענון לוח ההתראות בפתיחה (פועל רק במכשיר שההתראות דלוקות בו)
     window.setTimeout(() => refreshNotifySchedule(), 4000)
   }, [])
@@ -258,7 +268,7 @@ function Shell() {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       // כשגיליון פתוח, המספרים שייכים לו — לא לניווט
       if (document.querySelector('.scrim')) return
-      const map: Record<string, View> = { '1': 'today', '2': 'calendar', '3': 'projects', '4': 'review', '5': 'settings' }
+      const map: Record<string, View> = { '1': 'today', '2': 'atlas', '3': 'calendar', '4': 'projects', '5': 'review', '6': 'settings' }
       if (map[e.key]) setView(map[e.key])
     }
     window.addEventListener('keydown', onKey)
@@ -338,6 +348,7 @@ function Shell() {
           </div>
         )}
         {view === 'today' && <Today goto={goto} />}
+        {view === 'atlas' && <AtlasView />}
         {view === 'calendar' && <CalendarView initialDate={calDate} />}
         {view === 'projects' && <Projects />}
         {view === 'review' && <Review />}

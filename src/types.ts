@@ -399,4 +399,6 @@ export interface AppState {
   materializedTo: ISODate
   /** מיגרציות חד־פעמיות שכבר רצו על המצב הזה */
   migrations?: string[]
+  /** פקודות של אטלס שכבר בוצעו (מזהה -> מתי) — כדי שכל מכשיר יבצע פעם אחת */
+  atlasApplied?: Record<string, number>
 }

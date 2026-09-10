@@ -165,7 +165,7 @@ function contentOf(s: Partial<AppState>): string {
       String(a.id).localeCompare(String(b.id)),
     )
   }
-  return stableStringify({ settings: s.settings, settingsUpdatedAt: s.settingsUpdatedAt ?? 0, lists })
+  return stableStringify({ settings: s.settings, settingsUpdatedAt: s.settingsUpdatedAt ?? 0, lists, atlasApplied: s.atlasApplied ?? {} })
 }
 
 async function api(path: string, init?: RequestInit): Promise<any> {

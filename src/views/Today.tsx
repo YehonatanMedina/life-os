@@ -17,6 +17,7 @@ import { TaskSheet } from './Projects'
 import NewsCard from './NewsCard'
 import { GoalsCard, WeeklyFlow, reviewPending } from './Review'
 import { WorkoutCard } from './Workout'
+import { awaitingReply, todayNote, useAtlas } from '../atlas'
 
 export default function Today({ goto }: { goto: (v: string, arg?: any) => void }) {
   const s = useApp()
@@ -73,6 +74,7 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
       {!s.settings.onboarded && <Intro />}
 
       <ReviewNudge />
+      <AtlasCard goto={goto} />
       <PhaseStrip />
 
       {birthdays.length > 0 && (
@@ -1653,5 +1655,28 @@ function FocusCard() {
         </>
       )}
     </div>
+  )
+}
+
+/** פתק הבוקר של אטלס, ותשובה שמחכה — מוצג רק כשיש משהו */
+function AtlasCard({ goto }: { goto: (v: string) => void }) {
+  const a = useAtlas()
+  const note = todayNote(a)
+  const waiting = awaitingReply()
+  const last = a.messages[a.messages.length - 1]
+  const fresh = last && last.from === 'atlas' && Date.now() - Date.parse(last.at) < 3 * 3600_000
+  if (!note && !waiting && !fresh) return null
+  return (
+    <button className="card pad rail atlas-card" style={{ ['--rail' as any]: 'var(--accent)', textAlign: 'start', width: '100%' }} onClick={() => goto('atlas')}>
+      <div className="spread">
+        <b>אטלס</b>
+        <span className="tiny faint">{waiting ? 'עובד על התשובה…' : note ? 'הבוקר' : 'ענה'}</span>
+      </div>
+      {note ? (
+        <div className="small" style={{ whiteSpace: 'pre-wrap', marginTop: 6 }}>{note.text}</div>
+      ) : fresh && !waiting ? (
+        <div className="small muted" style={{ marginTop: 6 }}>{last.text.length > 160 ? last.text.slice(0, 160) + '…' : last.text}</div>
+      ) : null}
+    </button>
   )
 }

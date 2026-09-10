@@ -30,3 +30,4 @@ jobs:
           NOTIFY_KEY: ${{ secrets.NOTIFY_KEY }}
           VAPID_PUBLIC: ${{ secrets.VAPID_PUBLIC }}
           VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
+          AI_KEY: ${{ secrets.AI_KEY }}
