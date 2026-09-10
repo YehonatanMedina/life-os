@@ -73,13 +73,13 @@ function Icon({ name }: { name: IconName }) {
   )
 }
 
+// חמישה יעדים יומיים. ההגדרות לא מתחרות איתם על מקום — הן מאחורי גלגל השיניים.
 const NAV: Array<{ id: View; label: string }> = [
   { id: 'today', label: 'היום' },
   { id: 'atlas', label: 'אטלס' },
   { id: 'calendar', label: 'יומן' },
   { id: 'projects', label: 'פרויקטים' },
   { id: 'review', label: 'סקירה' },
-  { id: 'settings', label: 'הגדרות' },
 ]
 
 /**
@@ -268,7 +268,7 @@ function Shell() {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       // כשגיליון פתוח, המספרים שייכים לו — לא לניווט
       if (document.querySelector('.scrim')) return
-      const map: Record<string, View> = { '1': 'today', '2': 'atlas', '3': 'calendar', '4': 'projects', '5': 'review', '6': 'settings' }
+      const map: Record<string, View> = { '1': 'today', '2': 'atlas', '3': 'calendar', '4': 'projects', '5': 'review', '6': 'settings', ',': 'settings' }
       if (map[e.key]) setView(map[e.key])
     }
     window.addEventListener('keydown', onKey)
@@ -310,18 +310,31 @@ function Shell() {
             {n.label}
           </button>
         ))}
-        <div style={{ flex: 1 }} />
-        <SyncDot />
-        <TimerBadge onClick={() => setFocusMode(true)} />
+        <div className="foot">
+          <TimerBadge onClick={() => setFocusMode(true)} />
+          <SyncDot />
+          <button aria-current={view === 'settings'} onClick={() => setView('settings')}>
+            <Icon name="settings" />
+            הגדרות
+          </button>
+        </div>
       </nav>
 
       <header className="topbar">
         <div className="grow">
-          <h1>{NAV.find((n) => n.id === view)?.label}</h1>
+          <h1>{view === 'settings' ? 'הגדרות' : NAV.find((n) => n.id === view)?.label}</h1>
           <div className="sub">{niceDate(todayISO())}</div>
         </div>
-        <SyncDot compact />
         <TimerBadge onClick={() => setFocusMode(true)} compact />
+        <SyncDot compact />
+        <button
+          className="iconbtn"
+          aria-label="הגדרות"
+          aria-current={view === 'settings'}
+          onClick={() => setView('settings')}
+        >
+          <Icon name="settings" />
+        </button>
       </header>
 
       <main className="main">

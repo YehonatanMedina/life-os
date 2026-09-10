@@ -25,9 +25,18 @@
   --shadow: 0 1px 2px rgba(16, 18, 24, .05), 0 4px 14px rgba(16, 18, 24, .06);
   --shadow-lg: 0 10px 40px rgba(16, 18, 24, .16);
   --ring-track: #e6e8ec;
-  /* Assistant לממשק ולעברית; IBM Plex Mono רק למספרי המכשור —
-     הטיימר, הטבעת והספירה לאחור. זה מה שהופך אותם לקריאים כמדד ולא כטקסט. */
+  /* משפחה אחת לכל המערכת: IBM Plex Sans Hebrew לממשק, IBM Plex Mono למספרי
+     המכשור — הטיימר, הטבעת והספירה לאחור. אותו קו, שני תפקידים. */
+  --font-ui: 'IBM Plex Sans Hebrew', 'Assistant', 'Heebo', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Noto Sans Hebrew', Arial, sans-serif;
   --font-num: 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
+  /* סולם מרווחים — כל padding ו-gap במערכת נופל על אחד מאלה */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
   --r: 14px;
   --r-sm: 10px;
   --r-lg: 20px;
@@ -109,8 +118,7 @@ html { overflow-x: hidden; }
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Assistant', 'Heebo', -apple-system, BlinkMacSystemFont, 'Segoe UI',
-    'Noto Sans Hebrew', Arial, sans-serif;
+  font-family: var(--font-ui);
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -125,7 +133,8 @@ button, input, select, textarea {
 
 button { cursor: pointer; }
 
-h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -.01em; text-wrap: balance; }
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+b, strong { font-weight: 600; }
 
 /* מיקוד מקלדת נראה תמיד */
 :focus-visible {
@@ -180,6 +189,22 @@ h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -.01em; text-wrap:
 
 .topbar h1 { font-size: 17px; }
 .topbar .sub { font-size: 12px; color: var(--text-faint); }
+/* כפתור עגול בסרגל — הגדרות. מסומן כשהוא המסך הפעיל. */
+.iconbtn {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-dim);
+  padding: 0;
+}
+.iconbtn .ic { width: 20px; height: 20px; }
+.iconbtn:hover { background: var(--bg-sunk); color: var(--text); }
+.iconbtn[aria-current='true'] { background: var(--accent-soft); color: var(--accent); }
 
 .bottomnav {
   position: fixed;
@@ -187,7 +212,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -.01em; text-wrap:
   bottom: 0;
   z-index: 50;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   height: calc(var(--nav-h) + env(safe-area-inset-bottom));
   padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
@@ -264,6 +289,49 @@ h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -.01em; text-wrap:
 .card.pad { padding: 14px; }
 
 .stack { display: flex; flex-direction: column; gap: 12px; }
+/* עמוד = ערימה של מקטעים עם נשימה ביניהם; מקטע = כותרת קטנה וכרטיסים צפופים */
+.page { display: flex; flex-direction: column; gap: 22px; }
+.sec { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sec-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 4px;
+  min-height: 18px;
+}
+.sec-h h2, .eyebrow {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-faint);
+  letter-spacing: .03em;
+  margin: 0;
+}
+.sec-h .btn.ghost { margin: -6px -8px; }
+/* כותרת בתוך כרטיס — שורה אחת, אותו ריווח בכל המערכת */
+.card-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 13px 6px;
+}
+.card-h b { font-size: 15px; font-weight: 600; }
+.card-h .sub2 { font-size: 12px; color: var(--text-faint); margin-top: 1px; }
+/* התראה — כרטיס דק עם פס צבע, במקום רקע צבעוני מלא */
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 13px;
+  text-align: start;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+}
+.alert .txt { flex: 1; min-width: 0; }
+.alert b { display: block; font-size: 14px; }
+.alert .tiny { margin-top: 1px; }
 .row { display: flex; align-items: center; gap: 8px; }
 .row.wrap { flex-wrap: wrap; }
 .spread { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -615,7 +683,7 @@ label.field > span, .field > span {
   letter-spacing: -.04em;
   font-variant-numeric: tabular-nums;
 }
-.cd .d span { font-family: 'Assistant', sans-serif; letter-spacing: 0; }
+.cd .d span { font-family: var(--font-ui); letter-spacing: 0; }
 .cd .t { font-size: 12.5px; color: var(--text-dim); font-weight: 600; margin-top: 1px; }
 .cd .t > div {
   display: -webkit-box;
@@ -1258,6 +1326,7 @@ label.field > span, .field > span {
   .sidebar button:hover { background: var(--bg-sunk); color: var(--text); }
   .sidebar button[aria-current='true'] { background: var(--accent-soft); color: var(--accent); }
   .sidebar button .ic { width: 19px; height: 19px; flex: 0 0 19px; }
+  .sidebar .foot { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
   .topbar { display: none; }
   .desk-head { display: block; padding: 22px 0 4px; }
 }

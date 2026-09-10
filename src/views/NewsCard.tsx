@@ -141,7 +141,7 @@ export default function NewsCard() {
     <div className="card">
       <div className="spread" style={{ padding: '12px 13px 6px' }}>
         <div className="grow" style={{ minWidth: 0 }}>
-          <b>☕ {ed.title || 'חדשות הבוקר'}</b>
+          <b>{ed.title || 'חדשות הבוקר'}</b>
           <div className="tiny faint">
             {plural(totalStories, 'סיפור אחד', 'סיפורים')}
             {ed.minutes ? ` · כ־${ed.minutes} דקות` : ''}

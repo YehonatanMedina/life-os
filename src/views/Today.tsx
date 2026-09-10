@@ -59,7 +59,7 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
   const birthdays = eventsOn(s, date).filter((e) => e.kind === 'birthday')
 
   return (
-    <div className="stack" style={{ paddingTop: 12 }}>
+    <div className="page" style={{ paddingTop: 12 }}>
       <div className="desk-head">
         <h1>
           {greet}{s.settings.name ? `, ${s.settings.name}` : ''}
@@ -71,45 +71,66 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
         </div>
       </div>
 
-      {!s.settings.onboarded && <Intro />}
-
-      <ReviewNudge />
-      <AtlasCard goto={goto} />
-      <PhaseStrip />
-
-      {birthdays.length > 0 && (
-        <div className="card pad" style={{ background: 'var(--warn-soft)', borderColor: 'transparent' }}>
-          <b>🎂 {birthdays.map((e) => e.title).join(' · ')}</b>
-          <div className="tiny muted">אל תשכח להרים טלפון.</div>
-        </div>
-      )}
-
-      <Reminders date={date} />
+      {/* מה שדורש תשומת לב לפני הכל — דק, עם פס צבע, בלי רקעים צבעוניים */}
+      <div className="stack" style={{ gap: 8 }}>
+        {!s.settings.onboarded && <Intro />}
+        <ReviewNudge />
+        <AtlasCard goto={goto} />
+        {birthdays.length > 0 && (
+          <div className="card rail alert" style={{ ['--rail' as any]: kindColor('birthday') }}>
+            <div className="txt">
+              <b>יום הולדת היום: {birthdays.map((e) => e.title).join(' · ')}</b>
+              <div className="tiny faint">אל תשכח להרים טלפון.</div>
+            </div>
+          </div>
+        )}
+        <Reminders date={date} />
+        <PhaseStrip />
+      </div>
 
       <div className="grid2">
-        <div className="stack">
-          <DeepWork date={date} ws={ws} />
-          <WhatNow date={date} goto={goto} />
-          {showWake && <WakeCard date={date} />}
-          {showSleep && <SleepCard date={date} />}
+        <div className="page">
+          <section className="sec">
+            <div className="sec-h"><h2>עכשיו</h2></div>
+            <DeepWork date={date} ws={ws} />
+            <WhatNow date={date} goto={goto} />
+          </section>
+
+          <section className="sec">
+            <div className="sec-h"><h2>היום</h2></div>
+            {showWake && <WakeCard date={date} />}
+            {showSleep && <SleepCard date={date} />}
+            <TasksToday
+              due={dueToday}
+              overdue={overdue}
+              backlog={backlog}
+              doneToday={doneToday.length}
+              date={date}
+            />
+            <DaySchedule date={date} goto={goto} />
+          </section>
+
           <NewsCard />
-          <TasksToday
-            due={dueToday}
-            overdue={overdue}
-            backlog={backlog}
-            doneToday={doneToday.length}
-            date={date}
-          />
-          <DaySchedule date={date} goto={goto} />
         </div>
 
-        <div className="stack">
-          <Countdowns date={date} />
-          <GoalsCard ws={ws} title="מטרות־העל של השבוע" />
-          <WorkoutCard />
-          <DailyHabits date={date} />
-          <WeeklyTokens ws={ws} />
-          <FocusCard />
+        <div className="page">
+          <section className="sec">
+            <div className="sec-h"><h2>שגרה</h2></div>
+            <DailyHabits date={date} />
+            <WorkoutCard />
+          </section>
+
+          <section className="sec">
+            <div className="sec-h"><h2>השבוע</h2></div>
+            <GoalsCard ws={ws} title="מטרות־העל של השבוע" />
+            <WeeklyTokens ws={ws} />
+          </section>
+
+          <section className="sec">
+            <div className="sec-h"><h2>קדימה</h2></div>
+            <Countdowns date={date} />
+            <FocusCard />
+          </section>
         </div>
       </div>
     </div>
@@ -148,16 +169,18 @@ function Reminders({ date }: { date: string }) {
 
   if (!list.length) return null
   return (
-    <div className="card pad" style={{ background: 'var(--accent-soft)', borderColor: 'transparent' }}>
+    <>
       {list.map((r) => (
-        <div key={r.id} style={{ marginBottom: 2 }}>
-          <b>🎁 {countdownText(r.days)}: {r.title}</b>
-          <div className="tiny muted">
-            <span className="ltr">{shortDate(r.when)}</span> · יש עוד זמן לארגן משהו, וזה בדיוק העניין.
+        <div key={r.id} className="card rail alert" style={{ ['--rail' as any]: kindColor('birthday') }}>
+          <div className="txt">
+            <b>{countdownText(r.days)}: {r.title}</b>
+            <div className="tiny faint">
+              <span className="ltr">{shortDate(r.when)}</span> · יש עוד זמן לארגן משהו, וזה בדיוק העניין.
+            </div>
           </div>
         </div>
       ))}
-    </div>
+    </>
   )
 }
 
@@ -171,22 +194,16 @@ function ReviewNudge() {
 
   return (
     <>
-      <button
-        className="card pad rail"
-        style={{ ['--rail' as any]: 'var(--accent)', textAlign: 'start', width: '100%' }}
-        onClick={() => setOpen(true)}
-      >
-        <div className="spread">
-          <div className="grow" style={{ minWidth: 0 }}>
-            <b>🧭 המעבר השבועי מחכה</b>
-            <div className="tiny faint">
-              לסגור את השבוע <span className="ltr">{shortDate(ws)}–{shortDate(addDays(ws, 6))}</span>,
-              ולהגדיר את מטרות השבוע הזה.
-              {daysLate >= 2 ? ` כבר ${daysLate} ימים.` : ''}
-            </div>
+      <button className="card rail alert" style={{ ['--rail' as any]: 'var(--accent)' }} onClick={() => setOpen(true)}>
+        <div className="txt">
+          <b>המעבר השבועי מחכה</b>
+          <div className="tiny faint">
+            לסגור את השבוע <span className="ltr">{shortDate(ws)}–{shortDate(addDays(ws, 6))}</span>,
+            ולהגדיר את מטרות השבוע הזה.
+            {daysLate >= 2 ? ` כבר ${daysLate} ימים.` : ''}
           </div>
-          <span className="chip on">פתיחה ←</span>
         </div>
+        <span className="chip on">פתיחה ←</span>
       </button>
       {open && <WeeklyFlow ws={ws} onClose={() => setOpen(false)} />}
     </>
@@ -197,7 +214,7 @@ function ReviewNudge() {
 function Intro() {
   const s = useApp()
   return (
-    <div className="card pad" style={{ borderColor: 'var(--accent)', background: 'var(--accent-soft)' }}>
+    <div className="card pad rail" style={{ ['--rail' as any]: 'var(--accent)' }}>
       <div className="spread" style={{ alignItems: 'flex-start' }}>
         <div className="grow">
           <b>איך זה עובד</b>
@@ -1667,16 +1684,18 @@ function AtlasCard({ goto }: { goto: (v: string) => void }) {
   const fresh = last && last.from === 'atlas' && Date.now() - Date.parse(last.at) < 3 * 3600_000
   if (!note && !waiting && !fresh) return null
   return (
-    <button className="card pad rail atlas-card" style={{ ['--rail' as any]: 'var(--accent)', textAlign: 'start', width: '100%' }} onClick={() => goto('atlas')}>
-      <div className="spread">
-        <b>אטלס</b>
-        <span className="tiny faint">{waiting ? 'עובד על התשובה…' : note ? 'הבוקר' : 'ענה'}</span>
+    <button className="card rail alert atlas-card" style={{ ['--rail' as any]: 'var(--accent)' }} onClick={() => goto('atlas')}>
+      <div className="txt">
+        <div className="spread">
+          <b>אטלס</b>
+          <span className="tiny faint">{waiting ? 'עובד על התשובה…' : note ? 'הבוקר' : 'ענה'}</span>
+        </div>
+        {note ? (
+          <div className="small" style={{ whiteSpace: 'pre-wrap', marginTop: 4 }}>{note.text}</div>
+        ) : fresh && !waiting ? (
+          <div className="small muted" style={{ marginTop: 4 }}>{last.text.length > 160 ? last.text.slice(0, 160) + '…' : last.text}</div>
+        ) : null}
       </div>
-      {note ? (
-        <div className="small" style={{ whiteSpace: 'pre-wrap', marginTop: 6 }}>{note.text}</div>
-      ) : fresh && !waiting ? (
-        <div className="small muted" style={{ marginTop: 6 }}>{last.text.length > 160 ? last.text.slice(0, 160) + '…' : last.text}</div>
-      ) : null}
     </button>
   )
 }
