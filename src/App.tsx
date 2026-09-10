@@ -8,7 +8,7 @@ import Projects from './views/Projects'
 import Review, { ReviewLock, reviewWeekOf } from './views/Review'
 import SettingsView from './views/Settings'
 import FocusTimer from './views/FocusTimer'
-import { HE_STATUS, buildId, installFlush, startCloud, useCloudState } from './cloud'
+import { HE_STATUS, buildId, installFlush, safeToReload, startCloud, useCloudState } from './cloud'
 import { refreshNotifySchedule } from './push'
 
 type View = 'today' | 'calendar' | 'projects' | 'review' | 'settings'
@@ -216,7 +216,8 @@ function Shell() {
         const html = await (await fetch('./index.html', { cache: 'no-store' })).text()
         const m = html.match(/name="build" content="([^"]+)"/)
         if (m && m[1] !== mine) {
-          if (auto) location.reload()
+          // מרעננים לבד רק כשזה בטוח: הכל נשלח, ואין טיימר באמצע
+          if (auto && safeToReload()) location.reload()
           else setNewBuild(true)
         }
       } catch {

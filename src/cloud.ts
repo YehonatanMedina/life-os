@@ -361,6 +361,12 @@ let busy = false
 let loop: number | undefined
 let urgent = false
 
+/** האם בטוח לרענן את הדף עכשיו — הכל נשלח ואין טיימר רץ */
+export function safeToReload(): boolean {
+  const s = store.get()
+  return status === 'synced' && baseline !== null && snapshotOf(s) === baseline && !s.timer?.running
+}
+
 /** בקשה לדחוף בהזדמנות הראשונה, בלי לחכות לשקט */
 export function nudgePush() {
   urgent = true
