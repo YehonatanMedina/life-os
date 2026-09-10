@@ -4,3 +4,6 @@ dist/
 .DS_Store
 .claude/
 app-icon.ico
+test-results/
+playwright-report/
+tests/reports/
