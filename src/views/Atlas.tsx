@@ -9,7 +9,13 @@ import {
   undoCommand, useAtlas, type AtlasMessage,
 } from '../atlas'
 import { useTick, useToast, vibrate } from '../ui'
-import { hhmm, niceDate } from '../dates'
+import { hhmm, iso, niceDate } from '../dates'
+
+/** תאריך מקומי של הודעה — לפי הזמן האמיתי, לא לפי תחילית המחרוזת */
+const dayOf = (at: string) => {
+  const ms = Date.parse(at)
+  return Number.isFinite(ms) ? iso(new Date(ms)) : at.slice(0, 10)
+}
 
 const EXAMPLES = [
   'קבעתי רופא שיניים ביום שלישי ב-16:00, שעה.',
@@ -141,7 +147,7 @@ export default function AtlasView() {
           <Bubble
             key={m.id}
             m={m}
-            showDate={i === 0 || m.at.slice(0, 10) !== a.messages[i - 1].at.slice(0, 10)}
+            showDate={i === 0 || dayOf(m.at) !== dayOf(a.messages[i - 1].at)}
             onUndo={(cid) => {
               if (undoCommand(cid)) toast('בוטל')
             }}
@@ -217,7 +223,7 @@ function Bubble({
   const at = Date.parse(m.at)
   return (
     <>
-      {showDate && <div className="chat-date">{niceDate(m.at.slice(0, 10))}</div>}
+      {showDate && <div className="chat-date">{niceDate(dayOf(m.at))}</div>}
       <div className={`bubble ${m.from === 'user' ? 'me' : 'atlas'}${m.failed ? ' failed' : ''}`}>
         <div className="bubble-text">{m.text}</div>
         {m.commands && m.commands.length > 0 && (

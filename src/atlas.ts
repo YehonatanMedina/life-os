@@ -278,7 +278,8 @@ function mergeThread(local: AtlasMessage[], remote: AtlasMessage[]): AtlasMessag
   const answered = new Set(remote.filter((m) => m.replyTo).map((m) => m.replyTo))
   const extra = local.filter((m) => m.from === 'user' && !have.has(m.id) && !answered.has(m.id))
   const out = [...remote.map((m) => ({ ...m, pending: false })), ...extra]
-  return out.sort((a, b) => a.at.localeCompare(b.at)).slice(-120)
+  // לפי זמן אמיתי, לא לפי המחרוזת — ISO עם אזורי זמן שונים לא ממוין לקסיקוגרפית
+  return out.sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0)).slice(-120)
 }
 
 /** מתחיל את המשיכה התקופתית — מהאפליקציה */
