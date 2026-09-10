@@ -317,7 +317,7 @@ b, strong { font-weight: 600; }
   letter-spacing: .03em;
   margin: 0;
 }
-.sec-h .btn.ghost { margin: -6px -8px; }
+.sec-h > .btn.ghost { margin: -6px -8px; }
 /* כותרת בתוך כרטיס — שורה אחת, אותו ריווח בכל המערכת */
 .card-h {
   display: flex;
@@ -397,12 +397,22 @@ b, strong { font-weight: 600; }
 .btn.xs { padding: 5px 9px; font-size: 12px; border-radius: 7px; position: relative; }
 /* הגדלת אזור הפגיעה בלי לשנות את הגודל הוויזואלי */
 .btn.xs::before,
+.btn.sm::before,
+.tag::before,
+.iconbtn::before,
+.vote::before,
+.switch::before,
 .check::before {
   content: '';
   position: absolute;
   inset: -10px;
 }
-.check { position: relative; }
+.btn.sm, .tag, .iconbtn, .vote, .check { position: relative; }
+/* .switch כבר relative; ה-::after הוא הכפתור העגול, ה-::before פנוי לאזור הפגיעה */
+.switch::before { inset: -8px 0; }
+/* אירועי "כל היום" ברשת השבוע וכותרות מתקפלות — גובה מינימלי במקום הרחבה */
+.wk-allday .pill { min-height: 24px; padding-block: 4px; }
+button.spread { min-height: 40px; }
 .btn.block { width: 100%; }
 .btn:disabled { opacity: .45; pointer-events: none; }
 .btn .ic { width: 16px; height: 16px; flex: 0 0 16px; }
@@ -852,7 +862,7 @@ label.field > span, .field > span {
   .cal-cell:hover { background: var(--bg-sunk); }
 }
 .cal-cell:active { background: var(--bg-sunk); }
-.cal-cell.out { background: var(--bg-sunk); opacity: .5; }
+.cal-cell.out { background: var(--bg-sunk); opacity: .7; }
 .cal-cell.today .n { background: var(--accent); color: var(--on-accent); }
 .cal-cell .n {
   align-self: flex-start;
@@ -1008,7 +1018,7 @@ label.field > span, .field > span {
 .ev { padding-inline-start: 9px; }
 .ev:active { cursor: grabbing; }
 .ev.drag { z-index: 9; box-shadow: var(--shadow-lg); opacity: .92; }
-.ev .time { font-weight: 600; font-size: 10.5px; }
+.ev .time { font-weight: 700; font-size: 10.5px; }
 .ev .handle {
   position: absolute;
   inset-inline: 0;
@@ -1046,7 +1056,8 @@ label.field > span, .field > span {
   position: fixed;
   inset-inline: 0;
   bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px);
-  z-index: 200;
+  /* מעל המעבר השבועי (300) ומעל מצב המיקוד (400) — אחרת הודעות האימות נעלמות */
+  z-index: 500;
   display: flex;
   justify-content: center;
   pointer-events: none;
@@ -1140,7 +1151,7 @@ label.field > span, .field > span {
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--tc) 55%, var(--line));
   background: var(--bg-elev);
-  color: color-mix(in srgb, var(--tc) 78%, black);
+  color: color-mix(in srgb, var(--tc) 66%, black);
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;

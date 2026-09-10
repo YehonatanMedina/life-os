@@ -25,9 +25,13 @@ test('כל דחיפה שמשנה תוכן נושאת את ארבעת קבצי ה
   const title = 'משימה שתופיע בהקשר של אטלס'
   await addQuickTask(A.page, title)
   const p1 = await waitPatch(fake, n, (p) => 'life-os.json' in p.files)
-  for (const f of ['atlas-context.json', 'pulse.json', 'week-digest.json', 'news-feedback.json']) {
+  for (const f of ['atlas-context.json', 'pulse.json', 'week-digest.json']) {
     expect(Object.keys(p1.files), `patch #1 carries ${f}`).toContain(f)
   }
+  // המשוב (גלוי) נשלח רק כשהוא השתנה — לכן מספיק שדחיפה כלשהי עד כה נשאה אותו
+  const fbPatch = fake.patches.find((p) => 'news-feedback.json' in p.files)
+  expect(fbPatch, 'some patch carries news-feedback.json').toBeTruthy()
+  if (!('news-feedback.json' in p1.files)) p1.files['news-feedback.json'] = fbPatch!.files['news-feedback.json']
   // הצפנה: שלושת קבצי הניתוח במעטפה, המשוב גלוי
   expect(isEnvelope(p1.files['atlas-context.json'])).toBe(true)
   expect(isEnvelope(p1.files['pulse.json'])).toBe(true)
@@ -136,9 +140,12 @@ test('בלי מפתח ניתוח: רק news-feedback.json (גלוי) מצטרף 
   const n = fake.patches.length
   await addQuickTask(A.page, 'משימה בלי מפתח')
   const p = await waitPatch(fake, n, (x) => 'life-os.json' in x.files)
-  expect(Object.keys(p.files).sort()).toEqual(['life-os.json', 'news-feedback.json'])
+  // בלי מפתח ניתוח אין קבצי צד מוצפנים; המשוב הגלוי מגיע בדחיפה כלשהי (רק כשהוא משתנה)
+  expect(Object.keys(p.files).filter((f) => f !== 'news-feedback.json')).toEqual(['life-os.json'])
   expect(isEnvelope(p.files['life-os.json'])).toBe(true)
-  expect(isEnvelope(p.files['news-feedback.json'])).toBe(false)
+  const fb = fake.patches.find((x) => 'news-feedback.json' in x.files)
+  expect(fb, 'some patch carries news-feedback.json').toBeTruthy()
+  expect(isEnvelope(fb!.files['news-feedback.json'])).toBe(false)
   // המצב במחסן אף פעם לא גלוי, ולא מכיל את הטיימר
   const remote = await decryptJSON(p.files['life-os.json'], key)
   expect(remote.timer).toBeNull()

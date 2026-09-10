@@ -57,6 +57,14 @@ export function WorkoutCard() {
   const [open, setOpen] = useState(false)
   const [plan, setPlan] = useState(false)
   const [prog, setProg] = useState(false)
+  // אותו מופע של הגיליונות בשני הענפים — אלמנט (לא רכיב פנימי, שהיה נבנה מחדש בכל ציור)
+  const sheets = (
+    <>
+      {open && <WorkoutSheet key="log" date={date} onClose={() => setOpen(false)} />}
+      {plan && <PlanSheet key="plan" onClose={() => setPlan(false)} />}
+      {prog && <ProgressSheet key="prog" onClose={() => setProg(false)} />}
+    </>
+  )
 
   const planDay = planForDow(s, dow(date))
   const log = workoutOn(s, date)
@@ -64,7 +72,9 @@ export function WorkoutCard() {
   const started = workoutHasData(log)
   const week = weekDates(weekStart(date))
 
-  // אין תוכנית בכלל — מציעים לבנות אחת, פעם אחת
+  // אין תוכנית בכלל — מציעים לבנות אחת, פעם אחת.
+  // הגיליונות מרונדרים פעם אחת בסוף (לא בכל ענף) — אחרת הוספת היום הראשון
+  // מחליפה עץ, PlanSheet נבנה מחדש והיום שנפתח נסגר מיד.
   if (!alive(s.workoutPlan ?? []).length) {
     return (
       <>
@@ -77,7 +87,7 @@ export function WorkoutCard() {
             בניית התוכנית
           </button>
         </div>
-        {plan && <PlanSheet onClose={() => setPlan(false)} />}
+        {sheets}
       </>
     )
   }
@@ -134,9 +144,7 @@ export function WorkoutCard() {
         </div>
       </div>
 
-      {open && <WorkoutSheet date={date} onClose={() => setOpen(false)} />}
-      {plan && <PlanSheet onClose={() => setPlan(false)} />}
-      {prog && <ProgressSheet onClose={() => setProg(false)} />}
+      {sheets}
     </>
   )
 }

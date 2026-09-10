@@ -31,6 +31,8 @@ const api = (path, init = {}) =>
       Accept: 'application/vnd.github+json',
       Authorization: `Bearer ${GIST_TOKEN}`,
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      // הכותרות של הקורא גוברות — Accept raw לקובץ מהמאגר הפרטי
+      ...(init.headers ?? {}),
     },
   })
 

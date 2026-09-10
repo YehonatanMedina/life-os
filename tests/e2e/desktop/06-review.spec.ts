@@ -142,7 +142,8 @@ test.describe('סקירה', () => {
     // 4. מטרות — לשבוע 6.9–12.9 (השבוע הנוכחי, כי הסקירה מאוחרת)
     await expect(title).toHaveText('מטרות')
     await expect(flow).toContainText('לשבוע 6.9 – 12.9')
-    await expect(flow).toContainText('קיבולת של 42 אסימונים')
+    // סגירה מאוחרת (שישי): מתכננים רק את הימים שנשארו — שישי ושבת, 6 אסימונים כל אחד
+    await expect(flow).toContainText('קיבולת של 12 אסימונים')
     await expect(flow).toContainText('בפועל השבוע שנסגר הכניס 3.5')
     const g1 = flow.locator('.qcard', { hasText: 'מטרה 1' })
     await g1.locator('input').fill('לסיים את פרק 1 בסמינר')
@@ -173,7 +174,8 @@ test.describe('סקירה', () => {
     await inp.fill('להגיש דו״ח')
     await inp.press('Enter')
     await expect(flow).toContainText('2 משימות בשבוע')
-    const sunday = flow.locator('.item', { has: app.locator('.tiny.faint.ltr:text-is("6.9")') })
+    // סגירה מאוחרת: המשימות נוחתות על היום הראשון שנשאר (שישי 11.9), לא על ראשון שעבר
+    const sunday = flow.locator('.item', { has: app.locator('.tiny.faint.ltr:text-is("11.9")') })
     await expect(sunday).toContainText('להגיש דו״ח')
     await expect(sunday).toContainText('משימה במאגר לשבוע הבא')
     await next.click()
@@ -229,8 +231,9 @@ test.describe('סקירה', () => {
     ])
     expect(typeof cur.plannedAt).toBe('number')
     const tasks = live<Task>(st.tasks)
-    expect(tasks.find((t) => t.title === 'להגיש דו״ח')!.due).toBe(WEEK_START)
-    expect(tasks.find((t) => t.id === 't-pool')!.due).toBe(WEEK_START)
+    // סגירה מאוחרת — התאריך הוא היום שנשאר (שישי), לא ראשון שעבר
+    expect(tasks.find((t) => t.title === 'להגיש דו״ח')!.due).toBe('2026-09-11')
+    expect(tasks.find((t) => t.id === 't-pool')!.due).toBe('2026-09-11')
 
     await reload(app)
     await expect(app.locator('.card', { hasText: 'מטרות־העל של השבוע' })).toContainText('1/2')
@@ -256,13 +259,13 @@ test.describe('סקירה', () => {
     await expect(flow).toContainText('3 משימות בשבוע')
     await flow.getByRole('button', { name: 'פזר על ימי השבוע' }).click()
     await expect(app.locator('.toast')).toContainText('המשימות פוזרו על ימי השבוע')
-    // בלי הערכת אסימונים: מוגבל ל-cap+2 משימות ליום — כולן נכנסות לראשון
-    const sunday = flow.locator('.item', { has: app.locator('.tiny.faint.ltr:text-is("6.9")') })
-    await expect(sunday).toContainText('משימה א')
-    await expect(sunday).toContainText('משימה ג')
+    // בלי הערכת אסימונים: מוגבל ל-cap+2 משימות ליום — כולן נכנסות ליום הראשון שנשאר (שישי 11.9)
+    const friday = flow.locator('.item', { has: app.locator('.tiny.faint.ltr:text-is("11.9")') })
+    await expect(friday).toContainText('משימה א')
+    await expect(friday).toContainText('משימה ג')
 
     let st = await readState(app)
-    expect(live<Task>(st.tasks).filter((t) => /^משימה [אבג]$/.test(t.title)).every((t) => t.due === WEEK_START)).toBe(true)
+    expect(live<Task>(st.tasks).filter((t) => /^משימה [אבג]$/.test(t.title)).every((t) => t.due === '2026-09-11')).toBe(true)
   })
 
   test('"פזר על ימי השבוע" עם הערכות אסימונים מכבד את הקיבולת היומית', async ({ app }) => {
@@ -279,21 +282,18 @@ test.describe('סקירה', () => {
     const pool = flow.locator('.card', { hasText: 'מהמאגר' })
     for (const x of ['א', 'ב', 'ג']) await pool.getByRole('button', { name: `+ עבודה ${x}` }).click()
     await expect(flow).toContainText('3 משימות בשבוע')
-    await expect(flow).toContainText('12 מתוך 42 אסימונים')
+    await expect(flow).toContainText('12 מתוך 12 אסימונים')
     const dayRow = (d: string) => flow.locator('.item', { has: app.locator(`.tiny.faint.ltr:text-is("${d}")`) })
-    await expect(dayRow('6.9')).toContainText('12/6')
+    await expect(dayRow('11.9')).toContainText('12/6')
     await flow.getByRole('button', { name: 'פזר על ימי השבוע' }).click()
-    // האלגוריתם רואה את ראשון כמלא (12 מתוכננים עליו) ולכן דוחף את כולן הלאה — ראו הדוח
-    await expect(dayRow('6.9')).toContainText('0/6')
-    await expect(dayRow('7.9')).toContainText('4/6')
-    await expect(dayRow('8.9')).toContainText('4/6')
-    await expect(dayRow('9.9')).toContainText('4/6')
-    await expect(dayRow('10.9')).toContainText('0/6')
+    // המשימות שמפזרים לא נספרות כעומס קיים: 4 לשישי, 4 לשבת, והשלישית ליום הפנוי יותר
+    await expect(dayRow('11.9')).toContainText('8/6')
+    await expect(dayRow('12.9')).toContainText('4/6')
     const st = await readState(app)
-    expect(live<Task>(st.tasks).filter((t) => t.title.startsWith('עבודה ')).map((t) => t.due).sort()).toEqual(['2026-09-07', '2026-09-08', '2026-09-09'])
+    expect(live<Task>(st.tasks).filter((t) => t.title.startsWith('עבודה ')).map((t) => t.due).sort()).toEqual(['2026-09-11', '2026-09-11', '2026-09-12'])
   })
 
-  test.fixme('הטוסט (כולל כפתור "ביטול") מוסתר מאחורי המסך המלא של המעבר השבועי', async ({ app }) => {
+  test('הטוסט (כולל כפתור "ביטול") מוסתר מאחורי המסך המלא של המעבר השבועי', async ({ app }) => {
     await go(app, 'סקירה')
     await app.locator('.card.rail', { hasText: 'סגירת השבוע שהסתיים' }).click()
     const flow = app.getByRole('dialog', { name: 'מעבר שבועי' })

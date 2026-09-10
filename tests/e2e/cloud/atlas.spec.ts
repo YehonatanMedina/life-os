@@ -249,13 +249,16 @@ test('מכשיר שני: מקבל atlasApplied בסנכרון ולא מבצע ש
   await expect(B.page.getByText(TK_TITLE, { exact: true }).first()).toBeVisible()
   await B.context.close()
 
-  // -- B2: המחסן איטי (9 שניות) — משיכת אטלס מגיעה קודם ומבצעת מקומית ------------------
+  // -- B2: המחסן איטי (9 שניות) — משיכת אטלס מגיעה קודם, אבל הביצוע נדחה עד המשיכה הראשונה ----
   fake.hooks.push(({ tag, method, path }) => (tag === 'B2' && method === 'GET' && path.startsWith('/gists/') ? { delayMs: 9_000 } : undefined))
   const n = fake.patches.length
   const B2 = await openDevice({ tag: 'B2', state: baseState({ deviceId: 'dB2', aiKey: ai }), login: true })
-  // הפקודות בוצעו מקומית לפני שהמחסן ענה
-  await expect.poll(async () => Object.keys((await readState(B2.page)).atlasApplied ?? {}).length, { timeout: 8_000 }).toBe(7)
-  expect(Object.keys((await readAtlasCache(B2.page)).undo).sort()).toEqual([...CMD_IDS].sort())
+  // השיחה כבר מוצגת, אבל שום פקודה לא בוצעה לפני שהמחסן ענה
+  await expect.poll(async () => (await readAtlasCache(B2.page))?.messages?.length ?? 0, { timeout: 8_000 }).toBe(2)
+  expect(Object.keys((await readState(B2.page)).atlasApplied ?? {})).toEqual([])
+  // אחרי שהמחסן ענה — atlasApplied מגיע מהמיזוג, ולא מבצעים כאן שוב (אין מה לבטל)
+  await expect.poll(async () => Object.keys((await readState(B2.page)).atlasApplied ?? {}).length, { timeout: 25_000 }).toBe(7)
+  expect(Object.keys((await readAtlasCache(B2.page)).undo)).toEqual([])
   await waitSynced(B2.page, 30_000)
   await waitPatch(fake, n, (p) => p.tag === 'B2' && 'life-os.json' in p.files, 30_000)
   await quiet(fake, 3_000)
@@ -277,7 +280,6 @@ test('ביטול במכשיר אחד שורד מכשיר שני שמשך את ה
   // באג אמיתי (ראו tests/reports/cloud.md, ממצא #2): מכשיר שני שמושך את thread.json לפני
   // שהמחסן ענה מבצע את הפקודות מחדש. הרשומה שנוצרת אצלו חדשה יותר מהמחיקה של הביטול,
   // ולכן במיזוג היא מנצחת — הביטול מתבטל בכל המכשירים.
-  test.fixme(true, 'undo של addRule/addTask נדרס ע"י מכשיר שני שביצע את הפקודה מחדש לפני הסנכרון')
   const ai = newKey()
   const at = Date.now() - 60_000
   const applied = appliedState(baseState({ deviceId: 'dGist', aiKey: ai }), at)
@@ -288,7 +290,7 @@ test('ביטול במכשיר אחד שורד מכשיר שני שמשך את ה
 
   fake.hooks.push(({ tag, method, path }) => (tag === 'B2' && method === 'GET' && path.startsWith('/gists/') ? { delayMs: 9_000 } : undefined))
   const B2 = await openDevice({ tag: 'B2', state: baseState({ deviceId: 'dB2', aiKey: ai }), login: true })
-  await expect.poll(async () => Object.keys((await readState(B2.page)).atlasApplied ?? {}).length, { timeout: 8_000 }).toBe(7)
+  await expect.poll(async () => Object.keys((await readState(B2.page)).atlasApplied ?? {}).length, { timeout: 25_000 }).toBe(7)
   await waitSynced(B2.page, 30_000)
   await quiet(fake, 3_000)
   const s2 = await readState(B2.page)

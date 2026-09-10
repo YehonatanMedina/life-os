@@ -128,7 +128,9 @@ export default function CloudCard() {
                   ? 'המחסן לא נמצא. בדוק את מזהה החיבור.'
                   : lastError === 'no-key' || lastError === 'bad-key'
                     ? 'המחסן מוצפן וחסר המפתח — הדבק את מזהה החיבור המלא (עם החלק שאחרי #).'
-                    : `שגיאה: ${lastError}`}
+                    : lastError === 'unreadable'
+                      ? 'המחסן קיים אבל לא קריא בגרסה הזו — לא נכתב עליו. עדכן את האפליקציה או בדוק את המפתח.'
+                      : `שגיאה: ${lastError}`}
             </p>
           )}
           <button className="btn ghost sm" style={{ marginTop: 10 }} onClick={() => setOpen((v) => !v)}>

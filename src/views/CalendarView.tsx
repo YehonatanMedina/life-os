@@ -167,7 +167,14 @@ function MonthGrid({
       </div>
       <div className="cal-grid">
         {days.map((d) => {
-          const evs = eventsOn(s, d)
+          // כל היום קודם, ואז לפי שעה; מה שחריג (לא מופע של כלל) לפני השגרה הקבועה —
+          // כדי שביום עמוס האירוע האמיתי לא ייבלע מאחורי "עוד 3"
+          const evs = eventsOn(s, d).sort(
+            (a, b) =>
+              Number(b.allDay) - Number(a.allDay) ||
+              Number(!!a.ruleId) - Number(!!b.ruleId) ||
+              (a.start ?? '').localeCompare(b.start ?? ''),
+          )
           const tasks = tasksDueOn(s, d)
           return (
             <button
@@ -402,11 +409,19 @@ function HourGrid({
     const up = () => finish(true)
     const cancel = () => finish(false)
 
+    // בטלפון: אחרי שהלחיצה הארוכה פתחה גרירה, חוסמים את מחוות הגלילה של הדפדפן —
+    // אחרת touch-action: pan-y מתחיל גלילה, שולח pointercancel והגרירה מתבטלת.
+    // חייב להיות מאזין נייטיבי לא־פסיבי (React רושם touchmove כפסיבי).
+    const touchMove = (e: TouchEvent) => {
+      if (dragRef.current && e.cancelable) e.preventDefault()
+    }
+    window.addEventListener('touchmove', touchMove, { passive: false })
     window.addEventListener('pointermove', move, { passive: false })
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', cancel)
     window.addEventListener('blur', cancel)
     return () => {
+      window.removeEventListener('touchmove', touchMove)
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', cancel)

@@ -36,12 +36,10 @@ describe('רשומות', () => {
     expect(m.tasks.map((t) => t.id).sort()).toEqual(['only-local', 'only-remote'])
   })
 
-  it('תיקו בחותמת: המקומי מנצח — ולכן שני מכשירים עם אותה חותמת ותוכן שונה לא מתכנסים', () => {
-    // מתועד כממצא קוסמטי (ראו הדוח): שובר־שוויון דטרמיניסטי היה בטוח יותר
+  it('תיקו בחותמת: שובר־שוויון דטרמיניסטי — שני המכשירים מתכנסים לאותה גרסה', () => {
     const a = state({ tasks: [task('x', 500, { title: 'גרסה A' })] })
     const b = state({ tasks: [task('x', 500, { title: 'גרסה B' })] })
-    expect(mergeStates(a, b).tasks[0].title).toBe('גרסה A')
-    expect(mergeStates(b, a).tasks[0].title).toBe('גרסה B')
+    expect(mergeStates(a, b).tasks[0].title).toBe(mergeStates(b, a).tasks[0].title)
   })
 
   it('רשומות ישנות בלי updatedAt נחשבות 0 ומפסידות לכל עריכה', () => {

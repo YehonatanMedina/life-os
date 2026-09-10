@@ -831,7 +831,8 @@ function GoalsStep({
 }) {
   const s = useApp()
   const tracks = alive(s.tracks).sort((a, b) => a.order - b.order)
-  const cap = weekDates(nextWs).reduce((a, d) => a + dayCapacity(s, d), 0)
+  // הקיבולת שנשארה — רק הימים שעוד לא עברו
+  const cap = weekDates(nextWs).filter((d) => d >= todayISO()).reduce((a, d) => a + dayCapacity(s, d), 0)
 
   const set = (id: ID, p: Partial<WeekGoal>) => setGoals(goals.map((g) => (g.id === id ? { ...g, ...p } : g)))
 
@@ -916,8 +917,10 @@ function TasksStep({ nextWs }: { nextWs: string }) {
   const [txt, setTxt] = useState('')
   const [trk, setTrk] = useState<ID | undefined>(undefined)
   const prevDue = useRef(new Map<string, string | undefined>())
-  const dates = weekDates(nextWs)
+  // סגירה מאוחרת של שבוע: מתכננים מהיום, לא מימים שכבר עברו
+  const planFrom = nextWs > todayISO() ? nextWs : todayISO()
   const weekEnd = addDays(nextWs, 6)
+  const dates = weekDates(nextWs).filter((d) => d >= planFrom)
   const tracks = alive(s.tracks).sort((a, b) => a.order - b.order)
 
   const inWeek = alive(s.tasks).filter(
@@ -969,8 +972,8 @@ function TasksStep({ nextWs }: { nextWs: string }) {
             className="btn sm"
             disabled={!inWeek.length}
             onClick={() => {
-              if (!hasSpreadRoom(nextWs, 7)) return toast('אין יום פנוי בשבוע הבא')
-              const before = spreadTasks(inWeek.map((t) => t.id), nextWs, 7)
+              if (!hasSpreadRoom(planFrom, dates.length)) return toast('אין יום פנוי בשבוע הבא')
+              const before = spreadTasks(inWeek.map((t) => t.id), planFrom, dates.length)
               toast('המשימות פוזרו על ימי השבוע', {
                 label: 'ביטול',
                 run: () => before.forEach((x) => actions.patchTask(x.id, { due: x.due })),
@@ -1035,7 +1038,7 @@ function TasksStep({ nextWs }: { nextWs: string }) {
                       style={{ ['--tc' as any]: tr?.color ?? 'var(--accent)' }}
                       onClick={() => {
                         prevDue.current.set(t.id, t.due)
-                        actions.patchTask(t.id, { due: nextWs })
+                        actions.patchTask(t.id, { due: planFrom })
                         vibrate()
                       }}
                     >
@@ -1072,7 +1075,7 @@ function TasksStep({ nextWs }: { nextWs: string }) {
             onChange={(e) => setTxt(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && txt.trim()) {
-                actions.addTask({ title: txt.trim(), trackId: trk ?? defaultTrackId(s), due: nextWs })
+                actions.addTask({ title: txt.trim(), trackId: trk ?? defaultTrackId(s), due: planFrom })
                 setTxt('')
               }
             }}
@@ -1081,7 +1084,7 @@ function TasksStep({ nextWs }: { nextWs: string }) {
             className="btn"
             disabled={!txt.trim()}
             onClick={() => {
-              actions.addTask({ title: txt.trim(), trackId: trk ?? defaultTrackId(s), due: nextWs })
+              actions.addTask({ title: txt.trim(), trackId: trk ?? defaultTrackId(s), due: planFrom })
               setTxt('')
             }}
           >

@@ -27,7 +27,11 @@ export const test = base.extend<Fixtures>({
     })
     page.on('console', (m) => {
       // כישלון טעינה של משאב חיצוני שחסמנו בכוונה אינו באג של האפליקציה
-      if (m.type() === 'error' && !/net::ERR_FAILED|net::ERR_ABORTED/.test(m.text())) consoleErrors.push(m.text())
+      if (m.type() !== 'error') return
+      if (/net::ERR_FAILED|net::ERR_ABORTED/.test(m.text())) return
+      // תשובות 4xx/5xx מדומות מ-GitHub הן חלק מהבדיקה, לא באג של האפליקציה
+      if (/api\.github\.com/.test(m.location()?.url ?? '')) return
+      consoleErrors.push(m.text())
     })
     page.on('pageerror', (e) => consoleErrors.push('pageerror: ' + e.message))
     await page.goto('/')

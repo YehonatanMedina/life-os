@@ -114,20 +114,23 @@ function Shell() {
   const s = useApp()
   const [view, setView] = useState<View>('today')
   const [calDate, setCalDate] = useState<string | undefined>()
-  const now = useTick(30000)
+  // כשהטיימר רץ, כותרת הלשונית מתקתקת כל שנייה כמו התג בסרגל
+  const now = useTick(s.timer ? 1000 : 30000)
 
   // ערכת נושא
   useEffect(() => {
     const el = document.documentElement
     if (s.settings.theme === 'system') delete el.dataset.theme
     else el.dataset.theme = s.settings.theme
-    const meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) {
-      const dark =
-        s.settings.theme === 'dark' ||
-        (s.settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-      meta.setAttribute('content', dark ? '#0e1013' : '#f6f7f9')
-    }
+    const dark =
+      s.settings.theme === 'dark' ||
+      (s.settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+    // שני תגים עם media: במצב "מערכת" כל תג חוזר לצבע שלו והדפדפן בוחר לפי המערכת
+    // (וגם עוקב אחרי שינוי שלה בלי JS); בערכה מפורשת שניהם מקבלים את אותו צבע.
+    document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((m) => {
+      const own = m.media.includes('dark') ? '#0e1013' : '#f6f7f9'
+      m.setAttribute('content', s.settings.theme === 'system' ? own : dark ? '#0e1013' : '#f6f7f9')
+    })
   }, [s.settings.theme])
 
   // ענן

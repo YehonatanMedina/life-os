@@ -37,7 +37,10 @@ function mergeList<T extends Rec>(a: T[], b: T[]): T[] {
   for (const x of a) map.set(x.id, x)
   for (const x of b) {
     const cur = map.get(x.id)
-    if (!cur || (x.updatedAt || 0) > (cur.updatedAt || 0)) map.set(x.id, x)
+    // תיקו בחותמת — שובר שוויון דטרמיניסטי, אחרת שני מכשירים מתקנים זה את זה לנצח
+    const xa = x.updatedAt || 0
+    const ca = cur ? cur.updatedAt || 0 : -1
+    if (!cur || xa > ca || (xa === ca && JSON.stringify(x) > JSON.stringify(cur))) map.set(x.id, x)
   }
   return [...map.values()]
 }
@@ -470,6 +473,19 @@ function safeParse(raw: string | null, keepCopy = false): AppState | null {
  * נערמים על התוכן האמיתי.
  */
 let freshInstall = false
+
+const SEED_STAMP = Date.parse('2026-01-01T00:00:00') // T0 של הזרע ב-seed.ts
+/**
+ * מכשיר "בתולי": רק רשומות זרע (או מופעי כללים בחותמת 0) ואף יומן. במשיכה
+ * הראשונה המחסן הוא התמונה — לא תוספת. ההגדרות המקומיות (onboarded וכו')
+ * הן ברירות מחדל ולא שוות דריסה של המחסן.
+ */
+export function isPristine(s: AppState): boolean {
+  const lists: Rec[][] = [s.tracks, s.tasks, s.events, s.rules, s.habits, s.weekly, s.phases ?? [], s.workoutPlan ?? [], s.news ?? []]
+  const untouched = lists.every((l) => l.every((x) => (x.updatedAt || 0) <= SEED_STAMP))
+  return untouched && !s.sessions.length && !s.days.length && !s.weeks.length && !(s.workouts ?? []).length
+}
+
 export function consumeFreshInstall(): boolean {
   const v = freshInstall
   freshInstall = false
@@ -560,6 +576,8 @@ class Store {
 
   constructor() {
     this.state = loadState()
+    // מה שהתיישר בטעינה (טיימר אחרי שינה, מיגרציה, מופעים חדשים) — לדיסק מיד
+    persist(this.state)
   }
 
   subscribe = (l: Listener) => {
@@ -1427,12 +1445,14 @@ export function spreadTasks(ids: ID[], fromDate: ISODate, horizon = 21): Array<{
 
   const leftTokens = new Map<ISODate, number>()
   const leftCount = new Map<ISODate, number>()
+  // המשימות שמפזרים לא נספרות כעומס קיים ביום שהן יושבות בו עכשיו
+  const moving = new Set(ids)
   for (const d of days) {
     const cap = dayCapacity(s, d)
-    leftTokens.set(d, Math.max(0, cap - plannedOn(s, d)))
+    const others = alive(s.tasks).filter((x) => x.due === d && x.status !== 'done' && !moving.has(x.id))
+    leftTokens.set(d, Math.max(0, cap - others.reduce((a, t) => a + (t.est ?? 0), 0)))
     // גם מספר המשימות ליום מוגבל — אחרת כל המשימות בלי הערכת זמן נופלות על היום הראשון
-    const open = alive(s.tasks).filter((x) => x.due === d && x.status !== 'done').length
-    leftCount.set(d, Math.max(0, cap + 2 - open))
+    leftCount.set(d, Math.max(0, cap + 2 - others.length))
   }
 
   const tasks = ids

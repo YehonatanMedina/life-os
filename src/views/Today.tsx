@@ -1219,7 +1219,11 @@ function DailyHabits({ date }: { date: string }) {
                         vibrate()
                         const fresh = dayLog(store.get(), date)
                         if (steps.every((x) => fresh.steps[x.id])) {
-                          actions.patchDay(date, { habits: { ...fresh.habits, [h.id]: true } })
+                          // גם הסימון האוטומטי מקבל חותמת — אחרת ביטול ידני במכשיר אחר עלול להידרס
+                          actions.patchDay(date, {
+                            habits: { ...fresh.habits, [h.id]: true },
+                            habitsAt: { ...(fresh.habitsAt ?? {}), [h.id]: Date.now() },
+                          })
                         }
                       }}
                     />

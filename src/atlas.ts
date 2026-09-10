@@ -17,7 +17,7 @@ import { useSyncExternalStore } from 'react'
 import { actions, alive, store } from './store'
 import { decryptEnvelope, encryptText } from './crypto'
 import { aiKey } from './ai'
-import { nudgePush } from './cloud'
+import { cloudConfigured, hasPulledOnce, nudgePush } from './cloud'
 import { today } from './dates'
 import type { CalEvent, Exercise, ID, RecurRule, Task, WeekGoal, WorkoutDay } from './types'
 
@@ -248,7 +248,7 @@ export async function pollAtlas(): Promise<boolean> {
       const merged = mergeThread(cache.messages, remote.messages ?? [])
       save({ messages: merged, threadEtag: th.etag, lastPollAt: Date.now(), error: undefined })
       changed = true
-      applyPending(merged)
+      applyWhenSafe(merged)
     } else if (th.status === 304 || th.status === 404) {
       save({ lastPollAt: Date.now(), error: undefined })
     } else if (th.status === 401 || th.status === 403) {
@@ -286,15 +286,16 @@ function mergeThread(local: AtlasMessage[], remote: AtlasMessage[]): AtlasMessag
 export function startAtlas() {
   if (timer) return
   const tick = () => {
+    flushDeferred()
     const waiting = awaitingReply()
     const fast = Date.now() < fastUntil || waiting
-    const gap = fast ? 20_000 : 5 * 60_000
+    const gap = fast ? 10_000 : 5 * 60_000
     // ברקע מושכים רק כשמחכים לתשובה — כדי שהיא תחכה מוכנה כשהוא חוזר,
     // וכדי שפקודות יבוצעו גם אם החלון ממוזער. הדפדפן ממילא מאט טיימרים ברקע.
     const visible = document.visibilityState === 'visible'
     if ((visible || waiting) && Date.now() - (cache.lastPollAt ?? 0) >= gap - 500) void pollAtlas()
   }
-  timer = window.setInterval(tick, 10_000)
+  timer = window.setInterval(tick, 5_000)
   const onBack = () => {
     if (document.visibilityState === 'visible') void pollAtlas()
   }
@@ -304,6 +305,24 @@ export function startAtlas() {
 }
 
 // -- ביצוע פקודות -------------------------------------------------------------------
+/**
+ * פקודות מבוצעות רק אחרי שמצב המחסן (עם atlasApplied) התמזג — אחרת פקודה
+ * שבוטלה במכשיר אחר תבוצע כאן מחדש, תהיה חדשה מהמחיקה, ותנצח במיזוג.
+ * השיחה עצמה מוצגת מיד; הביצוע נדחה עד המשיכה הראשונה.
+ */
+let deferred = false
+function applyWhenSafe(messages: AtlasMessage[]) {
+  if (cloudConfigured() && !hasPulledOnce()) {
+    deferred = true
+    return
+  }
+  deferred = false
+  applyPending(messages)
+}
+/** נקרא מהטיק — מבצע מה שנדחה ברגע שהמחסן דיבר */
+function flushDeferred() {
+  if (deferred && (!cloudConfigured() || hasPulledOnce())) applyWhenSafe(cache.messages)
+}
 /** מזהה רשומה שנגזר ממזהה הפקודה — אותו מזהה בכל מכשיר */
 const derived = (prefix: string, cmd: AtlasCommand) => `${prefix}-${cmd.id}`
 

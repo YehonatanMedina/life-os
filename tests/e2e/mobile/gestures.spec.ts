@@ -94,7 +94,9 @@ test.describe('מחוות', () => {
     await page.waitForTimeout(400)
     const top1 = await body.evaluate((el) => el.scrollTop)
     await expect(ev.locator('.time'), 'quick vertical drag must not move the event').toHaveText('08:30–12:30')
-    expect((await readState(page)).events.find((e) => e.id === evId)).toBeUndefined()
+    // אם המצב כבר נשמר לדיסק (החנות שומרת בטעינה) — גם שם המופע לא זז
+    const saved = (await readState(page)).events.find((e) => e.id === evId)
+    if (saved) expect(saved.start).toBe('08:30')
     expect(top1, `vertical scroll should still work over an event (scrollTop ${top0} → ${top1})`).toBeGreaterThan(top0)
     expect(errors).toEqual([])
 

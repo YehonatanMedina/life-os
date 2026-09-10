@@ -146,8 +146,7 @@ test.describe('אימונים', () => {
     // הכרטיס החיצוני של יום שישי (הכותרת תשתנה בהמשך — לכן לא מאתרים לפי שם האימון)
     const dayCard = plan.locator('.stack > .card', { hasText: 'יום שישי' })
     await expect(dayCard).toContainText('יום שישי · אימון שישי')
-    // באג ידוע (ראו הדוח): היום הראשון שנוסף נסגר מיד — פותחים אותו שוב
-    await dayCard.getByRole('button', { name: /יום שישי · אימון שישי/ }).click()
+    // היום הראשון שנוסף נשאר פתוח לעריכה
     await dayCard.locator('label.field', { hasText: 'שם האימון' }).locator('input').fill('רגליים')
     const exInput = dayCard.getByPlaceholder('＋ תרגיל חדש — שם ו-Enter')
     await exInput.fill('סקוואט')
@@ -255,7 +254,6 @@ test.describe('אימונים', () => {
     const plan = app.getByRole('dialog', { name: 'תוכנית האימונים' })
     await plan.getByRole('button', { name: /^יום ראשון/ }).click()
     const dayCard = plan.locator('.stack > .card', { hasText: 'יום ראשון' })
-    await dayCard.getByRole('button', { name: /יום ראשון · אימון ראשון/ }).click()
     await dayCard.getByRole('button', { name: /ריצה/ }).click()
     await plan.getByRole('button', { name: 'סיום' }).click()
 
@@ -292,7 +290,7 @@ test.describe('אימונים', () => {
 test.describe('באגים ידועים', () => {
   test.use({ seed: onboarded })
 
-  test.fixme('השלמת כל השלבים מסמנת את ההרגל בלי חותמת habitsAt (מיזוג בין מכשירים)', async ({ app }) => {
+  test('השלמת כל השלבים מסמנת את ההרגל בלי חותמת habitsAt (מיזוג בין מכשירים)', async ({ app }) => {
     const card = habitsCard(app)
     const morning = card.locator('.item', { hasText: 'שגרת בוקר' })
     await morning.getByRole('button', { name: /שגרת בוקר/ }).click()
@@ -306,7 +304,7 @@ test.describe('באגים ידועים', () => {
     expect(typeof day.habitsAt?.['hb-morning']).toBe('number')
   })
 
-  test.fixme('היום הראשון שנוסף לתוכנית האימונים נשאר פתוח לעריכה', async ({ app }) => {
+  test('היום הראשון שנוסף לתוכנית האימונים נשאר פתוח לעריכה', async ({ app }) => {
     await app.locator('.card', { hasText: 'עוד אין תוכנית שבועית' }).getByRole('button', { name: 'בניית התוכנית' }).click()
     const plan = app.getByRole('dialog', { name: 'תוכנית האימונים' })
     await plan.getByRole('button', { name: /^יום שישי/ }).click()

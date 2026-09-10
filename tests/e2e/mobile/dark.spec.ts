@@ -108,14 +108,18 @@ test.describe('ניגודיות', () => {
     await page.addInitScript(() => {
       const frames: Array<{ t: number; app: boolean; theme: string; bg: string }> = []
       ;(window as any).__frames = frames
+      let after = 0
       const tick = () => {
+        const app = !!document.querySelector('#root .app')
         frames.push({
           t: Math.round(performance.now()),
-          app: !!document.querySelector('#root .app'),
+          app,
           theme: document.documentElement.dataset.theme ?? '',
           bg: getComputedStyle(document.body).backgroundColor,
         })
-        if (frames.length < 60) requestAnimationFrame(tick)
+        // מקליטים עד 30 פריימים אחרי שהאפליקציה עלתה (ולכל היותר ~10 שניות)
+        if (app) after++
+        if (after < 30 && frames.length < 600) requestAnimationFrame(tick)
       }
       requestAnimationFrame(tick)
     })
@@ -123,6 +127,7 @@ test.describe('ניגודיות', () => {
     s.settings.theme = 'dark'
     errors.push(...(await openApp(page, { state: s, colorScheme: 'light' })))
     await page.waitForTimeout(800)
+    await page.waitForFunction(() => ((window as any).__frames as any[]).filter((f) => f.app).length >= 10, null, { timeout: 10000 })
     const frames = await page.evaluate(() => (window as any).__frames as Array<{ t: number; app: boolean; theme: string; bg: string }>)
     const painted = frames.filter((f) => f.app)
     expect(painted.length).toBeGreaterThan(0)

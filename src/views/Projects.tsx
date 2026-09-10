@@ -386,7 +386,7 @@ function Card({
           className="btn xs ghost"
           title={t.status === 'done' ? 'החזר לביצוע' : 'סמן כהושלם'}
           aria-label={t.status === 'done' ? 'החזר לביצוע' : 'סמן כהושלם'}
-          style={t.status === 'done' ? { color: 'var(--good)' } : undefined}
+          style={t.status === 'done' ? { color: 'var(--good-text)' } : undefined}
           onClick={(e) => {
             e.stopPropagation()
             actions.toggleTaskDone(t.id)

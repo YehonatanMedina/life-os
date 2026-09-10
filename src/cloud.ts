@@ -19,7 +19,7 @@
 // ---------------------------------------------------------------------------
 
 import { useSyncExternalStore } from 'react'
-import { actions, consumeFreshInstall, store, mergeStates } from './store'
+import { actions, consumeFreshInstall, isPristine, store, mergeStates } from './store'
 import { refreshNotifySchedule } from './push'
 import { decryptText, encryptText, newCryptKey, stableStringify } from './crypto'
 import { aiKey, buildAtlasContext, buildPulse, buildWeekDigest } from './ai'
@@ -220,7 +220,8 @@ async function readRemote(): Promise<AppState | null> {
   try {
     parsed = JSON.parse(raw)
   } catch {
-    return null
+    // קובץ קיים אבל שבור (או פורמט של גרסה חדשה יותר) — לא "אין מחסן", ואסור לדרוס אותו
+    throw new Error('unreadable')
   }
   if (parsed && parsed.enc === 1) {
     const key = getCryptKey()
@@ -233,10 +234,13 @@ async function readRemote(): Promise<AppState | null> {
     }
     parsed = JSON.parse(plain)
   }
-  return parsed && Array.isArray(parsed.tasks) ? (parsed as AppState) : null
+  if (!parsed || !Array.isArray(parsed.tasks)) throw new Error('unreadable')
+  return parsed as AppState
 }
 
 // -- קבצי הצד: נגזרים מהמצב ונכתבים באותה דחיפה ------------------------------
+/** חתימת תוכן בלי חותמות זמן — גם ב-JSON מיושר עם רווח אחרי הנקודתיים */
+const sideStamp = (json: string) => json.replace(/"(generatedAt|updatedAt)":\s*"[^"]*"/g, '')
 // מה שכבר נכתב (בגרסתו הגלויה) — כדי לא לשלוח שוב קובץ שלא השתנה
 const sideWritten = new Map<string, string>()
 
@@ -272,7 +276,7 @@ function buildNewsFeedback(s: AppState): string {
  */
 async function sideFiles(s: AppState): Promise<Record<string, { content: string }>> {
   const out: Record<string, { content: string }> = {}
-  const stamp = (json: string) => json.replace(/"(generatedAt|updatedAt)":"[^"]*"/g, '')
+  const stamp = sideStamp
 
   const feedback = buildNewsFeedback(s)
   if (sideWritten.get('news-feedback.json') !== stamp(feedback)) out['news-feedback.json'] = { content: feedback }
@@ -293,7 +297,7 @@ async function sideFiles(s: AppState): Promise<Record<string, { content: string 
 }
 
 function rememberSide(s: AppState, written: Record<string, { content: string }>) {
-  const stamp = (json: string) => json.replace(/"(generatedAt|updatedAt)":"[^"]*"/g, '')
+  const stamp = sideStamp
   if (written['news-feedback.json']) sideWritten.set('news-feedback.json', stamp(buildNewsFeedback(s)))
   if (written['week-digest.json']) sideWritten.set('week-digest.json', stamp(JSON.stringify(buildWeekDigest(s))))
   if (written['atlas-context.json']) sideWritten.set('atlas-context.json', stamp(JSON.stringify(buildAtlasContext(s))))
@@ -328,9 +332,9 @@ export async function pullOnce(): Promise<boolean> {
   const remote = await readRemote()
   if (!remote) return false
   const before = snapshotOf(store.get())
-  if (consumeFreshInstall()) {
-    // מכשיר חדש: מה שבענן הוא התמונה, לא תוספת לתוכן הפתיחה.
-    // מזהה המכשיר נשאר שלנו — אחרת כל המכשירים היו נקראים באותו שם.
+  if (consumeFreshInstall() || isPristine(store.get())) {
+    // מכשיר חדש (או שרק נפתח פעם אחת בלי תוכן): מה שבענן הוא התמונה, לא תוספת
+    // לתוכן הפתיחה. מזהה המכשיר נשאר שלנו — אחרת כל המכשירים היו נקראים באותו שם.
     store.replace({ ...remote, timer: null, deviceId: store.get().deviceId })
   } else {
     store.set((local) => mergeStates(local, remote))
@@ -338,8 +342,21 @@ export async function pullOnce(): Promise<boolean> {
   // אם תוצאת המיזוג שונה ממה שבמחסן — אנחנו מחזיקים משהו שהוא לא. כותבים.
   remoteBehind = contentOf(store.get()) !== contentOf(remote)
   lastPullAt = Date.now()
+  // מפתח הניתוח מקישור ההתקנה נכנס רק עכשיו — אחרי המשיכה, ורק אם למחסן אין אחד
+  if (pendingAk) {
+    if (!store.get().settings.aiKey) actions.setSettings({ aiKey: pendingAk })
+    pendingAk = ''
+  }
   emit()
   return snapshotOf(store.get()) !== before
+}
+
+/** האם המכשיר הזה כבר משך פעם אחת מהמחסן בסשן הזה */
+export function hasPulledOnce(): boolean {
+  return lastPullAt > 0
+}
+export function cloudConfigured(): boolean {
+  return !!getToken() && !!getGistId()
 }
 
 /** מיזוג ואז כתיבה — כך כתיבה מקבילה ממכשיר אחר לא נמחקת */
@@ -482,6 +499,8 @@ async function tick() {
  * חיבור בקליק אחד: פתיחת הכתובת עם ‎#setup=…‎ מגדירה את המכשיר ונעלמת.
  * ה-fragment אף פעם לא נשלח לשרת, והשורה מוחלפת בהיסטוריה מיד.
  */
+let pendingAk = ''
+
 function consumeSetupLink() {
   try {
     const m = location.hash.match(/#setup=([A-Za-z0-9\-_]+)/)
@@ -505,8 +524,12 @@ function consumeSetupLink() {
         /* ignore */
       }
     }
-    // מפתח הניתוח נכנס להגדרות דרך הפעולה הרגילה — כך הוא מקבל חותמת ומסתנכרן לכל מכשיר
-    if (cfg && typeof cfg.ak === 'string' && cfg.ak) actions.setSettings({ aiKey: cfg.ak })
+    // מפתח הניתוח מוחל אחרי המשיכה הראשונה (ראו pullOnce) — כדי לא להקפיץ את חותמת
+    // ההגדרות לפני שהמחסן דיבר. בלי מחסן (רק מפתח) — מיד.
+    if (cfg && typeof cfg.ak === 'string' && cfg.ak) {
+      if (getToken() && getGistId()) pendingAk = cfg.ak
+      else actions.setSettings({ aiKey: cfg.ak })
+    }
     history.replaceState(null, '', location.pathname + location.search)
   } catch {
     /* ignore */
@@ -516,6 +539,12 @@ function consumeSetupLink() {
 export function startCloud() {
   if (loop) return
   consumeSetupLink()
+  // קישור התקנה שהודבק בלשונית פתוחה — ניווט hash בלבד, בלי טעינה מחדש
+  window.addEventListener('hashchange', () => {
+    consumeSetupLink()
+    baseline = null
+    void tick()
+  })
   loop = window.setInterval(() => void tick(), TICK_MS)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {

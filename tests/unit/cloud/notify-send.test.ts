@@ -222,17 +222,11 @@ describe('atlasReminders — תזכורות בשעה מדויקת מ-reminders.j
   // באג אמיתי (ראו tests/reports/cloud.md, ממצא #5): api() בסקריפט בונה headers חדש ולא ממזג את
   // init.headers, ולכן ה-Accept: raw של reminders.json נזרק. GitHub עונה ב-JSON עם content ב-base64,
   // JSON.parse מחזיר אובייקט ולא מערך, atlasReminders מחזיר [] — ושום תזכורת של אטלס לא יוצאת לעולם.
-  it.fails('מול GitHub אמיתי (Accept לא raw → base64) התזכורת עדיין נשלחת', async () => {
+  it('מול GitHub אמיתי (Accept לא raw → base64) התזכורת עדיין נשלחת', async () => {
     const r = await run({ reminders: [rem('09:20')], strictContents: true }, at('09:25'))
     const c = r.calls.find((x) => x.url.includes('reminders.json'))!
     expect(c.headers?.Accept).toBe('application/vnd.github.raw+json')
     expect(r.sends).toHaveLength(1)
-  })
-
-  it('מתעד את הבאג: בתשובה נאמנה ל-GitHub לא נשלחת שום תזכורת', async () => {
-    const r = await run({ reminders: [rem('09:20')], strictContents: true }, at('09:25'))
-    expect(r.sends).toHaveLength(0)
-    expect(r.logs.some((l) => l.startsWith('nothing due'))).toBe(true)
   })
 
   it('גבול החלון: 44 דקות — כן, 45 ומעלה — לא; עתיד — לא', async () => {
