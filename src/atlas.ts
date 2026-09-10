@@ -285,14 +285,20 @@ function mergeThread(local: AtlasMessage[], remote: AtlasMessage[]): AtlasMessag
 export function startAtlas() {
   if (timer) return
   const tick = () => {
-    const fast = Date.now() < fastUntil || awaitingReply()
+    const waiting = awaitingReply()
+    const fast = Date.now() < fastUntil || waiting
     const gap = fast ? 20_000 : 5 * 60_000
-    if (document.visibilityState === 'visible' && Date.now() - (cache.lastPollAt ?? 0) >= gap - 500) void pollAtlas()
+    // ברקע מושכים רק כשמחכים לתשובה — כדי שהיא תחכה מוכנה כשהוא חוזר,
+    // וכדי שפקודות יבוצעו גם אם החלון ממוזער. הדפדפן ממילא מאט טיימרים ברקע.
+    const visible = document.visibilityState === 'visible'
+    if ((visible || waiting) && Date.now() - (cache.lastPollAt ?? 0) >= gap - 500) void pollAtlas()
   }
   timer = window.setInterval(tick, 10_000)
-  document.addEventListener('visibilitychange', () => {
+  const onBack = () => {
     if (document.visibilityState === 'visible') void pollAtlas()
-  })
+  }
+  document.addEventListener('visibilitychange', onBack)
+  window.addEventListener('focus', onBack)
   window.setTimeout(() => void pollAtlas(), 2500)
 }
 
