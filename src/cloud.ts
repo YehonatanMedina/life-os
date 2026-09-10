@@ -8,18 +8,39 @@
 // המודל: המצב המקומי הוא מקור האמת. לפני כל כתיבה מושכים את הגרסה שבענן
 // וממזגים (לכל רשומה מנצחת החותמת החדשה יותר), ורק אז כותבים את התוצאה.
 // כך שני מכשירים שכתבו במקביל לא דורסים אחד את השני.
+//
+// שלושה כללים שנלמדו בכאב:
+//   1. אחרי כל משיכה משווים את *תוכן* התוצאה למה שבמחסן. אם יש אצלנו משהו
+//      שאין שם — כותבים מיד. זה מה שמציל שינויים שנעשו לפני שהטלפון הרג את
+//      האפליקציה, ומה שמחזיר נתונים שגרסה ישנה במכשיר אחר השמיטה.
+//   2. ברגע שהאפליקציה יוצאת מהמסך — דוחפים מיד, בלי לחכות ל"שקט".
+//   3. קבצי הצד (משוב חדשות, חבילת הניתוח, הדופק) נכתבים באותה דחיפה של
+//      המצב, לא בטיימרים נפרדים שנהרגים יחד עם הלשונית.
 // ---------------------------------------------------------------------------
 
 import { useSyncExternalStore } from 'react'
 import { consumeFreshInstall, store, mergeStates } from './store'
 import { refreshNotifySchedule } from './push'
+import { decryptText, encryptText, newCryptKey, stableStringify } from './crypto'
+import { aiKey, buildAtlasContext, buildPulse, buildWeekDigest } from './ai'
 import type { AppState } from './types'
+
+export { b64u, unb64u, encryptText, decryptText, newCryptKey } from './crypto'
 
 const API = 'https://api.github.com'
 const FILE = 'life-os.json'
 const TOKEN_KEY = 'life-os-gh-token'
 const GIST_KEY = 'life-os-gist-id'
 const CRYPT_KEY = 'life-os-crypt-key'
+
+/** מזהה הבנייה — מוזרק ל-index.html בזמן הבנייה, כדי שכל מכשיר ידע אם הוא מעודכן */
+export function buildId(): string {
+  try {
+    return document.querySelector('meta[name="build"]')?.getAttribute('content') ?? 'dev'
+  } catch {
+    return 'dev'
+  }
+}
 
 export type CloudStatus = 'off' | 'synced' | 'pending' | 'sending' | 'error' | 'offline'
 
@@ -69,67 +90,35 @@ export function setCredentials(token: string, pairing: string) {
   void tick()
 }
 
-// -- הצפנה ------------------------------------------------------------------
-// AES-GCM עם מפתח אקראי שנוצר במכשיר. מה שיושב ב-GitHub הוא צופן חסר משמעות
-// למי שאין לו את המפתח — והמפתח עובר רק בתוך מזהה החיבור, לא נשמר בענן.
-export function b64u(bytes: Uint8Array): string {
-  let s = ''
-  bytes.forEach((b) => (s += String.fromCharCode(b)))
-  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-export function unb64u(s: string): Uint8Array {
-  const t = s.replace(/-/g, '+').replace(/_/g, '/')
-  const bin = atob(t + '='.repeat((4 - (t.length % 4)) % 4))
-  return Uint8Array.from(bin, (c) => c.charCodeAt(0))
-}
-export function newCryptKey(): string {
-  return b64u(crypto.getRandomValues(new Uint8Array(32)))
-}
-async function aesKey(b64: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey('raw', unb64u(b64) as BufferSource, 'AES-GCM', false, [
-    'encrypt',
-    'decrypt',
-  ])
-}
-export async function encryptText(plain: string, keyB64: string): Promise<string> {
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const key = await aesKey(keyB64)
-  const ct = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: iv as BufferSource },
-    key,
-    new TextEncoder().encode(plain),
-  )
-  return JSON.stringify({ enc: 1, iv: b64u(iv), ct: b64u(new Uint8Array(ct)) })
-}
-export async function decryptText(ivB64: string, ctB64: string, keyB64: string): Promise<string> {
-  const key = await aesKey(keyB64)
-  const plain = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: unb64u(ivB64) as BufferSource },
-    key,
-    unb64u(ctB64) as BufferSource,
-  )
-  return new TextDecoder().decode(plain)
-}
-
 // -- מצב ריאקטיבי ------------------------------------------------------------
 let status: CloudStatus = 'off'
 let lastError = ''
 let lastSyncAt = 0
+let lastPullAt = 0
+let lastPushAt = 0
 const listeners = new Set<() => void>()
-type CloudSnapshot = { status: CloudStatus; lastError: string; lastSyncAt: number }
-let snapshotCache: CloudSnapshot = { status, lastError, lastSyncAt }
+type CloudSnapshot = {
+  status: CloudStatus
+  lastError: string
+  lastSyncAt: number
+  lastPullAt: number
+  lastPushAt: number
+}
+let snapshotCache: CloudSnapshot = { status, lastError, lastSyncAt, lastPullAt, lastPushAt }
 
+function emit() {
+  snapshotCache = { status, lastError, lastSyncAt, lastPullAt, lastPushAt }
+  listeners.forEach((l) => l())
+}
 function setStatus(v: CloudStatus, err = '') {
   if (status === v && lastError === err) return
   status = v
   lastError = err
-  snapshotCache = { status, lastError, lastSyncAt }
-  listeners.forEach((l) => l())
+  emit()
 }
 function markSyncedAt(t: number) {
   lastSyncAt = t
-  snapshotCache = { status, lastError, lastSyncAt }
-  listeners.forEach((l) => l())
+  emit()
 }
 
 export function useCloudState() {
@@ -148,8 +137,35 @@ export function useCloudState() {
 function forCloud(s: AppState): AppState {
   return { ...s, timer: null }
 }
+
+/**
+ * חתימה של המצב לזיהוי "יש מה לדחוף". הטיימר נכנס בצורה גסה בלבד —
+ * התחלה, עצירה ומסלול — כדי שדופק של כל 20 שניות לא יגרור דחיפה.
+ */
 function snapshotOf(s: AppState): string {
-  return JSON.stringify({ ...forCloud(s), lastSyncAt: 0 })
+  const t = s.timer
+  const timer = t ? `${t.running ? 1 : 0}|${t.trackId}|${t.startedAt}|${t.label}` : ''
+  return JSON.stringify({ ...forCloud(s), lastSyncAt: 0, timer })
+}
+
+const LIST_KEYS = [
+  'tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits',
+  'weekly', 'phases', 'news', 'workoutPlan', 'workouts',
+] as const
+
+/**
+ * תמונת התוכן — רק מה שמסונכרן: הרשומות (ממוינות לפי מזהה) וההגדרות.
+ * לא מזהה מכשיר, לא טיימר, לא חותמות מקומיות. שני מכשירים עם אותו תוכן
+ * מייצרים אותה מחרוזת, ולכן ההשוואה מולה אומרת בדיוק אם המחסן מפגר.
+ */
+function contentOf(s: Partial<AppState>): string {
+  const lists: Record<string, unknown> = {}
+  for (const k of LIST_KEYS) {
+    lists[k] = [...((s as any)[k] ?? [])].sort((a: any, b: any) =>
+      String(a.id).localeCompare(String(b.id)),
+    )
+  }
+  return stableStringify({ settings: s.settings, settingsUpdatedAt: s.settingsUpdatedAt ?? 0, lists })
 }
 
 async function api(path: string, init?: RequestInit): Promise<any> {
@@ -220,29 +236,88 @@ async function readRemote(): Promise<AppState | null> {
   return parsed && Array.isArray(parsed.tasks) ? (parsed as AppState) : null
 }
 
+// -- קבצי הצד: נגזרים מהמצב ונכתבים באותה דחיפה ------------------------------
+// מה שכבר נכתב (בגרסתו הגלויה) — כדי לא לשלוח שוב קובץ שלא השתנה
+const sideWritten = new Map<string, string>()
+
+/** משוב על החדשות — הקובץ היחיד שהעורך בענן קורא, ולכן גלוי */
+function buildNewsFeedback(s: AppState): string {
+  const list = (s.news ?? [])
+    .filter((n) => !n.deleted)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-21)
+  const editions = list.map((n) => {
+    const votes = Object.values(n.votes ?? {})
+    return {
+      date: n.date,
+      liked: votes.filter((v) => v.v === 1).map((v) => `[${v.section}] ${v.headline}`),
+      disliked: votes.filter((v) => v.v === -1).map((v) => `[${v.section}] ${v.headline}`),
+      note: n.note || undefined,
+    }
+  })
+  return JSON.stringify(
+    {
+      about: 'משוב של יהונתן על מהדורות הבוקר. נכתב על ידי האפליקציה, נקרא על ידי עורך החדשות.',
+      updatedAt: new Date().toISOString(),
+      editions,
+    },
+    null,
+    2,
+  )
+}
+
+/**
+ * בונה את קבצי הצד שהשתנו מאז הכתיבה האחרונה. ההשוואה היא על הטקסט הגלוי,
+ * כי ההצפנה מייצרת צופן שונה בכל פעם.
+ */
+async function sideFiles(s: AppState): Promise<Record<string, { content: string }>> {
+  const out: Record<string, { content: string }> = {}
+  const stamp = (json: string) => json.replace(/"(generatedAt|updatedAt)":"[^"]*"/g, '')
+
+  const feedback = buildNewsFeedback(s)
+  if (sideWritten.get('news-feedback.json') !== stamp(feedback)) out['news-feedback.json'] = { content: feedback }
+
+  const ak = aiKey(s)
+  if (ak) {
+    const pairs: Array<[string, string]> = [
+      ['week-digest.json', JSON.stringify(buildWeekDigest(s))],
+      ['atlas-context.json', JSON.stringify(buildAtlasContext(s))],
+      ['pulse.json', JSON.stringify(buildPulse(s))],
+    ]
+    for (const [name, plain] of pairs) {
+      if (sideWritten.get(name) === stamp(plain)) continue
+      out[name] = { content: await encryptText(plain, ak) }
+    }
+  }
+  return out
+}
+
+function rememberSide(s: AppState, written: Record<string, { content: string }>) {
+  const stamp = (json: string) => json.replace(/"(generatedAt|updatedAt)":"[^"]*"/g, '')
+  if (written['news-feedback.json']) sideWritten.set('news-feedback.json', stamp(buildNewsFeedback(s)))
+  if (written['week-digest.json']) sideWritten.set('week-digest.json', stamp(JSON.stringify(buildWeekDigest(s))))
+  if (written['atlas-context.json']) sideWritten.set('atlas-context.json', stamp(JSON.stringify(buildAtlasContext(s))))
+  if (written['pulse.json']) sideWritten.set('pulse.json', stamp(JSON.stringify(buildPulse(s))))
+}
+
 async function writeRemote(s: AppState): Promise<void> {
   const id = getGistId()
   if (!id) throw new Error('no-gist')
   const key = getCryptKey()
   const json = JSON.stringify(forCloud(s))
   const content = key ? await encryptText(json, key) : json
-  await api(`/gists/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ files: { [FILE]: { content } } }),
-  })
-}
-
-/**
- * ספירת הרשומות בכל רשימה. משמש כדי לזהות מצב שבו במחסן יש פחות ממה
- * שיש אצלנו — למשל מכשיר עם גרסה ישנה שכתב מצב בלי שדה שהוא לא מכיר.
- * במקרה כזה המיזוג מחזיר לנו את מה שחסר, ואנחנו כותבים אותו בחזרה.
- */
-function listSizes(s: Partial<AppState>): string {
-  const keys = [
-    'tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits',
-    'weekly', 'phases', 'news', 'workoutPlan', 'workouts',
-  ] as const
-  return keys.map((k) => ((s as any)[k] ?? []).length).join(',')
+  const files: Record<string, { content: string }> = { [FILE]: { content } }
+  let side: Record<string, { content: string }> = {}
+  try {
+    side = await sideFiles(s)
+  } catch {
+    side = {} // קובץ צד שנכשל לא עוצר את הסנכרון של המצב עצמו
+  }
+  Object.assign(files, side)
+  await api(`/gists/${id}`, { method: 'PATCH', body: JSON.stringify({ files }) })
+  rememberSide(s, side)
+  lastPushAt = Date.now()
+  emit()
 }
 
 /** המחסן מפגר אחרינו — הפעם הבאה שנתעורר תכתוב אליו */
@@ -259,7 +334,10 @@ export async function pullOnce(): Promise<boolean> {
   } else {
     store.set((local) => mergeStates(local, remote))
   }
-  remoteBehind = listSizes(store.get()) !== listSizes(remote)
+  // אם תוצאת המיזוג שונה ממה שבמחסן — אנחנו מחזיקים משהו שהוא לא. כותבים.
+  remoteBehind = contentOf(store.get()) !== contentOf(remote)
+  lastPullAt = Date.now()
+  emit()
   return snapshotOf(store.get()) !== before
 }
 
@@ -267,18 +345,50 @@ export async function pullOnce(): Promise<boolean> {
 export async function pushNow(): Promise<void> {
   await pullOnce()
   await writeRemote(store.get())
+  remoteBehind = false
 }
 
 // -- הלולאה ------------------------------------------------------------------
-const QUIET_MS = 4000 // כמה שקט צריך אחרי שינוי לפני שליחה
+const QUIET_MS = 2000 // כמה שקט צריך אחרי שינוי לפני שליחה
 const POLL_MS = 10000 // כל כמה זמן בודקים אם מישהו אחר שינה
-const TICK_MS = 2000
+const TICK_MS = 1000
 
 let baseline: string | null = null
 let dirtySince = 0
 let lastPoll = 0
 let busy = false
 let loop: number | undefined
+let urgent = false
+
+/** בקשה לדחוף בהזדמנות הראשונה, בלי לחכות לשקט */
+export function nudgePush() {
+  urgent = true
+  void tick()
+}
+
+/** לשימוש מכפתור "סנכרן עכשיו": משיכה, מיזוג וכתיבה — בלי קשר למצב */
+export async function syncNow(): Promise<void> {
+  if (busy) return
+  busy = true
+  try {
+    setStatus('sending')
+    await pullOnce()
+    await writeRemote(store.get())
+    remoteBehind = false
+    baseline = snapshotOf(store.get())
+    dirtySince = 0
+    urgent = false
+    lastPoll = Date.now()
+    markSyncedAt(Date.now())
+    setStatus('synced')
+    refreshNotifySchedule()
+  } catch (e: any) {
+    setStatus('error', String(e?.message ?? e))
+    throw e
+  } finally {
+    busy = false
+  }
+}
 
 async function tick() {
   if (busy) return
@@ -296,10 +406,17 @@ async function tick() {
   const s = store.get()
   const snap = snapshotOf(s)
   if (baseline === null) {
+    // פתיחה: מושכים, ממזגים — ואם יש אצלנו משהו שהמחסן לא מכיר, כותבים מיד.
+    // בלי זה, שינויים שנעשו לפני שהאפליקציה נהרגה לא היו נשלחים לעולם.
     baseline = snap
     busy = true
     try {
       await pullOnce()
+      if (remoteBehind) {
+        setStatus('sending')
+        await writeRemote(store.get())
+        remoteBehind = false
+      }
       baseline = snapshotOf(store.get())
       lastPoll = Date.now()
       markSyncedAt(Date.now())
@@ -319,7 +436,7 @@ async function tick() {
   }
   if (!dirty) dirtySince = 0
 
-  const shouldPush = (dirty && Date.now() - dirtySince >= QUIET_MS) || remoteBehind
+  const shouldPush = (dirty && (urgent || Date.now() - dirtySince >= QUIET_MS)) || remoteBehind
   const shouldPoll = !dirty && Date.now() - lastPoll >= POLL_MS
   if (!shouldPush && !shouldPoll) return
 
@@ -328,23 +445,27 @@ async function tick() {
     if (shouldPush) {
       setStatus('sending')
       await pushNow()
-      remoteBehind = false
       baseline = snapshotOf(store.get())
       dirtySince = 0
+      urgent = false
       lastPoll = Date.now()
       markSyncedAt(Date.now())
       setStatus('synced')
       refreshNotifySchedule()
     } else {
       const changed = await pullOnce()
+      if (remoteBehind) {
+        setStatus('sending')
+        await writeRemote(store.get())
+        remoteBehind = false
+      }
       baseline = snapshotOf(store.get())
       lastPoll = Date.now()
       if (changed) markSyncedAt(Date.now())
       setStatus('synced')
     }
   } catch (e: any) {
-    const m = String(e?.message ?? e)
-    setStatus(m === 'auth' ? 'error' : m.startsWith('http') || m === 'not-found' ? 'error' : 'error', m)
+    setStatus('error', String(e?.message ?? e))
   } finally {
     busy = false
   }
@@ -358,7 +479,13 @@ function consumeSetupLink() {
   try {
     const m = location.hash.match(/#setup=([A-Za-z0-9\-_]+)/)
     if (!m) return
-    const cfg = JSON.parse(new TextDecoder().decode(unb64u(m[1])))
+    const raw = new TextDecoder().decode(
+      Uint8Array.from(
+        atob(m[1].replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (m[1].length % 4)) % 4)),
+        (c) => c.charCodeAt(0),
+      ),
+    )
+    const cfg = JSON.parse(raw)
     // קישור יכול לשאת חיבור מלא (t+p), מפתח התראות (nk), או שניהם —
     // מה שחסר לא נוגעים בו
     if (cfg && typeof cfg.t === 'string' && typeof cfg.p === 'string') {
@@ -385,61 +512,14 @@ export function startCloud() {
     if (document.visibilityState === 'visible') {
       lastPoll = 0 // בחזרה למסך — בודקים מיד
       void tick()
+    } else {
+      // יוצאים מהמסך: אם יש מה לדחוף — עכשיו, לפני שהמערכת מקפיאה אותנו
+      nudgePush()
     }
   })
+  window.addEventListener('pagehide', () => nudgePush())
   window.addEventListener('online', () => void tick())
   void tick()
-}
-
-// ---------------------------------------------------------------------------
-// משוב על החדשות — קובץ נפרד וקריא במחסן.
-//
-// בכוונה לא מוצפן: זה הקובץ היחיד שעורך הבוקר בענן צריך לקרוא כדי ללמוד מה
-// אהבת ומה לא. הוא מכיל כותרות והערות על מהדורות — לא נתונים אישיים.
-// ---------------------------------------------------------------------------
-const FEEDBACK_FILE = 'news-feedback.json'
-let feedbackTimer: number | undefined
-
-export async function writeNewsFeedback(): Promise<boolean> {
-  const id = getGistId()
-  if (!id || !getToken()) return false
-  const list = (store.get().news ?? [])
-    .filter((n) => !n.deleted)
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-21)
-  const editions = list.map((n) => {
-    const votes = Object.values(n.votes ?? {})
-    return {
-      date: n.date,
-      liked: votes.filter((v) => v.v === 1).map((v) => `[${v.section}] ${v.headline}`),
-      disliked: votes.filter((v) => v.v === -1).map((v) => `[${v.section}] ${v.headline}`),
-      note: n.note || undefined,
-    }
-  })
-  const content = JSON.stringify(
-    {
-      about: 'משוב של יהונתן על מהדורות הבוקר. נכתב על ידי האפליקציה, נקרא על ידי עורך החדשות.',
-      updatedAt: new Date().toISOString(),
-      editions,
-    },
-    null,
-    2,
-  )
-  try {
-    await api(`/gists/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ files: { [FEEDBACK_FILE]: { content } } }),
-    })
-    return true
-  } catch {
-    return false
-  }
-}
-
-/** נקרא אחרי כל דירוג — כותב פעם אחת אחרי שהמשתמש הפסיק לגעת */
-export function queueNewsFeedback() {
-  if (feedbackTimer) clearTimeout(feedbackTimer)
-  feedbackTimer = window.setTimeout(() => void writeNewsFeedback(), 3500)
 }
 
 /** הורדת קובץ גיבוי */
@@ -476,6 +556,11 @@ export function installFlush() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush()
   })
+}
+
+/** תאימות: דירוג חדשות מבקש דחיפה מיידית — המשוב נכתב כחלק מהדחיפה */
+export function queueNewsFeedback() {
+  nudgePush()
 }
 
 export const HE_STATUS: Record<CloudStatus, string> = {

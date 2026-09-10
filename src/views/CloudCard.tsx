@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import {
-  HE_STATUS, createGist, getPairing, getToken, pullOnce, pushNow, setCredentials, useCloudState,
+  HE_STATUS, buildId, createGist, getPairing, getToken, setCredentials, syncNow, useCloudState,
 } from '../cloud'
+import { useApp } from '../store'
 import { Field, useToast } from '../ui'
 
 const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new'
@@ -11,8 +12,10 @@ const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new'
  * בקוד של האתר, אז מי שפותח את הכתובת בלי אסימון לא רואה שום נתון.
  */
 export default function CloudCard() {
-  const { status, lastError, lastSyncAt } = useCloudState()
+  const { status, lastError, lastSyncAt, lastPullAt, lastPushAt } = useCloudState()
+  const s = useApp()
   const toast = useToast()
+  const [syncing, setSyncing] = useState(false)
   const [open, setOpen] = useState(false)
   const [token, setToken] = useState(getToken())
   const [gist, setGist] = useState(getPairing())
@@ -48,6 +51,12 @@ export default function CloudCard() {
     return m < 1 ? 'עכשיו' : m === 1 ? 'לפני דקה' : `לפני ${m} דקות`
   }
 
+  const when = (t: number) => {
+    if (!t) return '—'
+    const d = new Date(t)
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+
   return (
     <div className="card pad">
       <div className="spread" style={{ marginBottom: 8 }}>
@@ -57,6 +66,52 @@ export default function CloudCard() {
           {status === 'synced' && lastSyncAt ? ` · ${ago()}` : ''}
         </span>
       </div>
+
+      {/* מצב הסנכרון במספרים — כדי שאפשר יהיה לראות בדיוק מה קורה, לא לנחש */}
+      {connected && (
+        <div className="sync-grid">
+          <div>
+            <span className="k">משיכה אחרונה</span>
+            <span className="v ltr">{when(lastPullAt)}</span>
+          </div>
+          <div>
+            <span className="k">כתיבה אחרונה</span>
+            <span className="v ltr">{when(lastPushAt)}</span>
+          </div>
+          <div>
+            <span className="k">גרסה</span>
+            <span className="v ltr">{buildId()}</span>
+          </div>
+          <div>
+            <span className="k">מכשיר</span>
+            <span className="v ltr">{s.deviceId}</span>
+          </div>
+          {lastError && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <span className="k">שגיאה</span>
+              <span className="v ltr" style={{ color: 'var(--bad)' }}>{lastError}</span>
+            </div>
+          )}
+          <button
+            className="btn sm"
+            style={{ gridColumn: '1 / -1' }}
+            disabled={syncing}
+            onClick={async () => {
+              setSyncing(true)
+              try {
+                await syncNow()
+                toast('סונכרן — נמשך, מוזג ונכתב')
+              } catch (e: any) {
+                toast(`הסנכרון נכשל: ${e?.message ?? e}`)
+              } finally {
+                setSyncing(false)
+              }
+            }}
+          >
+            {syncing ? 'מסנכרן…' : 'סנכרן עכשיו'}
+          </button>
+        </div>
+      )}
 
       {connected ? (
         <>
@@ -76,42 +131,6 @@ export default function CloudCard() {
                     : `שגיאה: ${lastError}`}
             </p>
           )}
-          <div className="row" style={{ marginTop: 10 }}>
-            <button
-              className="btn grow"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                try {
-                  const changed = await pullOnce()
-                  toast(changed ? 'נמשכו עדכונים' : 'הכל כבר מעודכן')
-                } catch {
-                  toast('המשיכה נכשלה')
-                } finally {
-                  setBusy(false)
-                }
-              }}
-            >
-              ⬇ משיכה עכשיו
-            </button>
-            <button
-              className="btn primary grow"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                try {
-                  await pushNow()
-                  toast('נשלח ✓')
-                } catch {
-                  toast('השליחה נכשלה')
-                } finally {
-                  setBusy(false)
-                }
-              }}
-            >
-              ⬆ שליחה עכשיו
-            </button>
-          </div>
           <button className="btn ghost sm" style={{ marginTop: 10 }} onClick={() => setOpen((v) => !v)}>
             {open ? 'סגור' : 'שינוי חיבור'}
           </button>

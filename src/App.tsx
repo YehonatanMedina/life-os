@@ -8,9 +8,8 @@ import Projects from './views/Projects'
 import Review, { ReviewLock, reviewWeekOf } from './views/Review'
 import SettingsView from './views/Settings'
 import FocusTimer from './views/FocusTimer'
-import { HE_STATUS, installFlush, startCloud, useCloudState } from './cloud'
+import { HE_STATUS, buildId, installFlush, startCloud, useCloudState } from './cloud'
 import { refreshNotifySchedule } from './push'
-import { writeWeekDigest } from './ai'
 
 type View = 'today' | 'calendar' | 'projects' | 'review' | 'settings'
 
@@ -185,8 +184,6 @@ function Shell() {
     startCloud()
     // רענון לוח ההתראות בפתיחה (פועל רק במכשיר שההתראות דלוקות בו)
     window.setTimeout(() => refreshNotifySchedule(), 4000)
-    // חבילת הנתונים לניתוח השבועי — נכתבת מוצפנת, לכל היותר פעם בשש שעות
-    window.setTimeout(() => void writeWeekDigest().catch(() => undefined), 9000)
   }, [])
 
   // דופק לטיימר, ויישור מיידי כשחוזרים ללשונית — כדי שטיימר שנשכח פתוח
@@ -206,6 +203,38 @@ function Shell() {
 
   // התראה אם השמירה המקומית נכשלת
   const saveFailed = useSyncExternalStore(subscribePersistError, getPersistError, getPersistError)
+
+  // גרסה חדשה באוויר? בודקים בפתיחה, בחזרה למסך וכל עשר דקות. אם המכשיר
+  // היה ברקע — מרעננים לבד (רגע טבעי); אם הוא פעיל — מציעים כפתור.
+  const [newBuild, setNewBuild] = useState(false)
+  useEffect(() => {
+    const mine = buildId()
+    if (mine === 'dev') return
+    let hiddenSince = 0
+    const check = async (auto: boolean) => {
+      try {
+        const html = await (await fetch('./index.html', { cache: 'no-store' })).text()
+        const m = html.match(/name="build" content="([^"]+)"/)
+        if (m && m[1] !== mine) {
+          if (auto) location.reload()
+          else setNewBuild(true)
+        }
+      } catch {
+        /* אין רשת — בפעם הבאה */
+      }
+    }
+    void check(false)
+    const i = setInterval(() => void check(false), 10 * 60_000)
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') hiddenSince = Date.now()
+      else if (hiddenSince && Date.now() - hiddenSince > 60_000) void check(true)
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearInterval(i)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [])
 
   // כותרת הלשונית מציגה את הטיימר
   useEffect(() => {
@@ -285,6 +314,17 @@ function Shell() {
       </header>
 
       <main className="main">
+        {newBuild && (
+          <div className="card pad spread" style={{ borderColor: 'var(--accent)', marginTop: 12 }}>
+            <div className="small">
+              <b>יש גרסה חדשה של האפליקציה.</b>
+              <div className="tiny faint">רענון קצר, שום דבר לא הולך לאיבוד.</div>
+            </div>
+            <button className="btn sm primary" onClick={() => location.reload()}>
+              עדכון
+            </button>
+          </div>
+        )}
         {saveFailed && (
           <div
             className="card pad"

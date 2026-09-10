@@ -1345,3 +1345,9 @@ label.field > span, .field > span {
 
 .col-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
 .col-btns .btn { padding: 2px 6px; font-size: 10px; line-height: 1.2; }
+
+/* לוח מצב הסנכרון */
+.sync-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 4px 0 12px; }
+.sync-grid > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sync-grid .k { font-size: 11px; color: var(--text-faint); font-weight: 700; }
+.sync-grid .v { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }

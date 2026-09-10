@@ -33,7 +33,7 @@
       // עובד גם בלי אינטרנט אחרי הפתיחה הראשונה
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          navigator.serviceWorker.register('./sw.js').catch(function () {})
+          navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(function () {})
         })
       }
     </script>
