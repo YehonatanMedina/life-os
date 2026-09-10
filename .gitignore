@@ -7,3 +7,4 @@ app-icon.ico
 test-results/
 playwright-report/
 tests/reports/
+test-results*/

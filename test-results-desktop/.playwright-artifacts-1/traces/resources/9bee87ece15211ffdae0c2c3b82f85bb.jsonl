@@ -1,6 +1,0 @@
-{"type":"receive","time":1789081793428.1208,"opcode":1,"data":"{\"type\":\"connected\"}"}
-{"type":"receive","time":1789081793467.255,"opcode":1,"data":"{\"type\":\"full-reload\",\"path\":\"/test-results-desktop/.playwright-artifacts-2/traces/resources/163abfeb08259a53a66ec121205c064bc84783f5.html\"}"}
-{"type":"receive","time":1789081793730.481,"opcode":1,"data":"{\"type\":\"full-reload\",\"path\":\"/test-results-desktop/.playwright-artifacts-0/traces/resources/bdce87566a063f17e78ee405ad5d0a7199c00c5f.html\"}"}
-{"type":"receive","time":1789081793740.421,"opcode":1,"data":"{\"type\":\"full-reload\",\"path\":\"/test-results-desktop/.playwright-artifacts-3/traces/resources/bdce87566a063f17e78ee405ad5d0a7199c00c5f.html\"}"}
-{"type":"receive","time":1789081793764.7769,"opcode":1,"data":"{\"type\":\"full-reload\",\"path\":\"/test-results-desktop/.playwright-artifacts-1/traces/resources/bdce87566a063f17e78ee405ad5d0a7199c00c5f.html\"}"}
-{"type":"receive","time":1789081793799.4749,"opcode":1,"data":"{\"type\":\"full-reload\",\"path\":\"/test-results-desktop/.playwright-artifacts-2/traces/resources/bdce87566a063f17e78ee405ad5d0a7199c00c5f.html\"}"}
