@@ -65,7 +65,7 @@ export default function Review() {
   )
 
   return (
-    <div className="stack narrow" style={{ paddingTop: 12 }}>
+    <div className="page narrow" style={{ paddingTop: 12 }}>
       <div className="desk-head">
         <h1>סקירה</h1>
         <div className="sub">פעם בשבוע אתה עוצר, מסתכל על מה שהיה, ומחליט מה משנים.</div>
@@ -85,6 +85,7 @@ export default function Review() {
         </button>
       )}
 
+      <section className="sec">
       <div className="spread">
         <div className="row">
           <button className="btn sm ghost" aria-label="לשבוע הקודם" onClick={() => setWsOffset((o) => o - 1)}>
@@ -113,10 +114,21 @@ export default function Review() {
       <WeekNumbers st={st} />
       <WeekBars st={st} />
       <TrackSplit st={st} />
-      <ClaudeInsight ws={ws} />
-      <InsightsCard st={st} insights={insights} ws={ws} />
-      <HistoryChart />
+      </section>
 
+      <section className="sec">
+        <div className="sec-h"><h2>מה עולה מהנתונים</h2></div>
+        <ClaudeInsight ws={ws} />
+        <InsightsCard st={st} insights={insights} ws={ws} />
+      </section>
+
+      <section className="sec">
+        <div className="sec-h"><h2>לאורך זמן</h2></div>
+        <HistoryChart />
+      </section>
+
+      <section className="sec">
+      <div className="sec-h"><h2>סגירת השבוע</h2></div>
       {wl.goals && wl.goals.length > 0 && <GoalsCard ws={ws} title="מטרות־העל של השבוע" />}
 
       {wl.review ? (
@@ -170,6 +182,8 @@ export default function Review() {
           </div>
         </div>
       )}
+
+      </section>
 
       {flow && <WeeklyFlow ws={flow} onClose={() => setFlow(null)} />}
     </div>

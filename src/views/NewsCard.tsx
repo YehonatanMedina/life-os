@@ -28,12 +28,6 @@ type Edition = {
 const READ_KEY = 'life-os-news-read'
 const CACHE_KEY = 'life-os-news-cache'
 
-const SECTION_EMOJI: Record<string, string> = {
-  israel: '🇮🇱',
-  tech: '🔬',
-  culture: '🎭',
-}
-
 function fullText(ed: Edition): string {
   const parts: string[] = []
   if (ed.intro) parts.push(ed.intro)
@@ -191,7 +185,7 @@ export default function NewsCard() {
         {ed.sections.map((sec) => (
           <React.Fragment key={sec.key}>
             <div className="section-title" style={{ padding: '8px 13px 2px' }}>
-              {SECTION_EMOJI[sec.key] ?? '•'} {sec.title}
+              {sec.title}
             </div>
             {sec.stories.map((st, i) => {
               const id = `${sec.key}-${i}`

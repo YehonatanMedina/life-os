@@ -52,9 +52,10 @@ export default function SettingsView() {
 
 
   return (
-    <div className="stack narrow" style={{ paddingTop: 12 }}>
+    <div className="page narrow" style={{ paddingTop: 12 }}>
       <div className="desk-head">
         <h1>הגדרות</h1>
+        <div className="sub">יעדים, מבנה השבוע, הרגלים, תאריכים, סנכרון וגיבוי.</div>
       </div>
 
       {/* ------------------------------------------------ יעדים */}
