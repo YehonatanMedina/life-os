@@ -69,7 +69,7 @@ export function WorkoutCard() {
     return (
       <>
         <div className="card pad">
-          <b>🏋️ אימונים</b>
+          <b>אימונים</b>
           <div className="tiny faint" style={{ margin: '3px 0 10px' }}>
             עוד אין תוכנית שבועית. בונים אותה פעם אחת, ומשם רק מסמנים מה עשית.
           </div>
@@ -85,7 +85,7 @@ export function WorkoutCard() {
   return (
     <>
       <div className="card">
-        <div className="spread" style={{ padding: '12px 13px 4px' }}>
+        <div className="card-h">
           <div className="grow" style={{ minWidth: 0 }}>
             <b>
               {KIND_EMOJI[planDay?.kind ?? 'rest']} {planDay ? planDay.title : 'אין אימון היום'}
@@ -191,7 +191,7 @@ export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => v
       })
     }
     vibrate([30, 50, 30])
-    toast('האימון נשמר 💪')
+    toast('האימון נשמר')
     onClose()
   }
 
@@ -214,7 +214,7 @@ export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => v
               onClick={() => setEdit((v) => !v)}
               aria-pressed={edit}
             >
-              {edit ? '✓ סיום עריכה' : '✎ עריכה'}
+              {edit ? 'סיום עריכה' : 'עריכה'}
             </button>
           )}
           <button className="btn ghost sm" aria-label="סגירה" onClick={onClose}>
@@ -242,7 +242,7 @@ export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => v
               {day && (
                 <div className="row" style={{ flexWrap: 'wrap' }}>
                   <button className="btn xs ghost" onClick={() => setPick((v) => !v)}>
-                    🔀 עשיתי אימון אחר
+                    עשיתי אימון אחר
                   </button>
                   {log?.finishedAt && <span className="chip on">✓ נשמר</span>}
                 </div>
@@ -293,7 +293,7 @@ export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => v
                     אין תרגילים ביום הזה.
                   </div>
                   <button className="btn sm block" onClick={() => setEdit(true)}>
-                    ✎ הוספת תרגילים
+                    הוספת תרגילים
                   </button>
                 </div>
               )}

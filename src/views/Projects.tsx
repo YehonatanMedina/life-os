@@ -1,3 +1,4 @@
+import { Icon } from '../icons'
 import React, { useEffect, useMemo, useState } from 'react'
 import { actions, alive, capacityBetween, minutesByTrack, nextOrder, trackById, useApp, uid } from '../store'
 import { PHASES } from '../seed'
@@ -54,7 +55,7 @@ export default function Projects() {
               className={`tag${sel === t.id ? ' on' : ''}`}
               style={
                 sel === t.id
-                  ? { background: t.color, color: onColor(t.color), borderColor: 'transparent' }
+                  ? { ['--tc' as any]: t.color }
                   : { ['--tc' as any]: t.color }
               }
               onClick={() => setSel(t.id)}
@@ -144,7 +145,7 @@ function TrackHeader({ track, minutes }: { track: Track; minutes: number }) {
             {track.goal && <div className="tiny faint">{track.goal}</div>}
           </div>
           <button className="btn ghost sm" aria-label="עריכת המסלול" onClick={() => setEdit(true)}>
-            ⚙
+            <Icon name="pencil" sm /> עריכה
           </button>
         </div>
         <div className="grid3" style={{ marginTop: 12 }}>
@@ -479,7 +480,7 @@ export function TaskSheet({ task, onClose }: { task: Task | null; onClose: () =>
                 className={`tag${d.trackId === tr.id ? ' on' : ''}`}
                 style={
                   d.trackId === tr.id
-                    ? { background: tr.color, color: onColor(tr.color), borderColor: 'transparent' }
+                    ? { ['--tc' as any]: tr.color }
                     : { ['--tc' as any]: tr.color }
                 }
                 onClick={() => up({ trackId: tr.id })}

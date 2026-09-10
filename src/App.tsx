@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { actions, getPersistError, subscribePersistError, useApp, weekLog } from './store'
-import { addDays, today as todayISO, weekStart, niceDate } from './dates'
+import { addDays, clock, today as todayISO, weekStart, niceDate } from './dates'
 import { ToastHost, setFocusMode, useTick } from './ui'
 import Today from './views/Today'
 import CalendarView from './views/CalendarView'
@@ -12,66 +12,9 @@ import AtlasView from './views/Atlas'
 import { startAtlas } from './atlas'
 import { HE_STATUS, buildId, installFlush, safeToReload, startCloud, useCloudState } from './cloud'
 import { refreshNotifySchedule } from './push'
+import { Icon } from './icons'
 
 type View = 'today' | 'atlas' | 'calendar' | 'projects' | 'review' | 'settings'
-
-type IconName = View
-
-const PATHS: Record<IconName, React.ReactNode> = {
-  today: (
-    <>
-      <circle cx="12" cy="12" r="8.2" />
-      <path d="M12 7.6V12l2.8 1.7" />
-    </>
-  ),
-  atlas: (
-    <>
-      <circle cx="12" cy="12" r="8.4" />
-      <path d="M12 6.6l1.7 3.7 3.7 1.7-3.7 1.7L12 17.4l-1.7-3.7-3.7-1.7 3.7-1.7z" />
-    </>
-  ),
-  calendar: (
-    <>
-      <rect x="3.6" y="5.2" width="16.8" height="15.2" rx="2.6" />
-      <path d="M3.6 10h16.8M8.4 3.6v3.2M15.6 3.6v3.2" />
-    </>
-  ),
-  projects: (
-    <>
-      <rect x="3.4" y="4.6" width="6.2" height="14.8" rx="1.8" />
-      <rect x="14.4" y="4.6" width="6.2" height="9.4" rx="1.8" />
-    </>
-  ),
-  review: (
-    <>
-      <path d="M4 19.4V13M9.4 19.4V8.2M14.8 19.4v-7.6M20.2 19.4V5.2" />
-    </>
-  ),
-  settings: (
-    <>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.1 14.6a1.6 1.6 0 0 0 .3 1.8l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5v.2a1.9 1.9 0 1 1-3.8 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a1.9 1.9 0 1 1 0-3.8h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.6 1.6 0 0 0 1.8.3h.1a1.6 1.6 0 0 0 1-1.5V3a1.9 1.9 0 1 1 3.8 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.5 1h.2a1.9 1.9 0 1 1 0 3.8h-.1a1.6 1.6 0 0 0-1.5 1z" />
-    </>
-  ),
-}
-
-function Icon({ name }: { name: IconName }) {
-  return (
-    <svg
-      className="ic"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      focusable="false"
-    >
-      {PATHS[name]}
-    </svg>
-  )
-}
 
 // חמישה יעדים יומיים. ההגדרות לא מתחרות איתם על מקום — הן מאחורי גלגל השיניים.
 const NAV: Array<{ id: View; label: string }> = [
@@ -350,13 +293,12 @@ function Shell() {
           </div>
         )}
         {saveFailed && (
-          <div
-            className="card pad"
-            style={{ background: 'var(--bad-soft)', borderColor: 'var(--bad)', marginTop: 12 }}
-          >
-            <b style={{ color: 'var(--bad)' }}>⚠ השמירה המקומית נכשלה</b>
+          <div className="card rail alert" style={{ ['--rail' as any]: 'var(--bad)', marginTop: 12 }}>
+            <div className="txt">
+            <b style={{ color: 'var(--bad-text)' }}>השמירה המקומית נכשלה</b>
             <div className="tiny muted">
               אחסון הדפדפן מלא או חסום. ייצא גיבוי מההגדרות עכשיו, ובדוק שאתה לא בגלישה פרטית.
+            </div>
             </div>
           </div>
         )}
@@ -388,8 +330,6 @@ function TimerBadge({ onClick, compact }: { onClick: () => void; compact?: boole
   if (!s.timer) return null
   const el = s.timer.accumulated + (s.timer.running ? (Date.now() - s.timer.startedAt) / 60000 : 0)
   const left = Math.max(0, s.timer.targetMinutes * 60 - el * 60)
-  const mm = String(Math.floor(left / 60)).padStart(2, '0')
-  const ss = String(Math.floor(left % 60)).padStart(2, '0')
   const over = el >= s.timer.targetMinutes
   return (
     <button
@@ -404,7 +344,7 @@ function TimerBadge({ onClick, compact }: { onClick: () => void; compact?: boole
         justifyContent: 'center',
       }}
     >
-      {s.timer.running ? '●' : '⏸'} {over ? 'הושלם' : `${mm}:${ss}`}
+      <Icon name={s.timer.running ? 'today' : 'pause'} sm /> {over ? 'הושלם' : clock(left)}
     </button>
   )
 }

@@ -75,7 +75,7 @@ export default function NotifyCard() {
             else toast('לא הצליח — נסה שוב')
           }}
         >
-          🔔 הדלק התראות במכשיר הזה
+          הדלק התראות במכשיר הזה
         </button>
       )}
       {!getNotifyKey() && supported && (

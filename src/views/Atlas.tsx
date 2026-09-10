@@ -114,14 +114,16 @@ export default function AtlasView() {
   return (
     <div className="chat">
       {!ready && (
-        <div className="card pad" style={{ background: 'var(--warn-soft)', borderColor: 'transparent' }}>
-          <b>אטלס עוד לא מחובר במכשיר הזה.</b>
-          <div className="tiny muted">פתח את קישור ההתקנה מהמחשב (הגדרות → סנכרון) — הוא נושא גם את המפתח של אטלס.</div>
+        <div className="card rail alert" style={{ ['--rail' as any]: 'var(--warn)' }}>
+          <div className="txt">
+            <b>אטלס עוד לא מחובר במכשיר הזה.</b>
+            <div className="tiny faint">פתח את קישור ההתקנה מהמחשב (הגדרות → סנכרון) — הוא נושא גם את המפתח של אטלס.</div>
+          </div>
         </div>
       )}
       {a.error && ready && (
-        <div className="card pad" style={{ background: 'var(--bad-soft)', borderColor: 'transparent' }}>
-          <div className="small" style={{ color: 'var(--bad)' }}>{a.error}</div>
+        <div className="card rail alert" style={{ ['--rail' as any]: 'var(--bad)' }}>
+          <div className="txt small" style={{ color: 'var(--bad-text)' }}>{a.error}</div>
         </div>
       )}
 

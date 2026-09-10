@@ -19,7 +19,7 @@ test('מכשירי המדידה תופסים פגמים מלאכותיים', asy
     const tiny = document.createElement('button')
     tiny.className = 'probe-tiny'
     tiny.textContent = 'x'
-    tiny.style.cssText = 'width:12px;height:12px;padding:0;border:0;display:block'
+    tiny.style.cssText = 'width:12px;height:12px;padding:0;border:0;display:block;font-size:8px;line-height:12px;overflow:hidden'
     card.appendChild(tiny)
     // וגם חריגה בתוך כרטיס עם פס (overflow:hidden) — נתפסת כחריגה מהכרטיס
     const rail = document.querySelector('.card.rail') as HTMLElement
@@ -41,8 +41,9 @@ test('מכשירי המדידה תופסים פגמים מלאכותיים', asy
   const t = hits.find((h) => h.el.includes('probe-tiny'))
   expect(t?.hitW).toBe(12)
   expect(t?.hitH).toBe(12)
-  // ה-::before של .check באמת מרחיב את אזור הפגיעה ל-44
+  // ה-::before של .check מרחיב את אזור הפגיעה: inset:-10px נמדד מקופסת הריפוד
+  // (בתוך הגבול של 2px), ולכן בפועל 24 + 8 + 8 = 40, לא 44
   const check = hits.find((h) => h.el.startsWith('button.check'))
-  expect(check?.hitW).toBeGreaterThanOrEqual(44)
-  expect(check?.hitH).toBeGreaterThanOrEqual(44)
+  expect(check?.hitW).toBeGreaterThanOrEqual(40)
+  expect(check?.hitH).toBeGreaterThanOrEqual(40)
 })

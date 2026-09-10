@@ -1,7 +1,8 @@
+import { Icon } from '../icons'
 import React, { useEffect, useRef } from 'react'
 import { actions, trackById, useApp } from '../store'
 import { setFocusMode, useFocusMode, useTick, useToast, vibrate } from '../ui'
-import { plural } from '../dates'
+import { plural, clock as fmtClock } from '../dates'
 
 // ---------------------------------------------------------------------------
 // מצב מיקוד — הטיימר על כל המסך ושום דבר אחר.
@@ -63,12 +64,7 @@ export default function FocusTimer() {
   const target = t.targetMinutes || s.settings.tokenMinutes
   const over = elapsed >= target
   const secs = Math.max(0, over ? (elapsed - target) * 60 : (target - elapsed) * 60)
-  const h = Math.floor(secs / 3600)
-  const m = Math.floor((secs % 3600) / 60)
-  const ss = Math.floor(secs % 60)
-  const clock = h > 0
-    ? `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
-    : `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+  const clock = fmtClock(secs)
   const tr = trackById(s, t.trackId)
   const pct = Math.min(100, (elapsed / Math.max(1, target)) * 100)
 
@@ -95,11 +91,11 @@ export default function FocusTimer() {
       <div className="focus-actions">
         {t.running ? (
           <button className="btn" onClick={() => actions.pauseTimer()}>
-            ⏸ השהיה
+            <Icon name="pause" /> השהיה
           </button>
         ) : (
           <button className="btn" onClick={() => actions.resumeTimer()}>
-            ▶ המשך
+            <Icon name="play" /> המשך
           </button>
         )}
         <button

@@ -44,7 +44,7 @@ test.describe('פריסה — מסכים', () => {
 
     // כרטיס החדשות פתוח על כל הכתבות + הערה
     await page.getByRole('button', { name: 'פתח את כל הכתבות' }).click()
-    await page.getByRole('button', { name: '✍️ הערה למהדורה' }).click()
+    await page.getByRole('button', { name: /^(✍️ )?הערה למהדורה$/ }).click()
     await checkScreen(page, 'today-news-open')
     expect(errors).toEqual([])
   })
@@ -188,7 +188,7 @@ test.describe('פריסה — מסכים', () => {
     await checkSheet(page, 'manual')
     await page.locator('.sheet').last().getByRole('button', { name: 'סגירה' }).click()
     // תכנון מחר (בערב הכפתור בכרטיס המשימות)
-    await page.getByRole('button', { name: '🌙 תכנון מחר' }).click()
+    await page.getByRole('button', { name: /^(🌙 )?תכנון מחר$/ }).click()
     await expect(page.getByRole('dialog', { name: 'תכנון מחר' })).toBeVisible()
     await checkSheet(page, 'plan-tomorrow')
     await page.getByRole('button', { name: /^סגור/ }).click()
@@ -231,7 +231,7 @@ test.describe('פריסה — מסכים', () => {
     await page.locator('.setchip').first().click()
     await expect(page.locator('.set-edit')).toBeVisible()
     await checkScreen(page, 'workout-log', '.flow')
-    await page.getByRole('button', { name: '✎ עריכה' }).click()
+    await page.locator('.flow-head').getByRole('button', { name: /^(✎ )?עריכה$/ }).click()
     await checkScreen(page, 'workout-edit', '.flow')
     await page.locator('.flow-foot').getByRole('button', { name: 'סגירה' }).click()
 

@@ -121,6 +121,17 @@ export function hhmm(ms: number): string {
 }
 
 /** "45 דק׳" · "7 שע׳" · "7 שע׳ 30 דק׳" — בלי נקודתיים, שלא ייקרא כשעון */
+/** שעון אחד לכל הטיימרים: mm:ss, ומעל שעה h:mm:ss */
+export function clock(secs: number): string {
+  const t = Number.isFinite(secs) ? Math.max(0, Math.floor(secs)) : 0
+  const h = Math.floor(t / 3600)
+  const m = Math.floor((t % 3600) / 60)
+  const ss = t % 60
+  const mm = String(m).padStart(2, '0')
+  const s2 = String(ss).padStart(2, '0')
+  return h > 0 ? `${h}:${mm}:${s2}` : `${mm}:${s2}`
+}
+
 export function minutesToHM(min: number): string {
   const m = Number.isFinite(min) ? Math.max(0, Math.round(min)) : 0
   const h = Math.floor(m / 60)

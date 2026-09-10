@@ -7,6 +7,14 @@ export function bootstrapDocument() {
   if (el.lang !== 'he') el.lang = 'he'
   if (el.dir !== 'rtl') el.dir = 'rtl'
 
+  // ערכת הנושא לפני הציור הראשון — אחרת יש הבזק בהיר וכל כפתור "נוסע" מלבן לכהה
+  try {
+    const t = JSON.parse(localStorage.getItem('life-os-v1') ?? '{}')?.settings?.theme
+    if (t === 'dark' || t === 'light') el.dataset.theme = t
+  } catch {
+    /* ignore */
+  }
+
   const ensureMeta = (name: string, content: string) => {
     let m = document.querySelector(`meta[name="${name}"]`)
     if (!m) {

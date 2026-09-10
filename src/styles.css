@@ -11,7 +11,7 @@
   --line-soft: #eef0f4;
   --text: #16181d;
   --text-dim: #5f6470;
-  --text-faint: #6d7280;
+  --text-faint: #626875;
   --accent: #5b5bd6;
   --accent-soft: #ececfb;
   --accent-text: #ffffff;
@@ -22,6 +22,10 @@
   --warn-soft: #fdf0e3;
   --bad: #d93d42;
   --bad-soft: #fdeaea;
+  /* טקסט על הרקעים הרכים — כהה יותר מהצבע עצמו, כדי לעבור ניגודיות בערכה הבהירה */
+  --good-text: #1f7a4f;
+  --warn-text: #a8560a;
+  --bad-text: #b8262c;
   --shadow: 0 1px 2px rgba(16, 18, 24, .05), 0 4px 14px rgba(16, 18, 24, .06);
   --shadow-lg: 0 10px 40px rgba(16, 18, 24, .16);
   --ring-track: #e6e8ec;
@@ -72,6 +76,9 @@
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .3);
     --shadow-lg: 0 10px 40px rgba(0, 0, 0, .6);
     --ring-track: #2b3038;
+    --good-text: #46c07f;
+    --warn-text: #f0913a;
+    --bad-text: #ff6369;
     color-scheme: dark;
   }
 }
@@ -99,6 +106,9 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .3);
   --shadow-lg: 0 10px 40px rgba(0, 0, 0, .6);
   --ring-track: #2b3038;
+  --good-text: #46c07f;
+  --warn-text: #f0913a;
+  --bad-text: #ff6369;
   color-scheme: dark;
 }
 
@@ -381,7 +391,7 @@ b, strong { font-weight: 600; }
 .btn.primary:hover { filter: brightness(1.08); }
 .btn.ghost { background: none; border-color: transparent; color: var(--text-dim); }
 .btn.ghost:hover { background: var(--bg-sunk); color: var(--text); }
-.btn.danger { color: var(--bad); border-color: var(--line); }
+.btn.danger { color: var(--bad-text); border-color: var(--line); }
 .btn.danger:hover { background: var(--bad-soft); }
 .btn.sm { padding: 6px 10px; font-size: 13px; border-radius: 8px; }
 .btn.xs { padding: 5px 9px; font-size: 12px; border-radius: 7px; position: relative; }
@@ -395,6 +405,8 @@ b, strong { font-weight: 600; }
 .check { position: relative; }
 .btn.block { width: 100%; }
 .btn:disabled { opacity: .45; pointer-events: none; }
+.btn .ic { width: 16px; height: 16px; flex: 0 0 16px; }
+.btn.xs .ic, .ic.ic-sm { width: 13px; height: 13px; flex-basis: 13px; }
 
 .chip {
   display: inline-flex;
@@ -433,6 +445,7 @@ b, strong { font-weight: 600; }
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .textarea { resize: vertical; min-height: 76px; line-height: 1.55; }
+::placeholder { color: var(--text-faint); opacity: 1; }
 .select {
   appearance: none;
   padding-inline-end: 32px;
@@ -717,7 +730,9 @@ label.field > span, .field > span {
 .item .txt { flex: 1; min-width: 0; font-size: 14.5px; }
 .item .txt .sub2 { font-size: 12px; color: var(--text-faint); margin-top: 1px; }
 .item.done .txt > .ttl { text-decoration: line-through; color: var(--text-faint); }
-.item .txt .ttl { line-height: 1.35; }
+.item .txt .ttl { line-height: 1.35; unicode-bidi: plaintext; }
+/* אירוע שכבר עבר — צבע חלש במקום שקיפות על כל השורה (שקיפות מפילה את הניגודיות) */
+.item.past .ttl, .item.past .sub2, .item.past .muted { color: var(--text-faint); }
 
 /* מספרים, שעות וטווחים — תמיד משמאל לימין כדי שלא יתהפכו בעברית */
 .ltr {
@@ -853,12 +868,12 @@ label.field > span, .field > span {
 .pill.tinted {
   --c: var(--accent);
   background: color-mix(in srgb, var(--c) 16%, var(--card));
-  color: var(--c);
+  color: color-mix(in srgb, var(--c) 72%, black);
 }
 .chip.tinted {
   --c: var(--accent);
   background: color-mix(in srgb, var(--c) 16%, var(--card));
-  color: var(--c);
+  color: color-mix(in srgb, var(--c) 72%, black);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .pill.tinted,
@@ -885,7 +900,7 @@ label.field > span, .field > span {
 }
 @media (max-width: 640px) {
   .cal-cell { min-height: 62px; }
-  .pill { font-size: 9.5px; padding: 0 3px; }
+  .pill { font-size: 10.5px; padding: 0 3px; }
 }
 
 /* =========================================================================
@@ -966,7 +981,7 @@ label.field > span, .field > span {
 .ev {
   --evc: var(--accent);
   background: color-mix(in srgb, var(--evc) 15%, var(--card));
-  color: var(--evc);
+  color: color-mix(in srgb, var(--evc) 72%, black);
   position: absolute;
   inset-inline: 2px;
   border-radius: 7px;
@@ -993,7 +1008,7 @@ label.field > span, .field > span {
 .ev { padding-inline-start: 9px; }
 .ev:active { cursor: grabbing; }
 .ev.drag { z-index: 9; box-shadow: var(--shadow-lg); opacity: .92; }
-.ev .time { font-weight: 600; opacity: .9; font-size: 10.5px; }
+.ev .time { font-weight: 600; font-size: 10.5px; }
 .ev .handle {
   position: absolute;
   inset-inline: 0;
@@ -1063,12 +1078,13 @@ label.field > span, .field > span {
   background: var(--bg-sunk);
 }
 
-.grid2 { display: grid; grid-template-columns: 1fr; gap: 12px; }
+/* בטלפון העמודות נערמות — המרווח ביניהן הוא מרווח בין מקטעים, לא בין כרטיסים */
+.grid2 { display: grid; grid-template-columns: 1fr; gap: 22px; }
 /* מסכים בעמודה אחת — לא נמתחים על כל הרוחב במחשב */
 .narrow { width: 100%; }
 .grid2 > *, .grid3 > *, .kanban > * { min-width: 0; }
 @media (min-width: 900px) {
-  .grid2 { grid-template-columns: 1.1fr .9fr; align-items: start; }
+  .grid2 { grid-template-columns: 1.1fr .9fr; align-items: start; gap: 12px; }
   .narrow { max-width: 720px; margin-inline: auto; }
   /* עמודת קנבן ארוכה גוללת בפנים במקום למתוח את כל הלוח */
   .kcol { max-height: 72vh; overflow-y: auto; }
@@ -1140,7 +1156,7 @@ label.field > span, .field > span {
   border-color: color-mix(in srgb, var(--tc) 70%, var(--line));
 }
 /* רקע ברירת מחדל — כדי ש-.on לא יהיה לבן על לבן כשלא הועבר צבע ישירות */
-.tag.on { background: var(--tc); color: var(--on-accent); border-color: transparent; }
+.tag.on { background: color-mix(in srgb, var(--tc) 82%, black); color: #fff; border-color: transparent; }
 
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
@@ -1161,7 +1177,7 @@ label.field > span, .field > span {
 .ins.warn { border-inline-start-color: var(--warn); }
 .ins.warn b { color: var(--warn); }
 .ins.bad { border-inline-start-color: var(--bad); background: var(--bad-soft); }
-.ins.bad b { color: var(--bad); }
+.ins.bad b { color: var(--bad-text); }
 
 /* המעבר השבועי — מסך מלא עם ראש קבוע ופס שלבים */
 .flow {
@@ -1266,8 +1282,8 @@ label.field > span, .field > span {
   font-size: 11px;
   line-height: 1;
 }
-.vote.up { background: var(--good-soft); border-color: var(--good); color: var(--good); }
-.vote.down { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+.vote.up { background: var(--good-soft); border-color: var(--good); color: var(--good-text); }
+.vote.down { background: var(--bad-soft); border-color: var(--bad); color: var(--bad-text); }
 
 /* החלפת תקופה ביומן */
 .swipe-in { animation: swipe-fwd .18s ease-out; }
@@ -1347,7 +1363,7 @@ label.field > span, .field > span {
   background: var(--bg-elev);
   min-width: 0;
 }
-.wk-strip .wd .l { font-size: 10.5px; color: var(--text-faint); font-weight: 700; }
+.wk-strip .wd .l { font-size: 10.5px; color: var(--text-dim); font-weight: 700; }
 .wk-strip .wd .i { font-size: 14px; line-height: 1; }
 .wk-strip .wd.now { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .wk-strip .wd.ok { background: var(--good-soft); border-color: var(--good); }
@@ -1372,10 +1388,9 @@ label.field > span, .field > span {
   position: absolute;
   top: 2px;
   inset-inline-start: 6px;
-  font-size: 9.5px;
-  font-weight: 800;
-  color: var(--text-faint);
-  opacity: .8;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-dim);
 }
 .setchip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .setchip.edit { box-shadow: 0 0 0 2px var(--accent); }
@@ -1404,7 +1419,7 @@ label.field > span, .field > span {
   border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--bg-elev);
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1;
   color: var(--text);
@@ -1413,7 +1428,7 @@ label.field > span, .field > span {
 .stepper .pm:active { background: var(--bg-sunk); }
 
 .col-btns { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
-.col-btns .btn { padding: 2px 6px; font-size: 10px; line-height: 1.2; }
+.col-btns .btn { padding: 2px 6px; font-size: 10.5px; line-height: 1.2; }
 
 /* לוח מצב הסנכרון */
 .sync-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 4px 0 12px; }
@@ -1426,6 +1441,7 @@ label.field > span, .field > span {
    --------------------------------------------------------------------------- */
 .chat { display: flex; flex-direction: column; gap: 10px; min-height: calc(100dvh - var(--header-h) - var(--nav-h) - 24px); padding-top: 12px; }
 .chat-list { flex: 1; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; padding-bottom: 8px; scroll-behavior: smooth; }
+.chat-list > :first-child { margin-top: auto; }
 .chat-date { align-self: center; font-size: 11px; color: var(--text-faint); padding: 2px 10px; border-radius: 999px; background: var(--bg-sunk); margin: 6px 0 2px; }
 .bubble {
   max-width: min(78%, 620px);
@@ -1442,7 +1458,7 @@ label.field > span, .field > span {
 .bubble.failed { opacity: .8; border-color: var(--bad); }
 .bubble-text { white-space: pre-wrap; word-break: break-word; }
 .bubble-meta { margin-top: 4px; display: flex; justify-content: flex-end; }
-.bubble.me .bubble-meta { color: var(--on-accent); opacity: .75; }
+.bubble.me .bubble-meta { color: var(--on-accent); opacity: .9; }
 .cmds { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
 .cmd { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); }
 .cmd::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--good); flex: none; }
@@ -1468,7 +1484,7 @@ label.field > span, .field > span {
 .composer .textarea { min-height: 44px; max-height: 160px; resize: none; line-height: 1.4; padding: 11px 12px; }
 .icon-btn { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; flex: none; border-radius: 12px; }
 .icon-btn svg { width: 22px; height: 22px; }
-.mic.on { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); animation: pulse 1.4s infinite; }
+.mic.on { background: var(--bad-soft); border-color: var(--bad); color: var(--bad-text); animation: pulse 1.4s infinite; }
 @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 var(--bad-soft); } 50% { box-shadow: 0 0 0 6px var(--bad-soft); } }
 @media (prefers-reduced-motion: reduce) { .dots i, .mic.on { animation: none; } }
 .atlas-card { cursor: pointer; }

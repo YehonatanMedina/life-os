@@ -86,7 +86,8 @@ export default function Review() {
       )}
 
       <section className="sec">
-      <div className="spread">
+      <div className="sec-h">
+        <h2>המספרים</h2>
         <div className="row">
           <button className="btn sm ghost" aria-label="לשבוע הקודם" onClick={() => setWsOffset((o) => o - 1)}>
             ›
@@ -122,10 +123,12 @@ export default function Review() {
         <InsightsCard st={st} insights={insights} ws={ws} />
       </section>
 
-      <section className="sec">
-        <div className="sec-h"><h2>לאורך זמן</h2></div>
-        <HistoryChart />
-      </section>
+      {s.sessions.some((x) => !x.deleted) && (
+        <section className="sec">
+          <div className="sec-h"><h2>לאורך זמן</h2></div>
+          <HistoryChart />
+        </section>
+      )}
 
       <section className="sec">
       <div className="sec-h"><h2>סגירת השבוע</h2></div>
@@ -134,7 +137,7 @@ export default function Review() {
       {wl.review ? (
         <div className="card pad">
           <div className="spread">
-            <b>השבוע הזה נסגר ✅</b>
+            <b>השבוע הזה נסגר</b>
             <span className="chip on">{wl.review.score}/10</span>
           </div>
           <div className="stack" style={{ marginTop: 12 }}>
@@ -432,7 +435,7 @@ function InsightsCard({ st, insights, ws }: { st: WeekStats; insights: Insight[]
             }
           }}
         >
-          📋 ניתוח מעמיק עם Claude
+          ניתוח מעמיק עם Claude
         </button>
       </div>
     </div>
@@ -553,7 +556,7 @@ export function GoalsCard({ ws, title }: { ws: string; title: string }) {
 
   return (
     <div className="card">
-      <div className="spread" style={{ padding: '12px 13px 4px' }}>
+      <div className="card-h">
         <b>{title}</b>
         <span className="tiny faint ltr">
           {done}/{goals.length}
@@ -638,7 +641,7 @@ export function WeeklyFlow({ ws, onClose }: { ws: string; onClose: () => void })
     })
     actions.patchWeek(nextWs, { goals: clean, plannedAt: Date.now() })
     vibrate([30, 50, 30])
-    toast('השבוע נסגר. שבוע חדש 🚀')
+    toast('השבוע נסגר. שבוע חדש.')
     onClose()
   }
 
@@ -705,7 +708,7 @@ export function WeeklyFlow({ ws, onClose }: { ws: string; onClose: () => void })
                   }
                 }}
               >
-                📋 ניתוח מעמיק עם Claude
+                ניתוח מעמיק עם Claude
               </button>
               <div className="tiny faint" style={{ marginTop: -4 }}>
                 מעתיק ללוח את כל נתוני השבוע יחד עם השאלות הנכונות. שום דבר לא נשלח מכאן —
@@ -885,7 +888,7 @@ function GoalsStep({
                 className={`tag${g.trackId === tr.id ? ' on' : ''}`}
                 style={
                   g.trackId === tr.id
-                    ? { background: tr.color, color: onColor(tr.color), borderColor: 'transparent' }
+                    ? { ['--tc' as any]: tr.color }
                     : { ['--tc' as any]: tr.color }
                 }
                 onClick={() => set(g.id, { trackId: tr.id })}
@@ -1054,7 +1057,7 @@ function TasksStep({ nextWs }: { nextWs: string }) {
             <button
               key={x.id}
               className={`tag${trk === x.id ? ' on' : ''}`}
-              style={trk === x.id ? { background: x.color, color: onColor(x.color), borderColor: 'transparent' } : { ['--tc' as any]: x.color }}
+              style={{ ['--tc' as any]: x.color }}
               onClick={() => setTrk(trk === x.id ? undefined : x.id)}
             >
               {x.emoji} {x.name}
@@ -1117,7 +1120,6 @@ function DoneStep({
   return (
     <>
       <div className="card pad" style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 34 }}>🧭</div>
         <b style={{ fontSize: 17 }}>השבוע הבא, בשורה אחת</b>
         <div className="small muted" style={{ marginTop: 4 }}>
           <span className="ltr">{shortDate(nextWs)} – {shortDate(weekEnd)}</span>
@@ -1182,7 +1184,7 @@ function DoneStep({
           }
         }}
       >
-        📋 ניתוח מעמיק עם Claude — כולל התשובות שלי
+        ניתוח מעמיק עם Claude — כולל התשובות שלי
       </button>
 
       <p className="small muted" style={{ margin: 0 }}>
@@ -1202,7 +1204,6 @@ export function ReviewLock({ ws, onSkip }: { ws: string; onSkip: () => void }) {
     <div className="lock-overlay">
       <div style={{ maxWidth: 700, margin: '0 auto' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 40 }}>🧭</div>
           <h1 style={{ fontSize: 24, marginTop: 6 }}>מעבר שבועי</h1>
           <p className="muted small" style={{ maxWidth: 440, margin: '6px auto 0' }}>
             שבוע נסגר. כמה דקות להסתכל מה עבד, ואז להגדיר את הבא — זה מה שמונע מהתוכנית להישחק

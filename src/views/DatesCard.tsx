@@ -67,7 +67,7 @@ export default function DatesCard() {
   return (
     <>
       <div className="card">
-        <div className="spread" style={{ padding: '12px 13px 4px' }}>
+        <div className="card-h">
           <b>תאריכים קבועים</b>
           <span className="tiny faint ltr">{list.length}</span>
         </div>

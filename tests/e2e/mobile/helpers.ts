@@ -211,8 +211,12 @@ export async function openApp(page: Page, opts: OpenOpts = {}): Promise<string[]
   if (opts.colorScheme) await page.emulateMedia({ colorScheme: opts.colorScheme })
 
   const state = opts.state ?? makeState()
+  // הזריעה רצה פעם אחת בלבד — סקריפט האתחול רץ גם ברענון, ואסור לו לדרוס
+  // את מה שהאפליקציה כבר שמרה
   await page.addInitScript(
     ({ k, v, ak, av }) => {
+      if (sessionStorage.getItem('life-os-test-seeded')) return
+      sessionStorage.setItem('life-os-test-seeded', '1')
       localStorage.setItem(k, v)
       if (av) localStorage.setItem(ak, av)
       else localStorage.removeItem(ak)
@@ -241,10 +245,24 @@ export async function openSettings(page: Page) {
 }
 
 export const test = base.extend<{ errors: string[] }>({
+  // ה-Service Worker של האפליקציה עוקף את page.route (בקשות מתוך ה-SW לא
+  // מיורטות) — ואחרי רענון היה מביא את גוגל פונטס מהרשת האמיתית. חוסמים אותו
+  // בכל הבדיקות; בדיקת ה-PWA מדליקה אותו במפורש.
+  serviceWorkers: 'block',
   errors: async ({}, use) => {
     await use([])
   },
 })
+
+/**
+ * פגם אמיתי שאומת: הבדיקה מסומנת fixme (לא מכשילה את הריצה) והסיבה נכתבת
+ * גם לפלט — כדי שהדוח והריצה יספרו את אותו הסיפור. כשהפגם יתוקן, התנאי
+ * ייפול והבדיקה תחזור לרוץ ולעבור.
+ */
+export function fixme(condition: boolean, reason: string) {
+  if (condition) console.log(`FIXME: ${reason}`)
+  test.fixme(condition, reason)
+}
 
 // ---------------------------------------------------------------------------
 // מדידות בתוך הדף
@@ -404,9 +422,11 @@ export async function sheetReport(page: Page) {
 // ---------------------------------------------------------------------------
 // שטח פגיעה — נמדד ב-elementFromPoint, כך ש-::before שמרחיב את האזור נספר
 // ---------------------------------------------------------------------------
-export type Hit = { el: string; w: number; h: number; hitW: number; hitH: number; covered?: boolean; box: Box }
+export type Hit = { el: string; w: number; h: number; hitW: number; hitH: number; covered?: boolean; by?: string; box: Box }
 
 export async function touchTargets(page: Page, root = 'body', max = 400): Promise<Hit[]> {
+  // אנימציית הכניסה של גיליון (translateY) מזיזה את הכפתורים — מחכים שתיגמר
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))))
   return page.evaluate(
     ({ rootSel, max }) => {
       const rootEl = document.querySelector(rootSel) ?? document.body
@@ -442,6 +462,7 @@ export async function touchTargets(page: Page, root = 'body', max = 400): Promis
         const W = window.innerWidth
         if (cx < 0 || cy < 0 || cx >= W || cy >= H) continue
         const covered = !hit(el, cx, cy)
+        const by = covered ? desc(document.elementFromPoint(cx, cy) ?? document.body) : undefined
         let l = cx
         let rr = cx
         let t = cy
@@ -459,6 +480,7 @@ export async function touchTargets(page: Page, root = 'body', max = 400): Promis
           hitW: covered ? 0 : rr - l + 1,
           hitH: covered ? 0 : b - t + 1,
           covered,
+          by,
           box: { x: Math.round(r.left), y: Math.round(r.top + window.scrollY), w: Math.round(r.width), h: Math.round(r.height) },
         })
       }
@@ -485,6 +507,9 @@ export type ContrastRow = {
 }
 
 export async function contrastReport(page: Page, selector: string, root = 'body'): Promise<ContrastRow[]> {
+  // מעברי צבע (.btn, הניווט) נמשכים ~150 מ״ש — לא דוגמים באמצע מעבר
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))))
+  await page.waitForTimeout(250)
   return page.evaluate(
     ({ selector, rootSel }) => {
       const rootEl = document.querySelector(rootSel) ?? document.body
@@ -550,6 +575,8 @@ export async function contrastReport(page: Page, selector: string, root = 'body'
       for (const el of Array.from(rootEl.querySelectorAll<HTMLElement>(selector))) {
         const cs = getComputedStyle(el)
         if (cs.display === 'none' || cs.visibility === 'hidden') continue
+        // פקד לא פעיל פטור מדרישת הניגודיות (WCAG 1.4.3)
+        if ((el as HTMLButtonElement).disabled || el.closest('button:disabled')) continue
         const r = el.getBoundingClientRect()
         if (r.width === 0 || r.height === 0) continue
         if (!Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent || '').trim())) continue
@@ -562,7 +589,7 @@ export async function contrastReport(page: Page, selector: string, root = 'body'
         const large = size >= 24 || (size >= 18.66 && weight >= 700)
         const need = large || weight >= 700 ? 3 : 4.5
         const ratio = contrast(fg, bg)
-        rows.push({ el: desc(el), fg: hex(fg), bg: hex(bg), ratio: Math.round(ratio * 100) / 100, size, weight, need, ok: ratio >= need, strictOk: ratio >= (large ? 3 : 4.5) })
+        rows.push({ el: desc(el) + (op < 1 ? ` (opacity ${Math.round(op * 100) / 100})` : ''), fg: hex(fg), bg: hex(bg), ratio: Math.round(ratio * 100) / 100, size, weight, need, ok: ratio >= need, strictOk: ratio >= (large ? 3 : 4.5) })
       }
       return rows.sort((a, b) => a.ratio - b.ratio)
     },

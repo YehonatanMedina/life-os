@@ -100,7 +100,7 @@ test.describe('הוספה ועריכה', () => {
     const kc2 = app.locator('.kcard', { hasText: 'לפתור תרגיל 2' })
     await expect(kc2.locator('.chip', { hasText: '2 אסימונים' })).toBeVisible()
     await expect(kc2.locator('.chip', { hasText: 'קריטי' })).toBeVisible()
-    await expect(kc2.locator('.chip', { hasText: '☑ 1/2' })).toBeVisible()
+    await expect(kc2.locator('.chip', { hasText: /1\/2/ })).toBeVisible()
     await expect(app.locator('.card', { hasText: 'כל המסלולים' })).toContainText('2 אסימונים פתוחים')
     await expect(app.locator('.card', { hasText: 'כל המסלולים' })).toContainText('2 משימות בלי הערכת אסימונים')
 

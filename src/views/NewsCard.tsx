@@ -133,7 +133,7 @@ export default function NewsCard() {
 
   return (
     <div className="card">
-      <div className="spread" style={{ padding: '12px 13px 6px' }}>
+      <div className="card-h">
         <div className="grow" style={{ minWidth: 0 }}>
           <b>{ed.title || 'חדשות הבוקר'}</b>
           <div className="tiny faint">
@@ -170,7 +170,7 @@ export default function NewsCard() {
           />
         ) : (
           <button className="btn sm" onClick={speak}>
-            {speaking ? '⏸ עצור קריינות' : '▶ השמע'}
+            {speaking ? 'עצור קריינות' : 'השמע'}
           </button>
         )}
       </div>
@@ -242,7 +242,7 @@ export default function NewsCard() {
           {open ? 'צמצם' : 'פתח את כל הכתבות'}
         </button>
         <button className="btn sm ghost" onClick={() => setNoteOpen((v) => !v)}>
-          {noteOpen ? 'סגור' : '✍️ הערה למהדורה'}
+          {noteOpen ? 'סגור' : 'הערה למהדורה'}
         </button>
         {voteCount > 0 && (
           <span className="tiny faint">

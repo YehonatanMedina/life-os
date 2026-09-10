@@ -76,6 +76,8 @@ export const test = base.extend<Fixtures & Options>({
       if (m.type() !== 'error') return
       // משאב חיצוני שחסמנו בכוונה, או ה-WebSocket של Vite כששרת הפיתוח המשותף מופעל מחדש — לא באגים של האפליקציה
       if (/net::ERR_FAILED|net::ERR_ABORTED|WebSocket connection to 'ws:\/\/localhost:5173/.test(m.text())) return
+      // תשובות 4xx/5xx מ-GitHub המדומה (page.route) — הדפדפן מדווח עליהן כשגיאת משאב, האפליקציה מטפלת בהן
+      if (/Failed to load resource/.test(m.text()) && /api\.github\.com/.test(m.location()?.url ?? '')) return
       consoleErrors.push(m.text())
     })
     page.on('pageerror', (e) => consoleErrors.push('pageerror: ' + e.message))

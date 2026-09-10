@@ -624,7 +624,7 @@ function DayList({
 
   return (
     <div className="card">
-      <div className="spread" style={{ padding: '12px 13px 6px' }}>
+      <div className="card-h">
         <b>{niceDate(date)}</b>
         <div className="row" style={{ gap: 6 }}>
           <button className="btn sm ghost" onClick={() => setBulk(true)}>
@@ -644,7 +644,7 @@ function DayList({
             <button className="item tappable" key={e.id} onClick={() => onOpen(e)} style={{ textAlign: 'start' }}>
               <span className="dot" style={{ background: col }} />
               <div className="txt">
-                <div className="ttl truncate">{e.title}</div>
+                <div className="ttl clamp2">{e.title}</div>
                 <div className="sub2">
                   {e.allDay ? 'כל היום' : <span className="ltr">{e.start}–{e.end}</span>} · {KIND_LABEL[e.kind]}
                 </div>
@@ -664,7 +664,7 @@ function DayList({
               }}
             />
             <div className="txt">
-              <div className="ttl truncate">{t.title}</div>
+              <div className="ttl clamp2">{t.title}</div>
               <div className="sub2">משימה · {trackById(s, t.trackId)?.name ?? 'ללא מסלול'}</div>
             </div>
           </div>

@@ -4,7 +4,7 @@
 // - החלקה שמתחילה ב-26px מקצה המסך היא מחוות "חזור" של המערכת — לא נוגעים
 // - גרירה אנכית על אירוע ברשת השבוע לא שוברת את הגלילה; לחיצה ארוכה פותחת גרירה
 // ---------------------------------------------------------------------------
-import { TODAY, cdpSwipe, expect, nav, openApp, readState, richState, test } from './helpers'
+import { TODAY, cdpSwipe, expect, nav, openApp, readState, richState, test, fixme } from './helpers'
 
 const LABEL_TODAY = 'יום רביעי, 9 בספטמבר'
 const LABEL_NEXT = 'יום חמישי, 10 בספטמבר'
@@ -65,7 +65,7 @@ test.describe('מחוות', () => {
     await expect(label).toHaveText('ספטמבר 2026')
 
     // מעבר חודש מעגן את ה-1 בחודש; "היום" מחזיר לתאריך הנוכחי
-    await page.getByRole('button', { name: 'היום', exact: true }).click()
+    await page.locator('.main').getByRole('button', { name: 'היום', exact: true }).click()
     await page.getByRole('button', { name: 'שבוע', exact: true }).click()
     await expect(label).toHaveText('6.9 – 12.9')
     const head = await page.locator('.wk-head').boundingBox()
@@ -89,24 +89,40 @@ test.describe('מחוות', () => {
 
     const top0 = await body.evaluate((el) => el.scrollTop)
     let box = await ev.boundingBox()
-    // תנועה מהירה (פחות מ-350 מ״ש של לחיצה ארוכה) 160px למטה
-    await cdpSwipe(page, { x: box!.x + box!.width / 2, y: box!.y + 20 }, { x: box!.x + box!.width / 2, y: box!.y + 180 }, { steps: 6, stepMs: 10 })
+    // תנועה מהירה (פחות מ-350 מ״ש של לחיצה ארוכה) 160px למעלה — גלילה קדימה
+    await cdpSwipe(page, { x: box!.x + box!.width / 2, y: box!.y + 180 }, { x: box!.x + box!.width / 2, y: box!.y + 20 }, { steps: 6, stepMs: 10 })
     await page.waitForTimeout(400)
     const top1 = await body.evaluate((el) => el.scrollTop)
     await expect(ev.locator('.time'), 'quick vertical drag must not move the event').toHaveText('08:30–12:30')
     expect((await readState(page)).events.find((e) => e.id === evId)).toBeUndefined()
-    expect(top1, `vertical scroll should still work over an event (scrollTop ${top0} → ${top1})`).not.toBe(top0)
+    expect(top1, `vertical scroll should still work over an event (scrollTop ${top0} → ${top1})`).toBeGreaterThan(top0)
     expect(errors).toEqual([])
 
-    // לחיצה ארוכה (>350 מ״ש) ואז תזוזה של שעתיים (2×52px) — גרירה
+    // לחיצה ארוכה (>350 מ״ש) ואז תזוזה של שעתיים (2×52px) — גרירה.
+    // מתעדים את אירועי המצביע כדי לדעת *למה* הגרירה נכשלה אם היא נכשלת.
+    await page.evaluate(() => {
+      const log: string[] = []
+      ;(window as any).__ptr = log
+      for (const t of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchcancel', 'contextmenu']) {
+        window.addEventListener(t, (e: any) => log.push(`${t}:${e.pointerType ?? 'touch'}`), { capture: true })
+      }
+    })
     box = await ev.boundingBox()
+    const top2 = await body.evaluate((el) => el.scrollTop)
     await cdpSwipe(page, { x: box!.x + box!.width / 2, y: box!.y + 20 }, { x: box!.x + box!.width / 2, y: box!.y + 20 + 104 }, { holdMs: 550, steps: 8, stepMs: 30 })
     await page.waitForTimeout(400)
+    const ptr = await page.evaluate(() => (window as any).__ptr as string[])
+    const top3 = await body.evaluate((el) => el.scrollTop)
+    const timeNow = await page.locator('.ev', { hasText: 'עבודה עמוקה — בוקר' }).nth(3).locator('.time').textContent()
     const after = await readState(page)
     const moved = after.events.find((e) => e.id === evId)
+    const cancelled = ptr.some((x) => x.startsWith('pointercancel'))
     // לחיצה ארוכה פותחת גרירה בטלפון (README). אם הדפדפן מבטל אותה כשהאצבע זזה
     // (pointercancel בגלל touch-action: pan-y) — זה פגם אמיתי, ראו הדוח.
-    test.fixme(moved?.start === '08:30', 'long-press drag on the phone is cancelled by the browser scroll gesture (touch-action: pan-y) — see report')
+    fixme(
+      timeNow === '08:30–12:30',
+      `long-press drag on the phone did not move the event (still ${timeNow}); pointer events: ${ptr.join(' ')}; pointercancel=${cancelled}; body scrollTop ${top2}→${top3}`,
+    )
     expect(moved?.start).toBe('10:30')
     expect(moved?.end).toBe('14:30')
   })

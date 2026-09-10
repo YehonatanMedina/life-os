@@ -170,7 +170,7 @@ test.describe('ניווט במחשב', () => {
     // הכותרת מתעדכנת כל 30 שניות — אחרי דקה וחצי היא כבר ירדה
     await app.clock.runFor(95_000)
     await expect(app).toHaveTitle(/^(88|89) דק׳ · מערכת ההפעלה$/)
-    await expect(app.locator('.timer-time')).toHaveText(/^88:/)
+    await expect(app.locator('.timer-time')).toHaveText(/^(1:28:|88:)/)
     // ביטול — הכותרת חוזרת
     await app.getByRole('button', { name: 'ביטול בלי לשמור' }).click()
     await expect(app).toHaveTitle('מערכת ההפעלה')

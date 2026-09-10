@@ -457,7 +457,7 @@ export function DateField({
         onClick={() => setOpen(true)}
       >
         <span>{value ? niceDate(value, true) : <span className="faint">{placeholder}</span>}</span>
-        <span className="faint">📅</span>
+        <span className="faint" aria-hidden>▾</span>
       </button>
 
       <Sheet open={open} onClose={() => setOpen(false)} title="בחירת תאריך">

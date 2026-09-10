@@ -4,7 +4,7 @@
 // - מספרים ב-.ltr לא מתהפכים ("08:30–12:30", "15.9")
 // - עברית עם מספרים בסוף לא מאבדת את המספר בחיתוך (truncate)
 // ---------------------------------------------------------------------------
-import { clippedDigitsReport, expect, fmt, ltrOrderReport, nav, openApp, openSettings, richState, test } from './helpers'
+import { clippedDigitsReport, expect, fmt, ltrOrderReport, nav, openApp, openSettings, richState, test, fixme } from './helpers'
 
 test.describe('טיפוגרפיה', () => {
   test('גוגל פונטס חסום → גופן גיבוי, טקסט נראה, בלי FOIT', async ({ page, errors }) => {
@@ -33,7 +33,7 @@ test.describe('טיפוגרפיה', () => {
   test('גיליון סגנון חיצוני איטי לא אמור לחסום את הציור הראשון', async ({ page, errors }) => {
     // גוגל פונטס עונה אחרי 3 שניות. הדף אמור לצייר את המעטפת לפני כן.
     const t0 = Date.now()
-    errors.push(...(await openApp(page, { state: richState(), fontsDelayMs: 3000, goto: false })))
+    errors.push(...(await openApp(page, { state: richState(), fontsDelayMs: 3000, goto: false, now: null })))
     await page.goto('/', { waitUntil: 'commit' })
     await page.waitForTimeout(1500)
     // מה רואים אחרי שנייה וחצי? (צילום לדוח)
@@ -52,7 +52,7 @@ test.describe('טיפוגרפיה', () => {
     await expect(page.locator('.bottomnav button')).toHaveCount(5)
     expect(errors).toEqual([])
     const blocked = !at1500.painted || (paint.fcp !== null && paint.fcp >= 2500)
-    test.fixme(blocked, `render-blocking <link rel=stylesheet> to fonts.googleapis.com: nothing painted at 1500ms (React mounted: ${at1500.mounted}); FCP at ${paint.fcp}ms, CSS answered at ${paint.cssEnd}ms — see report`)
+    fixme(blocked, `render-blocking <link rel=stylesheet> to fonts.googleapis.com: nothing painted at 1500ms (React mounted: ${at1500.mounted}); FCP at ${paint.fcp}ms, CSS answered at ${paint.cssEnd}ms — see report`)
     expect(paint.fcp, fmt({ ...paint, at1500, loadMs })).toBeLessThan(2500)
   })
 
@@ -114,7 +114,7 @@ test.describe('טיפוגרפיה', () => {
     lost = lost.concat((await clippedDigitsReport(page, '.truncate')).map((x) => ({ ...x, screen: 'calendar' })))
     if (lost.length) await page.screenshot({ path: 'test-results/mobile-truncate-eats-digits.png', fullPage: true })
     expect(errors).toEqual([])
-    test.fixme(lost.length > 0, `RTL text-overflow:ellipsis clips the trailing number: ${lost.map((l) => `«${l.text.slice(-24)}» lost "${l.lostDigits}"`).join(' | ')}`)
+    fixme(lost.length > 0, `RTL text-overflow:ellipsis clips the trailing number: ${lost.map((l) => `«${l.text.slice(-24)}» lost "${l.lostDigits}"`).join(' | ')}`)
     expect(lost, fmt(lost)).toEqual([])
   })
 })

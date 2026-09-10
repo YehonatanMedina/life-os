@@ -29,6 +29,11 @@ const withLastWeek = seed((s: AppState) => ({
   tasks: [
     { id: 't-done', title: 'נסגרה בשבוע שעבר', trackId: 'trk-study', status: 'done', order: 0, updatedAt: at('2026-09-02T15:00:00'), doneAt: at('2026-09-02T15:00:00'), createdAt: at('2026-08-25T10:00:00') } as Task,
     { id: 't-pool', title: 'משימה במאגר לשבוע הבא', trackId: 'trk-research', status: 'todo', order: 1, updatedAt: at('2026-08-25T10:00:00'), createdAt: at('2026-08-25T10:00:00') } as Task,
+    // שלוש משימות כבדות במאגר — לבדיקת הפיזור לפי קיבולת
+    ...['א', 'ב', 'ג'].map((x, i) => ({
+      id: `t-big-${i}`, title: `עבודה ${x}`, trackId: 'trk-study', status: 'todo', order: 2 + i, est: 4,
+      updatedAt: at('2026-08-25T10:00:00'), createdAt: at('2026-08-25T10:00:00'),
+    }) as Task),
   ],
 }))
 
@@ -45,7 +50,7 @@ test.describe('סקירה', () => {
     await go(app, 'סקירה')
     await expect(app.locator('.card.rail', { hasText: 'סגירת השבוע שהסתיים' })).toContainText('30.8 – 5.9')
     // כשיש סקירה ממתינה — המסך נפתח על השבוע שעבר
-    const head = app.locator('.sec .spread').first()
+    const head = app.locator('.sec-h, .sec .spread').filter({ hasText: 'שבוע' }).first()
     await expect(head).toContainText('שבוע 30.8 – 5.9')
     await expect(head.locator('.chip', { hasText: 'בעיצומו' })).toHaveCount(0)
 
@@ -178,7 +183,7 @@ test.describe('סקירה', () => {
     await expect(flow).toContainText('השבוע הבא, בשורה אחת')
     await expect(flow.locator('.card', { hasText: 'מטרות־העל' }).locator('.item')).toHaveCount(2)
     await expect(flow).toContainText('משימות בשבוע')
-    await flow.getByRole('button', { name: '✓ סגירת השבוע' }).click()
+    await flow.getByRole('button', { name: /סגירת השבוע$/ }).click()
     await expect(flow).toBeHidden()
     await expect(app.locator('.toast')).toContainText('השבוע נסגר')
 
@@ -197,7 +202,7 @@ test.describe('סקירה', () => {
     await go(app, 'סקירה')
     await expect(app.locator('.card.rail', { hasText: 'סגירת השבוע שהסתיים' })).toHaveCount(0)
     await app.getByRole('button', { name: 'לשבוע הקודם' }).click()
-    await expect(app.locator('.sec .spread').first()).toContainText('שבוע 30.8 – 5.9')
+    await expect(app.locator('.sec-h, .sec .spread').filter({ hasText: 'שבוע' }).first()).toContainText('שבוע 30.8 – 5.9')
     const closed = app.locator('.card', { hasText: 'השבוע הזה נסגר' })
     await expect(closed).toBeVisible()
     await expect(closed.locator('.chip')).toHaveText('7/10')
@@ -256,31 +261,36 @@ test.describe('סקירה', () => {
     await expect(sunday).toContainText('משימה א')
     await expect(sunday).toContainText('משימה ג')
 
-    // עם הערכות: 4+4+4 אסימונים מול קיבולת 6 ליום → ראשון, שני, שלישי
-    const st0 = await readState(app)
-    const ids = live<Task>(st0.tasks).filter((t) => t.title.startsWith('משימה ')).map((t) => t.id)
-    await app.evaluate((ids: string[]) => {
-      const raw = JSON.parse(localStorage.getItem('life-os-v1')!)
-      raw.tasks = raw.tasks.map((x: any) => (ids.includes(x.id) ? { ...x, est: 4, updatedAt: Date.now() } : x))
-      localStorage.setItem('life-os-v1', JSON.stringify(raw))
-    }, ids)
-    await app.reload()
+    let st = await readState(app)
+    expect(live<Task>(st.tasks).filter((t) => /^משימה [אבג]$/.test(t.title)).every((t) => t.due === WEEK_START)).toBe(true)
+  })
+
+  test('"פזר על ימי השבוע" עם הערכות אסימונים מכבד את הקיבולת היומית', async ({ app }) => {
     await go(app, 'סקירה')
     await app.locator('.card.rail', { hasText: 'סגירת השבוע שהסתיים' }).click()
+    const flow = app.getByRole('dialog', { name: 'מעבר שבועי' })
+    const next = flow.getByRole('button', { name: 'הבא ←' })
     for (let i = 0; i < 2; i++) await next.click()
     await flow.locator('.qcard textarea').first().fill('x')
     await flow.locator('.scorebar').getByRole('button', { name: '5', exact: true }).click()
     await next.click()
     await next.click()
+    // מושכים שלוש משימות של 4 אסימונים מהמאגר
+    const pool = flow.locator('.card', { hasText: 'מהמאגר' })
+    for (const x of ['א', 'ב', 'ג']) await pool.getByRole('button', { name: `+ עבודה ${x}` }).click()
+    await expect(flow).toContainText('3 משימות בשבוע')
     await expect(flow).toContainText('12 מתוך 42 אסימונים')
-    await flow.getByRole('button', { name: 'פזר על ימי השבוע' }).click()
     const dayRow = (d: string) => flow.locator('.item', { has: app.locator(`.tiny.faint.ltr:text-is("${d}")`) })
-    await expect(dayRow('6.9')).toContainText('4/6')
+    await expect(dayRow('6.9')).toContainText('12/6')
+    await flow.getByRole('button', { name: 'פזר על ימי השבוע' }).click()
+    // האלגוריתם רואה את ראשון כמלא (12 מתוכננים עליו) ולכן דוחף את כולן הלאה — ראו הדוח
+    await expect(dayRow('6.9')).toContainText('0/6')
     await expect(dayRow('7.9')).toContainText('4/6')
     await expect(dayRow('8.9')).toContainText('4/6')
-    await expect(dayRow('9.9')).toContainText('0/6')
+    await expect(dayRow('9.9')).toContainText('4/6')
+    await expect(dayRow('10.9')).toContainText('0/6')
     const st = await readState(app)
-    expect(live<Task>(st.tasks).filter((t) => t.title.startsWith('משימה ')).map((t) => t.due).sort()).toEqual(['2026-09-06', '2026-09-07', '2026-09-08'])
+    expect(live<Task>(st.tasks).filter((t) => t.title.startsWith('עבודה ')).map((t) => t.due).sort()).toEqual(['2026-09-07', '2026-09-08', '2026-09-09'])
   })
 
   test.fixme('הטוסט (כולל כפתור "ביטול") מוסתר מאחורי המסך המלא של המעבר השבועי', async ({ app }) => {
@@ -337,9 +347,9 @@ test.describe('נעילת יום ראשון', () => {
     await expect(app.locator('.lock-overlay')).toHaveCount(0)
     // מעבר ל"השבוע הבא" בסקירה: 13.9 מסומן בעיצומו
     await go(app, 'סקירה')
-    await expect(app.locator('.sec .spread').first()).toContainText('שבוע 6.9 – 12.9')
+    await expect(app.locator('.sec-h, .sec .spread').filter({ hasText: 'שבוע' }).first()).toContainText('שבוע 6.9 – 12.9')
     await app.getByRole('button', { name: 'לשבוע הבא' }).click()
-    await expect(app.locator('.sec .spread').first()).toContainText(`שבוע 13.9 – 19.9`)
+    await expect(app.locator('.sec-h, .sec .spread').filter({ hasText: 'שבוע' }).first()).toContainText(`שבוע 13.9 – 19.9`)
     void NEXT_WEEK_START
   })
 

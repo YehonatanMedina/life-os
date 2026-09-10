@@ -17,7 +17,7 @@ test.describe('טיימר', () => {
     await card.getByRole('button', { name: /לימודים/ }).click()
     await expect(card).toHaveClass(/live/)
     await expect(card.locator('.chip.tinted')).toContainText('לימודים')
-    await expect(card.locator('.timer-time')).toHaveText(/^(89:5\d|90:00)$/)
+    await expect(card.locator('.timer-time')).toHaveText(/^(1:29:5\d|1:30:00|89:5\d|90:00)$/)
     await expect(card).toContainText('0 מתוך 90 דק׳')
     // התגית בסרגל הצד
     await expect(app.locator('nav.sidebar .foot .chip')).toBeVisible()
@@ -29,26 +29,26 @@ test.describe('טיימר', () => {
     await expect(focus.locator('.focus-track')).toContainText('לימודים')
     await expect(focus.locator('.focus-time')).toHaveText(/^1:29:/)
     // השהיה בתוך מצב מיקוד — השעון עומד
-    await focus.getByRole('button', { name: '⏸ השהיה' }).click()
+    await focus.getByRole('button', { name: /השהיה/ }).click()
     await expect(focus.locator('.focus-paused')).toHaveText('מושהה')
     const frozen = await focus.locator('.focus-time').textContent()
     await app.clock.runFor(20_000)
     await expect(focus.locator('.focus-time')).toHaveText(frozen!)
-    await focus.getByRole('button', { name: '▶ המשך' }).click()
+    await focus.getByRole('button', { name: /המשך/ }).click()
     await expect(focus.locator('.focus-paused')).toHaveCount(0)
     await app.keyboard.press('Escape')
     await expect(focus).toBeHidden()
     // ובכרטיס: אפשר להשהות משם
-    await expect(card.getByRole('button', { name: '⏸ השהיה' })).toBeVisible()
+    await expect(card.getByRole('button', { name: /השהיה/ })).toBeVisible()
 
     // חמש דקות של עבודה (הדופק רץ כל 20 שנ׳ — לכן runFor ולא קפיצה)
     await app.clock.runFor(5 * 60_000)
     await expect(card).toContainText('5 מתוך 90 דק׳')
-    await expect(card.locator('.timer-time')).toHaveText(/^84:/)
+    await expect(card.locator('.timer-time')).toHaveText(/^(1:24:|84:)/)
     await expect(app).toHaveTitle(/^8[4-6] דק׳/) // הכותרת מתעדכנת כל 30 שנ׳
 
     // סיום ושמירה
-    await card.getByRole('button', { name: '✓ סיים ושמור' }).click()
+    await card.getByRole('button', { name: /סיים ושמור/ }).click()
     await expect(app.locator('.toast')).toContainText('5 דקות נשמרו · 0.06 אסימונים')
     await expect(card).not.toHaveClass(/live/)
     await expect(card.locator('.ring-wrap .n')).toHaveText('0.1')
@@ -78,7 +78,7 @@ test.describe('טיימר', () => {
     await go(app, 'פרויקטים')
     await app.locator('.tag-scroll').first().getByRole('button', { name: /לימודים/ }).click()
     const head = app.locator('.card.rail', { hasText: 'לימודים' }).first()
-    await expect(head.locator('div', { hasText: /^זמן שהושקע/ }).locator('b')).toHaveText('5 דק׳')
+    await expect(head.locator('.grid3 > div', { hasText: 'זמן שהושקע' }).locator('b')).toHaveText('5 דק׳')
 
     // בסקירה: השבוע הנוכחי
     await go(app, 'סקירה')
@@ -106,7 +106,7 @@ test.describe('טיימר', () => {
     await expect(c2).toHaveClass(/live/)
     await expect(c2.locator('.chip.tinted')).toContainText('מחקר')
     await expect(c2).toContainText('2 מתוך 90 דק׳')
-    await expect(c2.getByRole('button', { name: '⏸ השהיה' })).toBeVisible()
+    await expect(c2.getByRole('button', { name: /השהיה/ })).toBeVisible()
     await expect(app).toHaveTitle(/^8[78] דק׳/)
 
     // ביטול בלי לשמור
@@ -116,7 +116,7 @@ test.describe('טיימר', () => {
 
     // התחלה וסיום מיד — פחות מדקה
     await c2.getByRole('button', { name: /פרויקט/ }).click()
-    await c2.getByRole('button', { name: '✓ סיים ושמור' }).click()
+    await c2.getByRole('button', { name: /סיים ושמור/ }).click()
     await expect(app.locator('.toast')).toContainText('פחות מדקה — לא נשמר')
     const st = await readState(app)
     expect(st.timer).toBeNull()
@@ -210,7 +210,7 @@ test.describe('טיימר שהגיע ליעד', () => {
     await expect(card).toContainText('89 מתוך 90 דק׳')
     // בשני צעדים — הטוסט חי 2.6 שניות, וריצה ארוכה של השעון הייתה מוחקת אותו
     await app.clock.runFor(28_000)
-    await expect(card.locator('.timer-time')).toHaveText(/^00:/)
+    await expect(card.locator('.timer-time')).toHaveText(/^(00:|0:00:)/)
     await app.clock.runFor(3_000)
     await expect(app.locator('.toast')).toContainText('אסימון הושלם · 90 דקות ריכוז נטו')
     await expect(card.locator('.timer-time')).toHaveText(/^\+00:/)
@@ -220,7 +220,7 @@ test.describe('טיימר שהגיע ליעד', () => {
     const focus = app.getByRole('dialog', { name: 'מצב מיקוד' })
     await expect(focus.locator('.focus-track')).toHaveText('🚀 פרויקט · בלוק בוקר')
     await expect(focus.locator('.focus-time')).toHaveText(/^\+00:/)
-    await focus.getByRole('button', { name: '✓ סיים ושמור' }).click()
+    await focus.getByRole('button', { name: /סיים ושמור/ }).click()
     await expect(focus).toBeHidden()
     await expect(app.locator('.toast')).toContainText('90 דקות נשמרו · 1.00 אסימונים')
     await expect(card.locator('.ring-wrap .n')).toHaveText('1.0')
@@ -252,16 +252,16 @@ test.describe('טיימר שנשכח פתוח', () => {
   test('נעצר בנקודת הדופק האחרונה ולא צובר זמן דמיוני', async ({ app }) => {
     const card = timerCard(app)
     await expect(card).toHaveClass(/live/)
-    await expect(card.getByRole('button', { name: '▶ המשך' })).toBeVisible()
+    await expect(card.getByRole('button', { name: /המשך/ })).toBeVisible()
     await expect(card).toContainText('20 מתוך 90 דק׳')
     await app.clock.runFor(60_000)
     await expect(card).toContainText('20 מתוך 90 דק׳')
     // גם אחרי רענון נוסף — אותן 20 דקות, לא יותר
     await reload(app)
     await expect(timerCard(app)).toContainText('20 מתוך 90 דק׳')
-    await expect(timerCard(app).getByRole('button', { name: '▶ המשך' })).toBeVisible()
+    await expect(timerCard(app).getByRole('button', { name: /המשך/ })).toBeVisible()
     // המשך → הזמן ממשיך מ־20
-    await timerCard(app).getByRole('button', { name: '▶ המשך' }).click()
+    await timerCard(app).getByRole('button', { name: /המשך/ }).click()
     await app.clock.runFor(60_000)
     await expect(timerCard(app)).toContainText('21 מתוך 90 דק׳')
     const st = await readState(app)

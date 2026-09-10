@@ -6,7 +6,7 @@ import {
 } from '../store'
 import {
   HE_DAYS_SHORT, addDays, countdownText, diffDays, dow, hhmm, isAfterMidnight, logicalDate,
-  minutesToHM, niceDate, plural, shortDate, timeToMinutes, today as todayISO, weekStart,
+  minutesToHM, niceDate, plural, shortDate, timeToMinutes, today as todayISO, weekStart, clock,
 } from '../dates'
 import {
   Bar, Check, DateField, NumField, onColor, Ring, Sheet, ding, setFocusMode, useTick, useToast,
@@ -17,6 +17,7 @@ import { TaskSheet } from './Projects'
 import NewsCard from './NewsCard'
 import { GoalsCard, WeeklyFlow, reviewPending } from './Review'
 import { WorkoutCard } from './Workout'
+import { Icon } from '../icons'
 import { awaitingReply, todayNote, useAtlas } from '../atlas'
 
 export default function Today({ goto }: { goto: (v: string, arg?: any) => void }) {
@@ -85,8 +86,8 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
           </div>
         )}
         <Reminders date={date} />
-        <PhaseStrip />
       </div>
+      <PhaseStrip />
 
       <div className="grid2">
         <div className="page">
@@ -126,11 +127,7 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
             <WeeklyTokens ws={ws} />
           </section>
 
-          <section className="sec">
-            <div className="sec-h"><h2>קדימה</h2></div>
-            <Countdowns date={date} />
-            <FocusCard />
-          </section>
+          <AheadSection date={date} />
         </div>
       </div>
     </div>
@@ -385,11 +382,7 @@ function DeepWork({ date, ws }: { date: string; ws: string }) {
     }
   }, [reached, t, s.settings.sound, s.settings.notifications, target, toast])
 
-  const mmss = (secs: number) => {
-    const m = Math.floor(Math.max(0, secs) / 60)
-    const ss = Math.floor(Math.max(0, secs) % 60)
-    return `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
-  }
+  const mmss = clock
 
   return (
     <>
@@ -488,11 +481,11 @@ function DeepWork({ date, ws }: { date: string; ws: string }) {
               </button>
               {t.running ? (
                 <button className="btn grow" onClick={() => actions.pauseTimer()}>
-                  ⏸ השהיה
+                  <Icon name="pause" /> השהיה
                 </button>
               ) : (
                 <button className="btn grow" onClick={() => actions.resumeTimer()}>
-                  ▶ המשך
+                  <Icon name="play" /> המשך
                 </button>
               )}
             </div>
@@ -553,7 +546,7 @@ function ManualSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
             className={`tag${trackId === tr.id ? ' on' : ''}`}
             style={
               trackId === tr.id
-                ? { background: tr.color, color: onColor(tr.color), borderColor: 'transparent' }
+                ? { ['--tc' as any]: tr.color }
                 : { ['--tc' as any]: tr.color }
             }
             onClick={() => setTrackId(tr.id)}
@@ -676,7 +669,7 @@ function WhatNow({ date, goto }: { date: string; goto: (v: string, arg?: any) =>
           onClick={() => goto('calendar', date)}
         >
           <div className="tiny faint">{live ? 'עכשיו' : 'הבא בתור'}</div>
-          <div className="truncate" style={{ fontWeight: 700 }}>
+          <div className="ttl clamp2" style={{ fontWeight: 600 }}>
             {e.title}
           </div>
           <div className="tiny faint ltr">
@@ -855,7 +848,7 @@ function DaySchedule({ date, goto }: { date: string; goto: (v: string, arg?: any
 
   return (
     <div className="card">
-      <div className="spread" style={{ padding: '12px 13px 6px' }}>
+      <div className="card-h">
         <b>הלו״ז של היום</b>
         <button className="btn ghost sm" onClick={() => goto('calendar', date)}>
           ליומן ←
@@ -878,7 +871,7 @@ function DaySchedule({ date, goto }: { date: string; goto: (v: string, arg?: any
           const live = nowMin >= st && nowMin < en
           const past = nowMin >= en
           return (
-            <div className="item" key={e.id} style={{ opacity: past ? 0.72 : 1 }}>
+            <div className={`item${past ? ' past' : ''}`} key={e.id}>
               <div style={{ width: 44, flex: '0 0 44px' }} className="tiny muted ltr">
                 {e.start}
               </div>
@@ -887,9 +880,9 @@ function DaySchedule({ date, goto }: { date: string; goto: (v: string, arg?: any
                 style={{ background: e.trackId ? trackById(s, e.trackId)?.color : kindColor(e.kind) }}
               />
               <div className="txt">
-                <div className="ttl truncate" style={{ fontWeight: live ? 800 : 600 }}>
-                  {e.title}
-                  {live && <span className="chip on" style={{ marginInlineStart: 6 }}>עכשיו</span>}
+                <div className="row" style={{ gap: 6, alignItems: 'flex-start' }}>
+                  <div className="ttl clamp2 grow" style={{ fontWeight: live ? 700 : 600 }}>{e.title}</div>
+                  {live && <span className="chip on">עכשיו</span>}
                 </div>
                 <div className="sub2 muted ltr">
                   {e.start}–{e.end}
@@ -994,7 +987,7 @@ function TasksToday({
             {t.est ? ` · ${plural(t.est, 'אסימון אחד', 'אסימונים')}` : ''}
           </div>
         </button>
-        {t.critical && <span className="chip" style={{ background: 'var(--bad-soft)', color: 'var(--bad)' }}>קריטי</span>}
+        {t.critical && <span className="chip" style={{ background: 'var(--bad-soft)', color: 'var(--bad-text)' }}>קריטי</span>}
         <button
           className="btn xs ghost"
           title="דחה למחר"
@@ -1013,12 +1006,12 @@ function TasksToday({
 
   return (
     <div className="card">
-      <div className="spread" style={{ padding: '12px 13px 6px' }}>
+      <div className="card-h">
         <div className="row" style={{ gap: 8 }}>
           <b>המשימות של היום</b>
           {hourNow >= 17 && (
             <button className="btn xs" onClick={() => setPlan(addDays(date, 1))}>
-              🌙 תכנון מחר
+              <Icon name="moon" sm /> תכנון מחר
             </button>
           )}
         </div>
@@ -1091,7 +1084,7 @@ function TasksToday({
             <div className="empty" style={{ padding: '18px 13px' }}>
               <div style={{ marginBottom: 10 }}>עוד לא נכתבו מטרות להיום.</div>
               <button className="btn primary sm" onClick={() => setPlan(date)}>
-                ✍️ כתוב את המטרות של היום
+                כתוב את המטרות של היום
               </button>
             </div>
           ) : (
@@ -1129,7 +1122,7 @@ function TasksToday({
                   className={`tag${(quickTrack ?? defaultTrack) === x.id ? ' on' : ''}`}
                   style={
                     (quickTrack ?? defaultTrack) === x.id
-                      ? { background: x.color, color: onColor(x.color), borderColor: 'transparent' }
+                      ? { ['--tc' as any]: x.color }
                       : { ['--tc' as any]: x.color }
                   }
                   onClick={() => setQuickTrack(x.id)}
@@ -1154,13 +1147,14 @@ function DailyHabits({ date }: { date: string }) {
 
   return (
     <div className="card">
-      <div className="spread" style={{ padding: '12px 13px 6px' }}>
+      <div className="card-h">
         <b>הרגלי היום</b>
         <span className="tiny faint ltr">
           {habits.filter((h) => log.habits[h.id]).length}/{habits.length}
         </span>
       </div>
       <div className="list">
+        {habits.length === 0 && <div className="empty">אין הרגלים עדיין. מוסיפים בהגדרות ← הרגלים יומיים.</div>}
         {habits.map((h) => {
           const on = !!log.habits[h.id]
           const steps = h.steps ?? []
@@ -1241,7 +1235,7 @@ function DailyHabits({ date }: { date: string }) {
                     {/* השלב "לארגן את מחר" — קיצור ישיר לכתיבת המשימות של מחר */}
                     {st.text.includes('מחר') && (
                       <button className="btn xs" onClick={() => setPlan(addDays(date, 1))}>
-                        🌙 פתח
+                        <Icon name="moon" sm /> פתח
                       </button>
                     )}
                   </div>
@@ -1333,7 +1327,7 @@ function PlanSheet({ date, onClose }: { date: string | null; onClose: () => void
           <button
             key={x.id}
             className={`tag${trk === x.id ? ' on' : ''}`}
-            style={trk === x.id ? { background: x.color, color: onColor(x.color), borderColor: 'transparent' } : { ['--tc' as any]: x.color }}
+            style={trk === x.id ? { ['--tc' as any]: x.color } : { ['--tc' as any]: x.color }}
             onClick={() => setTrk(trk === x.id ? undefined : x.id)}
           >
             {x.emoji} {x.name}
@@ -1378,7 +1372,7 @@ function PlanSheet({ date, onClose }: { date: string | null; onClose: () => void
                         className={`tag${picked ? ' on' : ''}`}
                         style={
                           picked
-                            ? { background: tr?.color ?? 'var(--accent)', color: onColor(tr?.color ?? '#6b5cff'), borderColor: 'transparent' }
+                            ? { ['--tc' as any]: tr?.color ?? 'var(--accent)' }
                             : { ['--tc' as any]: tr?.color ?? 'var(--accent)' }
                         }
                         onClick={() => {
@@ -1462,7 +1456,7 @@ function WeeklyTokens({ ws }: { ws: string }) {
 
   return (
     <div className="card">
-      <div className="spread" style={{ padding: '12px 13px 6px' }}>
+      <div className="card-h">
         <div>
           <b>השבוע — אסימונים צפים</b>
           <div className="tiny faint">מתאפס בכל יום ראשון. אין להם שעה — רק צריך שיקרו.</div>
@@ -1472,6 +1466,7 @@ function WeeklyTokens({ ws }: { ws: string }) {
         </span>
       </div>
       <div className="list">
+        {visible.length === 0 && <div className="empty">אין אסימונים צפים השבוע. מגדירים אותם בהגדרות.</div>}
         {(() => {
           // פריטים עם group מוצגים יחד בשורה אחת — שלושת הבלוקים של החברה
           const out: React.ReactNode[] = []
@@ -1585,7 +1580,7 @@ function WeeklyTokens({ ws }: { ws: string }) {
                 </div>
                 {w.hint && <div className="sub2">{w.hint}</div>}
               </div>
-              {alert && <span className="chip" style={{ background: 'var(--warn-soft)', color: 'var(--warn)' }}>היום</span>}
+              {alert && <span className="chip" style={{ background: 'var(--warn-soft)', color: 'var(--warn-text)' }}>היום</span>}
             </div>
           )
     }
@@ -1697,5 +1692,27 @@ function AtlasCard({ goto }: { goto: (v: string) => void }) {
         ) : null}
       </div>
     </button>
+  )
+}
+
+/** "קדימה": ספירות לאחור והנתיב הקריטי. כשאין כלום — אומרים את זה, לא משאירים כותרת יתומה. */
+function AheadSection({ date }: { date: string }) {
+  const s = useApp()
+  const horizon = addDays(date, 30)
+  const hasCountdown = alive(s.events).some((e) => (e.kind === 'exam' || e.kind === 'deadline') && e.date >= date)
+  const hasFocus =
+    alive(s.events).some((e) => (e.kind === 'milestone' || e.kind === 'deadline') && e.date >= date && e.date <= horizon) ||
+    alive(s.tasks).some((t) => t.critical && t.status !== 'done')
+  return (
+    <section className="sec">
+      <div className="sec-h"><h2>קדימה</h2></div>
+      {hasCountdown && <Countdowns date={date} />}
+      {hasFocus && <FocusCard />}
+      {!hasCountdown && !hasFocus && (
+        <div className="card">
+          <div className="empty">אין יעד קרוב ואין נתיב קריטי. מבחן או דדליין ביומן יופיעו כאן כספירה לאחור.</div>
+        </div>
+      )}
+    </section>
   )
 }

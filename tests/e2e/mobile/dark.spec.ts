@@ -4,7 +4,7 @@
 // 4.5 לטקסט רגיל, 3 לטקסט גדול או מודגש.
 // ---------------------------------------------------------------------------
 import fs from 'node:fs'
-import { atlasCache, contrastReport, edition, expect, fmt, nav, openApp, openSettings, richState, test, type ContrastRow } from './helpers'
+import { atlasCache, contrastReport, edition, expect, fmt, nav, openApp, openSettings, richState, test, type ContrastRow, fixme } from './helpers'
 import type { Page } from '@playwright/test'
 
 const SEL = [
@@ -74,7 +74,9 @@ async function runContrast(page: Page, tag: string, screens: Screen[], testInfo:
     await nav(page, 'היום')
   }
   fs.mkdirSync('test-results', { recursive: true })
+  fs.mkdirSync('tests/reports/mobile-data', { recursive: true })
   fs.writeFileSync(`test-results/mobile-${tag}.json`, JSON.stringify({ fails, warns }, null, 1))
+  fs.writeFileSync(`tests/reports/mobile-data/contrast-${tag}.json`, JSON.stringify({ fails, warns }, null, 1))
   await testInfo.attach(`contrast-${tag}`, { body: JSON.stringify({ fails, warns }, null, 1), contentType: 'application/json' })
   return { fails, warns }
 }
@@ -85,7 +87,7 @@ test.describe('ניגודיות', () => {
     expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(14, 16, 19)')
     const { fails } = await runContrast(page, 'dark-system', SCREENS, testInfo)
     expect(errors).toEqual([])
-    test.fixme(fails.length > 0, `${fails.length} low-contrast text styles in dark mode: ${fails.slice(0, 8).map((f) => `${f.screen} ${f.el} ${f.fg}/${f.bg}=${f.ratio}`).join(' | ')}`)
+    fixme(fails.length > 0, `${fails.length} low-contrast text styles in dark mode: ${fails.slice(0, 8).map((f) => `${f.screen} ${f.el} ${f.fg}/${f.bg}=${f.ratio}`).join(' | ')}`)
     expect(fails, fmt(fails)).toEqual([])
   })
 
@@ -97,15 +99,47 @@ test.describe('ניגודיות', () => {
     expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(14, 16, 19)')
     const { fails } = await runContrast(page, 'dark-explicit', SCREENS.slice(0, 3), testInfo)
     expect(errors).toEqual([])
-    test.fixme(fails.length > 0, `${fails.length} low-contrast text styles with explicit dark theme`)
+    fixme(fails.length > 0, `${fails.length} low-contrast text styles with explicit dark theme`)
     expect(fails, fmt(fails)).toEqual([])
+  })
+
+  test('ערכה כהה מפורשת לא מהבהבת בהיר בטעינה', async ({ page, errors }) => {
+    // כל פריים מהראשון: מה צבע הרקע ומה ערכת הנושא על <html>
+    await page.addInitScript(() => {
+      const frames: Array<{ t: number; app: boolean; theme: string; bg: string }> = []
+      ;(window as any).__frames = frames
+      const tick = () => {
+        frames.push({
+          t: Math.round(performance.now()),
+          app: !!document.querySelector('#root .app'),
+          theme: document.documentElement.dataset.theme ?? '',
+          bg: getComputedStyle(document.body).backgroundColor,
+        })
+        if (frames.length < 60) requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    })
+    const s = richState()
+    s.settings.theme = 'dark'
+    errors.push(...(await openApp(page, { state: s, colorScheme: 'light' })))
+    await page.waitForTimeout(800)
+    const frames = await page.evaluate(() => (window as any).__frames as Array<{ t: number; app: boolean; theme: string; bg: string }>)
+    const painted = frames.filter((f) => f.app)
+    expect(painted.length).toBeGreaterThan(0)
+    const lightFrames = painted.filter((f) => f.bg !== 'rgb(14, 16, 19)')
+    expect(errors).toEqual([])
+    fixme(
+      lightFrames.length > 0,
+      `explicit dark theme flashes light on startup: first ${lightFrames.length} painted frame(s) had bg ${lightFrames[0]?.bg} / data-theme="${lightFrames[0]?.theme}" (t=${lightFrames[0]?.t}ms) before turning dark at t=${painted.find((f) => f.bg === 'rgb(14, 16, 19)')?.t}ms — data-theme is applied in a React effect, after first paint`,
+    )
+    expect(lightFrames).toEqual([])
   })
 
   test('בהיר — צ׳יפים צבעוניים, אירועים ותגיות', async ({ page, errors }, testInfo) => {
     errors.push(...(await openApp(page, { state: richState(), news: edition(), atlas: atlasCache(4), colorScheme: 'light' })))
     const { fails } = await runContrast(page, 'light', SCREENS, testInfo)
     expect(errors).toEqual([])
-    test.fixme(fails.length > 0, `${fails.length} low-contrast text styles in light mode: ${fails.slice(0, 8).map((f) => `${f.screen} ${f.el} ${f.fg}/${f.bg}=${f.ratio}`).join(' | ')}`)
+    fixme(fails.length > 0, `${fails.length} low-contrast text styles in light mode: ${fails.slice(0, 8).map((f) => `${f.screen} ${f.el} ${f.fg}/${f.bg}=${f.ratio}`).join(' | ')}`)
     expect(fails, fmt(fails)).toEqual([])
   })
 })

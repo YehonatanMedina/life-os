@@ -143,7 +143,7 @@ export default function SettingsView() {
 
       {/* ------------------------------------------------ בלוקים קבועים */}
       <div className="card">
-        <div className="spread" style={{ padding: '12px 13px 6px' }}>
+        <div className="card-h">
           <div>
             <b>מבנה השבוע הקבוע</b>
             <div className="tiny faint">הבלוקים האלה נכנסים ליומן אוטומטית. כל מופע ניתן להזזה בנפרד.</div>
@@ -190,7 +190,7 @@ export default function SettingsView() {
 
       {/* ------------------------------------------------ הרגלים */}
       <div className="card">
-        <div className="spread" style={{ padding: '12px 13px 6px' }}>
+        <div className="card-h">
           <b>הרגלים יומיים</b>
           <button
             className="btn sm"
@@ -200,6 +200,7 @@ export default function SettingsView() {
           </button>
         </div>
         <div className="list">
+          {alive(s.habits).length === 0 && <div className="empty">אין הרגלים. "+ חדש" למעלה.</div>}
           {alive(s.habits)
             .sort((a, b) => a.order - b.order)
             .map((h) => (
@@ -221,7 +222,7 @@ export default function SettingsView() {
 
       {/* ------------------------------------------------ שבועיים */}
       <div className="card">
-        <div className="spread" style={{ padding: '12px 13px 6px' }}>
+        <div className="card-h">
           <b>אסימונים שבועיים</b>
           <button
             className="btn sm"
@@ -231,6 +232,7 @@ export default function SettingsView() {
           </button>
         </div>
         <div className="list">
+          {alive(s.weekly).length === 0 && <div className="empty">אין אסימונים שבועיים. "+ חדש" למעלה.</div>}
           {alive(s.weekly)
             .sort((a, b) => a.order - b.order)
             .map((w) => (
@@ -837,7 +839,7 @@ function RuleSheet({ rule, onClose }: { rule: RecurRule | null; onClose: () => v
               className={`tag${d.trackId === tr.id ? ' on' : ''}`}
               style={
                 d.trackId === tr.id
-                  ? { background: tr.color, color: onColor(tr.color), borderColor: 'transparent' }
+                  ? { ['--tc' as any]: tr.color }
                   : { ['--tc' as any]: tr.color }
               }
               onClick={() => up({ trackId: tr.id })}
