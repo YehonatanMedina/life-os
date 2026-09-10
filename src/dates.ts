@@ -31,7 +31,10 @@ export const DAY_SWITCH_MIN = 3 * 60 + 30
 
 /** התאריך הלוגי של רגע מסוים (ברירת מחדל: עכשיו) */
 export function logicalDate(ms: number = Date.now()): ISODate {
-  return iso(new Date(ms - DAY_SWITCH_MIN * 60_000))
+  // לפי שעון הקיר, לא לפי חיסור של 3.5 שעות אמיתיות — ביום מעבר שעון השניים לא מסכימים
+  const d = new Date(ms)
+  if (d.getHours() * 60 + d.getMinutes() < DAY_SWITCH_MIN) d.setDate(d.getDate() - 1)
+  return iso(d)
 }
 
 export function today(): ISODate {
@@ -119,7 +122,7 @@ export function hhmm(ms: number): string {
 
 /** "45 דק׳" · "7 שע׳" · "7 שע׳ 30 דק׳" — בלי נקודתיים, שלא ייקרא כשעון */
 export function minutesToHM(min: number): string {
-  const m = Math.max(0, Math.round(min))
+  const m = Number.isFinite(min) ? Math.max(0, Math.round(min)) : 0
   const h = Math.floor(m / 60)
   const r = m % 60
   if (h === 0) return `${r} דק׳`

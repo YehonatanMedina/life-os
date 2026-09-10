@@ -11,7 +11,7 @@
 //   docs/insights/latest.json — הניתוח השבועי שחוזר, מוצפן באותו מפתח
 // ---------------------------------------------------------------------------
 import { alive, dayCapacity, dayLog, eventsOn, plannedOn, sessionsOn, store, trackById, weekLog } from './store'
-import { addDays, today, weekStart } from './dates'
+import { addDays, logicalDate, today, weekStart } from './dates'
 import { buildWeekStats } from './insights'
 import { decryptText } from './crypto'
 import type { AppState } from './types'
@@ -159,7 +159,7 @@ export function buildAtlasContext(s: AppState) {
         review: w.review ? { score: w.review.score, answers: w.review.answers } : undefined,
       })),
     sessions: alive(s.sessions)
-      .filter((x) => new Date(x.endedAt - 3.5 * 3600_000).toISOString().slice(0, 10) >= hist)
+      .filter((x) => logicalDate(x.endedAt) >= hist)
       .map((x) => ({ endedAt: x.endedAt, minutes: x.minutes, track: tr(x.trackId), label: x.label })),
     workoutPlan: alive(s.workoutPlan ?? [])
       .sort((a, b) => a.dow - b.dow)
@@ -238,7 +238,7 @@ export function buildPulse(s: AppState) {
     habitsTotal: alive(s.habits).length,
     wake: log.wake,
     tasksOpen: tasksToday.filter((x) => x.status !== 'done').length,
-    tasksDoneToday: alive(s.tasks).filter((x) => x.status === 'done' && x.doneAt && new Date(x.doneAt - 3.5 * 3600_000).toISOString().slice(0, 10) === t).length,
+    tasksDoneToday: alive(s.tasks).filter((x) => x.status === 'done' && x.doneAt && logicalDate(x.doneAt) === t).length,
     workoutPlanned: !!alive(s.workoutPlan ?? []).find((d) => d.dow === new Date(t + 'T12:00:00').getDay() && d.kind !== 'rest'),
     workoutDone: !!(s.workouts ?? []).find((w) => w.date === t && !w.deleted && w.finishedAt),
   }

@@ -168,6 +168,8 @@ export interface WeekLog extends Rec {
    * שסוגרת את השבוע הקודם, ומוצגות במסך היום לאורך כל השבוע.
    */
   goals?: WeekGoal[]
+  /** חותמת לכל מטרה בנפרד — למיזוג בין מכשירים */
+  goalsAt?: Record<string, number>
   /** מתי הושלם שלב תכנון השבוע הזה */
   plannedAt?: number
 }

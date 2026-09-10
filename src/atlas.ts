@@ -62,7 +62,7 @@ interface AtlasCache {
 
 type UndoEntry =
   | { kind: 'event' | 'task' | 'rule' | 'workoutDay' | 'track'; id: ID; prev: any | null }
-  | { kind: 'exercise'; dayId: ID; id: ID; prev: Exercise | null }
+  | { kind: 'exercise'; dayId: ID; id: ID; prev: Exercise | null; index?: number }
   | { kind: 'weekGoals'; ws: string; prev: WeekGoal[] | undefined }
   | { kind: 'settings'; prev: Record<string, unknown> }
 
@@ -409,11 +409,11 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
     case 'setWeekGoals': {
       const ws = c.weekStart
       const prev = s.weeks.find((w) => w.weekStart === ws)?.goals
-      const goals: WeekGoal[] = (c.goals ?? []).map((g: any, i: number) => ({
-        id: g.id || `${derived('g', c)}-${i}`,
-        text: String(g.text ?? ''),
-        trackId: g.trackId,
-      }))
+      const goals: WeekGoal[] = (c.goals ?? []).map((g: any, i: number) => {
+        const id = g.id || `${derived('g', c)}-${i}`
+        // שליחה חוזרת של אותה מטרה לא מוחקת סימון שכבר נעשה
+        return { id, text: String(g.text ?? ''), trackId: g.trackId, done: prev?.find((x) => x.id === id)?.done }
+      })
       actions.setWeekGoals(ws, goals)
       return { kind: 'weekGoals', ws, prev }
     }
@@ -462,14 +462,14 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
       const prev = day?.exercises.find((x) => x.id === c.exerciseId)
       if (!prev) throw new Error('exercise not found')
       actions.patchExercise(c.dayId, c.exerciseId, strip(c.patch))
-      return { kind: 'exercise', dayId: c.dayId, id: c.exerciseId, prev }
+      return { kind: 'exercise', dayId: c.dayId, id: c.exerciseId, prev, index: day!.exercises.indexOf(prev) }
     }
     case 'deleteExercise': {
       const day = (s.workoutPlan ?? []).find((d) => d.id === c.dayId)
       const prev = day?.exercises.find((x) => x.id === c.exerciseId)
       if (!prev) throw new Error('exercise not found')
       actions.deleteExercise(c.dayId, c.exerciseId)
-      return { kind: 'exercise', dayId: c.dayId, id: c.exerciseId, prev }
+      return { kind: 'exercise', dayId: c.dayId, id: c.exerciseId, prev, index: day!.exercises.indexOf(prev) }
     }
     case 'setSettings': {
       const patch = strip(c.patch)
@@ -522,9 +522,13 @@ export function undoCommand(cmdId: string): boolean {
       break
     case 'exercise':
       if (u.prev) {
+        // החלפה מלאה במקום המקורי — לא מיזוג, ולא הוספה בסוף עם ברירות מחדל
         const day = (store.get().workoutPlan ?? []).find((d) => d.id === u.dayId)
-        if (day?.exercises.some((x) => x.id === u.id)) actions.patchExercise(u.dayId, u.id, u.prev)
-        else actions.addExercise(u.dayId, u.prev.name, u.prev)
+        if (day) {
+          const list = day.exercises.filter((x) => x.id !== u.id)
+          list.splice(Math.min(u.index ?? list.length, list.length), 0, u.prev)
+          actions.patchWorkoutDay(u.dayId, { exercises: list })
+        }
       } else actions.deleteExercise(u.dayId, u.id)
       break
     case 'weekGoals':

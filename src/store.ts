@@ -119,14 +119,22 @@ function mergeWeekLogs(a: WeekLog[], b: WeekLog[]): WeekLog[] {
       { map: x.progress, at: x.progressAt, updatedAt: x.updatedAt },
       { map: y.progress, at: y.progressAt, updatedAt: y.updatedAt },
     )
+    // מטרות השבוע — לפי מטרה, לא כמערך שלם; הסדר לפי הרשומה החדשה
+    const gm = mergeKeyed<WeekGoal>(
+      { map: x.goals ? Object.fromEntries(x.goals.map((g) => [g.id, g])) : undefined, at: x.goalsAt, updatedAt: x.updatedAt },
+      { map: y.goals ? Object.fromEntries(y.goals.map((g) => [g.id, g])) : undefined, at: y.goalsAt, updatedAt: y.updatedAt },
+    )
+    const goalOrder = [...new Set([...(newer.goals ?? []).map((g) => g.id), ...Object.keys(gm.map)])]
+    const goals = x.goals || y.goals ? goalOrder.filter((id) => id in gm.map).map((id) => gm.map[id]) : undefined
     map.set(y.id, {
       ...newer,
+      goals,
+      goalsAt: goals ? gm.at : undefined,
       items: it.map,
       itemsAt: it.at,
       progress: pr.map,
       progressAt: pr.at,
       review: newer.review ?? older.review,
-      goals: newer.goals ?? older.goals,
       plannedAt: newer.plannedAt ?? older.plannedAt,
     })
   }
@@ -426,7 +434,7 @@ function sanitize(p: any): AppState {
     habits: arr(p.habits),
     weekly: arr(p.weekly),
     phases: arr(p.phases, (x) => isDate(x.from) && isDate(x.to)),
-    sessions: arr(p.sessions),
+    sessions: arr(p.sessions, (x) => num(x.minutes) && num(x.endedAt)),
     news: arr(p.news, (n) => isDate(n.date)),
     workoutPlan: arr(p.workoutPlan, (w) => Array.isArray(w.exercises)),
     workouts: arr(p.workouts, (w) => isDate(w.date)),
@@ -573,7 +581,8 @@ class Store {
 
   /** החלפה מלאה — משמש בייבוא / סנכרון */
   replace = (s: AppState) => {
-    this.state = materialize(fillDefaults(s))
+    // גם מחסן שנערך ביד או גיבוי ישן עוברים את אותו סינון של הטעינה
+    this.state = materialize(fillDefaults(sanitize(s)))
     persist(this.state)
     this.listeners.forEach((l) => l())
   }
@@ -590,6 +599,21 @@ export function useApp(): AppState {
 // פעולות
 // ---------------------------------------------------------------------------
 const stamp = <T extends Rec>(x: T): T => ({ ...x, updatedAt: Date.now() })
+
+/**
+ * משלים חותמת לכל מפתח קיים שאין לו — מה-updatedAt הישן של הרשומה.
+ * בלי זה, אחרי נגיעה במפתח אחד ברשומה ישנה, שאר המפתחות נופלים במיזוג
+ * ל-updatedAt החדש ודורסים שינוי חדש יותר במכשיר השני.
+ */
+function backfillAt(
+  map: Record<string, unknown> | undefined,
+  at: Record<string, number> | undefined,
+  fallback: number,
+): Record<string, number> {
+  const out = { ...(at ?? {}) }
+  for (const k of Object.keys(map ?? {})) if (!(k in out)) out[k] = fallback
+  return out
+}
 
 export const actions = {
   // ---- הגדרות ----
@@ -869,7 +893,7 @@ export const actions = {
     const val = !(cur?.habits?.[habitId])
     actions.patchDay(date, {
       habits: { ...(cur?.habits ?? {}), [habitId]: val },
-      habitsAt: { ...(cur?.habitsAt ?? {}), [habitId]: Date.now() },
+      habitsAt: { ...backfillAt(cur?.habits, cur?.habitsAt, cur?.updatedAt ?? 0), [habitId]: Date.now() },
     })
   },
   toggleStep(date: ISODate, stepId: string) {
@@ -877,7 +901,7 @@ export const actions = {
     const val = !(cur?.steps?.[stepId])
     actions.patchDay(date, {
       steps: { ...(cur?.steps ?? {}), [stepId]: val },
-      stepsAt: { ...(cur?.stepsAt ?? {}), [stepId]: Date.now() },
+      stepsAt: { ...backfillAt(cur?.steps, cur?.stepsAt, cur?.updatedAt ?? 0), [stepId]: Date.now() },
     })
   },
 
@@ -900,7 +924,7 @@ export const actions = {
     const val = !(cur?.items?.[itemId])
     actions.patchWeek(ws, {
       items: { ...(cur?.items ?? {}), [itemId]: val },
-      itemsAt: { ...(cur?.itemsAt ?? {}), [itemId]: Date.now() },
+      itemsAt: { ...backfillAt(cur?.items, cur?.itemsAt, cur?.updatedAt ?? 0), [itemId]: Date.now() },
     })
   },
   // ---- אימונים ----
@@ -996,7 +1020,7 @@ export const actions = {
     else arr[idx] = val
     sets[exId] = arr
     // חותמת לתרגיל הזה בלבד — כדי שמכשיר אחר שרשם תרגיל אחר לא יידרס
-    const setsAt = { ...(cur?.setsAt ?? {}), [exId]: Date.now() }
+    const setsAt = { ...backfillAt(cur?.sets, cur?.setsAt, cur?.updatedAt ?? 0), [exId]: Date.now() }
     actions.patchWorkout(date, { sets, setsAt })
   },
   deleteWorkout(date: ISODate) {
@@ -1015,12 +1039,17 @@ export const actions = {
 
   /** מטרות־העל של שבוע. נקבעות בסקירה, מוצגות במסך היום כל השבוע. */
   setWeekGoals(ws: ISODate, goals: WeekGoal[]) {
-    actions.patchWeek(ws, { goals })
+    // רשימה חדשה — כל מטרה מקבלת חותמת עכשיו, כדי שמטרה שהוסרה לא תחזור מהצד השני
+    const now = Date.now()
+    actions.patchWeek(ws, { goals, goalsAt: Object.fromEntries(goals.map((g) => [g.id, now])) })
   },
   toggleWeekGoal(ws: ISODate, goalId: ID) {
     const cur = store.get().weeks.find((w) => w.weekStart === ws)
     const goals = (cur?.goals ?? []).map((g) => (g.id === goalId ? { ...g, done: !g.done } : g))
-    actions.patchWeek(ws, { goals })
+    actions.patchWeek(ws, {
+      goals,
+      goalsAt: { ...backfillAt(Object.fromEntries(goals.map((g) => [g.id, g])), cur?.goalsAt, cur?.updatedAt ?? 0), [goalId]: Date.now() },
+    })
   },
 
   // ---- משוב על החדשות ----
@@ -1057,7 +1086,7 @@ export const actions = {
     const now = Math.max(0, before + minutes)
     actions.patchWeek(ws, {
       progress: { ...(cur?.progress ?? {}), [itemId]: now },
-      progressAt: { ...(cur?.progressAt ?? {}), [itemId]: Date.now() },
+      progressAt: { ...backfillAt(cur?.progress, cur?.progressAt, cur?.updatedAt ?? 0), [itemId]: Date.now() },
     })
     return now - before
   },
@@ -1100,9 +1129,11 @@ export const actions = {
   },
   pauseTimer() {
     store.set((s) => {
-      if (!s.timer || !s.timer.running) return s
-      const add = (Date.now() - s.timer.startedAt) / 60000
-      return { ...s, timer: { ...s.timer, running: false, accumulated: s.timer.accumulated + add } }
+      // אם המחשב ישן — הסשן כבר נעצר בדופק האחרון, לא עכשיו
+      const r = reconcileTimer(s)
+      if (!r.timer || !r.timer.running) return r
+      const add = (Date.now() - r.timer.startedAt) / 60000
+      return { ...r, timer: { ...r.timer, running: false, accumulated: r.timer.accumulated + add } }
     })
   },
   resumeTimer() {
@@ -1113,6 +1144,8 @@ export const actions = {
   },
   /** מסיים את הסשן ושומר אותו. מחזיר את מספר הדקות. */
   stopTimer(save = true): number {
+    // שינה של המחשב לא נספרת כעבודה
+    actions.reconcileNow()
     const s = store.get()
     if (!s.timer) return 0
     const t = s.timer
@@ -1207,7 +1240,8 @@ export const actions = {
     if (typeof out.materializedTo !== 'string') out.materializedTo = today()
     // רשומות ללא מזהה נזרקות — הן שוברות מיזוג
     for (const k of keys) out[k] = out[k].filter((x: any) => x && typeof x.id === 'string' && x.id.length > 0)
-    return out as AppState
+    // אותו סינון כמו בטעינה: כלל בלי ימים, אירוע בלי תאריך, שלב פגום — לא נכנסים
+    return sanitize(out)
   },
   resetAll() {
     const now = Date.now()
