@@ -746,3 +746,51 @@ describe('ייבוא, איפוס, טעינה', () => {
     expect(n).toBe(1)
   })
 })
+
+// ---------------------------------------------------------------------------
+describe('טיימר שנשכח דולק בלשונית פתוחה', () => {
+  const beat = (minutes: number) => {
+    for (let i = 0; i < minutes * 3; i++) {
+      tick(20_000)
+      S.actions.touchTimer()
+    }
+  }
+
+  it('אחרי 4 שעות רצופות הטיימר מושהה מעצמו, נשמרות בדיוק 240 דקות, והמשך מנקה את הסימון', () => {
+    S.actions.startTimer('trk-study')
+    beat(239)
+    expect(get().timer?.running).toBe(true)
+    beat(2)
+    const t = get().timer!
+    expect(t.running).toBe(false)
+    expect(t.autoPaused).toBe('long')
+    expect(Math.round(t.accumulated)).toBe(240)
+    S.actions.resumeTimer()
+    expect(get().timer?.running).toBe(true)
+    expect(get().timer?.autoPaused).toBeUndefined()
+    // סיום שומר את מה שנצבר, לא את 10 השעות של הלילה
+    beat(10)
+    expect(S.actions.stopTimer(true)).toBe(250)
+  })
+
+  it('עבודה אמיתית על פני 03:30 (פחות מ-4 שעות) לא נעצרת — היום הלוגי לא קוטע סשן', () => {
+    pin(new Date(2026, 8, 11, 2, 0, 0).getTime())
+    S.actions.startTimer('trk-study')
+    beat(120)
+    expect(get().timer?.running).toBe(true)
+    expect(get().timer?.autoPaused).toBeUndefined()
+    expect(S.actions.stopTimer(true)).toBe(120)
+  })
+
+  it('השהיה ידנית והשהיה בגלל לשונית קפואה לא מסמנות autoPaused', () => {
+    S.actions.startTimer('trk-study')
+    beat(30)
+    S.actions.pauseTimer()
+    expect(get().timer?.autoPaused).toBeUndefined()
+    S.actions.resumeTimer()
+    tick(10 * 60_000) // הלשונית קפאה 10 דקות — הדופק הבא מיישר לנקודה האחרונה
+    S.actions.touchTimer()
+    expect(get().timer?.running).toBe(false)
+    expect(get().timer?.autoPaused).toBeUndefined()
+  })
+})

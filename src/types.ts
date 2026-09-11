@@ -369,6 +369,8 @@ export interface Timer {
   lastSeen: number
   /** האם כבר הודענו שהיעד הושלם (כדי לא לצלצל שוב בכל חזרה למסך) */
   notified?: boolean
+  /** הושהה אוטומטית אחרי 4 שעות רצופות בלשונית פתוחה — טיימר שנשכח דולק */
+  autoPaused?: 'long'
 }
 
 export interface AppState {

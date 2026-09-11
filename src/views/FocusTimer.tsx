@@ -86,7 +86,11 @@ export default function FocusTimer() {
             ? 'היעד הושלם — כל דקה נוספת נספרת'
             : `${Math.floor(elapsed)} מתוך ${target} דקות · ${plural(Math.max(0, Math.ceil(target - elapsed)), 'נשארה דקה אחת', 'דקות נשארו')}`}
         </div>
-        {!t.running && <div className="focus-paused">מושהה</div>}
+        {!t.running && (
+          <div className="focus-paused">
+            {t.autoPaused ? 'הושהה אוטומטית — 4 שעות רצופות' : 'מושהה'}
+          </div>
+        )}
       </div>
 
       <div className="focus-actions">

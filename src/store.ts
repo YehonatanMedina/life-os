@@ -490,6 +490,9 @@ export function loadState(): AppState {
  * טיימר שנשאר רץ בזמן שהלשונית הייתה סגורה לא אמור לצבור שעות דמיוניות.
  * מסתמכים על הדופק האחרון: אם הוא ישן מ-3 דקות, הסשן נעצר שם.
  */
+/** הקטע הרצוף הארוך ביותר שסביר שבאמת נעבד — הבלוק הארוך ביותר בשגרה הוא 4 שעות */
+export const MAX_STRETCH_MIN = 240
+
 function reconcileTimer(s: AppState): AppState {
   const t = s.timer
   if (!t || !t.running) return s
@@ -1159,8 +1162,15 @@ export const actions = {
       const t = s.timer
       if (!t || !t.running) return s
       const seen = t.lastSeen || t.startedAt
-      if (Date.now() - seen > 3 * 60000) return reconcileTimer(s)
-      return { ...s, timer: { ...t, lastSeen: Date.now() } }
+      const now = Date.now()
+      if (now - seen > 3 * 60000) return reconcileTimer(s)
+      // טיימר שנשכח דולק בלשונית פתוחה (קרה: 10.5 שעות על "מבחנים" בלילה): אחרי 4 שעות
+      // רצופות משהים ושומרים בדיוק 4 שעות. המשתמש מחליט אם להמשיך, לסיים או לבטל.
+      const stretch = (now - t.startedAt) / 60000
+      if (stretch >= MAX_STRETCH_MIN) {
+        return { ...s, timer: { ...t, running: false, accumulated: t.accumulated + MAX_STRETCH_MIN, startedAt: now, lastSeen: now, autoPaused: 'long' } }
+      }
+      return { ...s, timer: { ...t, lastSeen: now } }
     })
   },
   pauseTimer() {
@@ -1175,7 +1185,8 @@ export const actions = {
   resumeTimer() {
     store.set((s) => {
       if (!s.timer || s.timer.running) return s
-      return { ...s, timer: { ...s.timer, running: true, startedAt: Date.now(), lastSeen: Date.now() } }
+      const { autoPaused: _ap, ...t } = s.timer
+      return { ...s, timer: { ...t, running: true, startedAt: Date.now(), lastSeen: Date.now() } }
     })
   },
   /** מסיים את הסשן ושומר אותו. מחזיר את מספר הדקות. */

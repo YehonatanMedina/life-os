@@ -464,6 +464,12 @@ function DeepWork({ date, ws }: { date: string; ws: string }) {
 
         {t && (
           <>
+            {t.autoPaused && (
+              <div className="small" style={{ marginTop: 10, color: 'var(--warn-text)' }} role="status">
+                <b>הושהה אוטומטית אחרי 4 שעות רצופות.</b> נצברו {Math.round(t.accumulated)} דקות. אם עדיין עובד — המשך;
+                אם הטיימר נשכח דולק — בטל בלי לשמור, או סיים ושמור רק אם באמת עבדת.
+              </div>
+            )}
             <div className="row" style={{ marginTop: 13 }}>
               <button
                 className="btn primary grow"
