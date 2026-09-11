@@ -245,6 +245,23 @@ let polling = false
 let fastUntil = 0
 let timer: number | undefined
 
+/**
+ * מתי הסריקה הבאה של אטלס בענן (כל שעה בדקה 20, בין 07:00 ל-24:00 שעון ישראל).
+ * ה-webhook עונה מהר יותר כשהוא פעיל; זה הגבול העליון הכן להצגה למשתמש.
+ */
+export function nextSweepAt(now: number = Date.now()): Date {
+  const d = new Date(now)
+  d.setSeconds(0, 0)
+  if (d.getMinutes() >= 20) d.setHours(d.getHours() + 1)
+  d.setMinutes(20)
+  if (d.getHours() < 7) d.setHours(7, 20, 0, 0)
+  if (d.getHours() > 23) {
+    d.setDate(d.getDate() + 1)
+    d.setHours(7, 20, 0, 0)
+  }
+  return d
+}
+
 /** יש הודעה שעדיין מחכה לתשובה? */
 export function awaitingReply(): boolean {
   return cache.messages.some((m) => m.from === 'user' && m.pending)

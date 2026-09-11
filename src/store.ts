@@ -413,6 +413,7 @@ function sanitize(p: any): AppState {
     workoutPlan: arr(p.workoutPlan, (w) => Array.isArray(w.exercises)),
     workouts: arr(p.workouts, (w) => isDate(w.date)),
     timer: sane(p.timer),
+    timerStamp: typeof p.timerStamp === 'number' ? p.timerStamp : 0,
     days: arr(p.days, (d) => isDate(d.date)),
     weeks: arr(p.weeks, (w) => isDate(w.weekStart)),
   } as AppState
@@ -564,8 +565,10 @@ class Store {
   get = () => this.state
 
   set = (fn: (s: AppState) => AppState) => {
-    const next = fn(this.state)
+    let next = fn(this.state)
     if (next === this.state) return
+    // כל שינוי בטיימר מקבל חותמת — לשונית אחרת יודעת אם הגרסה שלה טרייה יותר
+    if (next.timer !== this.state.timer) next = { ...next, timerStamp: Date.now() }
     this.state = next
     persist(next)
     this.listeners.forEach((l) => l())
@@ -581,6 +584,37 @@ class Store {
 }
 
 export const store = new Store()
+
+// שתי לשוניות (או חלון מותקן + לשונית) על אותו localStorage: כל כתיבה של האחרת
+// מתמזגת לכאן באותו מיזוג של המחסן (LWW פר־רשומה), במקום שהאחרונה תדרוס.
+// הטיימר הוא של המכשיר — הכתיבה האחרונה היא הטרייה, ולכן היא קובעת אותו.
+// אירוע storage לא נורה בלשונית שכתבה, ומצב זהה לא נכתב שוב — אז אין פינג־פונג.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key !== KEY || !e.newValue) return
+    let other: AppState | null = null
+    try {
+      other = safeParse(e.newValue, true)
+    } catch {
+      other = null
+    }
+    if (!other) return
+    other = fillDefaults(applyMigrations(other))
+    store.set((mine) => {
+      const o = other as AppState
+      // הטיימר: הגרסה עם החותמת הטרייה יותר — לא "מי שכתב אחרון" (כתיבה של לשונית
+      // שעוד לא ראתה את הטיימר היא ישנה גם אם היא הגיעה עכשיו)
+      const theirs = (o.timerStamp ?? 0) > (mine.timerStamp ?? 0)
+      const merged: AppState = {
+        ...mergeStates(mine, o),
+        timer: theirs ? o.timer ?? null : mine.timer,
+        timerStamp: Math.max(o.timerStamp ?? 0, mine.timerStamp ?? 0),
+        deviceId: mine.deviceId,
+      }
+      return JSON.stringify(merged) === JSON.stringify(mine) ? mine : merged
+    })
+  })
+}
 
 export function useApp(): AppState {
   return useSyncExternalStore(store.subscribe, store.get, store.get)

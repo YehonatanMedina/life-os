@@ -219,7 +219,7 @@ function Shell() {
       if ((e.target as HTMLElement)?.isContentEditable) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
       // כשגיליון פתוח, המספרים שייכים לו — לא לניווט
-      if (document.querySelector('.scrim')) return
+      if (document.querySelector('.scrim, .flow, .focus, .lock-overlay')) return
       const map: Record<string, View> = { '1': 'today', '2': 'atlas', '3': 'calendar', '4': 'projects', '5': 'review', '6': 'settings', ',': 'settings' }
       if (map[e.key]) setView(map[e.key])
     }

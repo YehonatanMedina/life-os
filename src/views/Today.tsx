@@ -18,7 +18,7 @@ import NewsCard from './NewsCard'
 import { GoalsCard, WeeklyFlow, reviewPending } from './Review'
 import { WorkoutCard } from './Workout'
 import { Icon } from '../icons'
-import { awaitingReply, todayNote, useAtlas } from '../atlas'
+import { awaitingReply, nextSweepAt, todayNote, useAtlas } from '../atlas'
 
 export default function Today({ goto }: { goto: (v: string, arg?: any) => void }) {
   const s = useApp()
@@ -1688,7 +1688,7 @@ function AtlasCard({ goto }: { goto: (v: string) => void }) {
       <div className="txt">
         <div className="spread">
           <b>אטלס</b>
-          <span className="tiny faint">{waiting ? 'עובד על התשובה…' : note ? 'הבוקר' : 'ענה'}</span>
+          <span className="tiny faint">{waiting ? `עובד על התשובה… עד ${hhmm(nextSweepAt().getTime())}` : note ? 'הבוקר' : 'ענה'}</span>
         </div>
         {note ? (
           <div className="small" style={{ whiteSpace: 'pre-wrap', marginTop: 4 }}>{note.text}</div>

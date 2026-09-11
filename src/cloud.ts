@@ -397,7 +397,12 @@ let urgent = false
 /** האם בטוח לרענן את הדף עכשיו — הכל נשלח ואין טיימר רץ */
 export function safeToReload(): boolean {
   const s = store.get()
-  return status === 'synced' && baseline !== null && snapshotOf(s) === baseline && !s.timer?.running
+  // גיליון/זרימה/מצב מיקוד פתוחים — יש טקסט שעלול ללכת לאיבוד; טיימר רץ — לא קוטעים
+  const busy = typeof document !== 'undefined' && !!document.querySelector('.scrim, .flow, .focus, .lock-overlay')
+  if (busy || s.timer?.running) return false
+  // בלי ענן אין מה לדחוף — השמירה המקומית נכתבת לפני היציאה
+  if (status === 'off') return true
+  return status === 'synced' && baseline !== null && snapshotOf(s) === baseline
 }
 
 /** בקשה לדחוף בהזדמנות הראשונה, בלי לחכות לשקט */

@@ -393,6 +393,8 @@ export interface AppState {
   /** מה שבאמת בוצע */
   workouts: WorkoutLog[]
   timer: Timer | null
+  /** מתי הטיימר השתנה לאחרונה — כדי ששתי לשוניות יסכימו מי מהן מחזיקה את הגרסה הטרייה */
+  timerStamp?: number
   deviceId: string
   lastSyncAt: number
   /** מתי ההגדרות נערכו לאחרונה — לצורך מיזוג בין מכשירים */

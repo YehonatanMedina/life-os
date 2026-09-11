@@ -527,7 +527,7 @@ export function TaskSheet({ task, onClose }: { task: Task | null; onClose: () =>
             על הנתיב הקריטי
             <div className="tiny faint" style={{ fontWeight: 400 }}>אם זה נופל — הכל נופל</div>
           </span>
-          <button className="switch" role="switch" aria-checked={!!d.critical} onClick={() => up({ critical: !d.critical })} />
+          <button className="switch" role="switch" aria-label="על הנתיב הקריטי" aria-checked={!!d.critical} onClick={() => up({ critical: !d.critical })} />
         </div>
 
         <Field label="תת־משימות">

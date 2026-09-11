@@ -78,7 +78,7 @@ test.describe('הוספה ועריכה', () => {
     await app.locator('.kcard', { hasText: 'לפתור תרגיל 2' }).click()
     const sh = app.getByRole('dialog', { name: 'משימה' })
     await expect(sh).toBeVisible()
-    await expect(sh.getByRole('group', { name: 'כותרת' }).locator('input')).toHaveValue('לפתור תרגיל 2')
+    await expect(sh.getByLabel('כותרת', { exact: true })).toHaveValue('לפתור תרגיל 2')
     const est = sh.locator('label.field', { hasText: 'אסימונים' }).locator('input')
     await est.fill('2')
     await est.press('Enter')
@@ -127,7 +127,7 @@ test.describe('הוספה ועריכה', () => {
     // עריכה מהיום: שינוי כותרת ומסלול
     await row.getByRole('button', { name: 'לפתור תרגיל 2' }).click()
     const sh2 = app.getByRole('dialog', { name: 'משימה' })
-    await sh2.getByRole('group', { name: 'כותרת' }).locator('input').fill('לפתור תרגיל 2 — גרסה סופית')
+    await sh2.getByLabel('כותרת', { exact: true }).fill('לפתור תרגיל 2 — גרסה סופית')
     await sh2.getByRole('group', { name: 'מסלול' }).getByRole('button', { name: /מחקר/ }).click()
     await sh2.getByRole('button', { name: 'שמירה' }).click()
     const row3 = card.locator('.item', { hasText: 'גרסה סופית' })

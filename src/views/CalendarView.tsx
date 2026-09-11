@@ -181,7 +181,6 @@ function MonthGrid({
               key={d}
               className={`cal-cell${isSameMonth(d, anchor) ? '' : ' out'}${d === t ? ' today' : ''}`}
               onClick={() => onPick(d)}
-              onDoubleClick={() => onNew(d)}
             >
               <span className="n">{parseISO(d).getDate()}</span>
               {evs.slice(0, 3).map((e) => {
@@ -794,6 +793,7 @@ export function EventSheet({
           <button
             className="switch"
             role="switch"
+            aria-label="כל היום"
             aria-checked={draft.allDay}
             onClick={() => up({ allDay: !draft.allDay })}
           />
@@ -897,7 +897,7 @@ export function EventSheet({
             <span className="grow" style={{ fontWeight: 700, fontSize: 13.5 }}>
               חוזר כל שנה
             </span>
-            <button className="switch" role="switch" aria-checked={!!draft.yearly} onClick={() => up({ yearly: !draft.yearly })} />
+            <button className="switch" role="switch" aria-label="חוזר כל שנה" aria-checked={!!draft.yearly} onClick={() => up({ yearly: !draft.yearly })} />
           </div>
         )}
 

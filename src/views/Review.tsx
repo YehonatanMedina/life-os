@@ -646,10 +646,11 @@ export function WeeklyFlow({ ws, onClose }: { ws: string; onClose: () => void })
   useEffect(() => {
     const prev = document.documentElement.style.overflow
     document.documentElement.style.overflow = 'hidden'
-    document.body.style.overflow = 'hidden'
+    // רק html (ראו Sheet ב-ui.tsx): overflow:hidden על body גוזר את התוכן ומאפס את הגלילה
+    const y = window.scrollY
     return () => {
       document.documentElement.style.overflow = prev
-      document.body.style.overflow = ''
+      if (window.scrollY !== y) window.scrollTo(0, y)
     }
   }, [])
 

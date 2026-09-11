@@ -272,8 +272,9 @@ test('מכשיר שני: מקבל atlasApplied בסנכרון ולא מבצע ש
   expect(count(remote)).toEqual({ events: 1, liveEvents: 1, tasks: 1, rules: 1, exercises: 1, goals: 1 })
   expect(Object.keys(remote.atlasApplied ?? {}).sort()).toEqual([...CMD_IDS].sort())
   await gotoTab(B2.page, 'היום')
-  await expect(B2.page.getByText(TK_TITLE, { exact: true })).toHaveCount(1)
-  await expect(B2.page.getByText(EV_TITLE, { exact: true })).toHaveCount(1)
+  // הרשומה אחת במצב (נבדק למעלה); על המסך היא יכולה להופיע גם ב"הבא בתור" לפי שעת היום
+  await expect(B2.page.getByText(TK_TITLE, { exact: true }).first()).toBeVisible()
+  await expect(B2.page.getByText(EV_TITLE, { exact: true }).first()).toBeVisible()
 })
 
 test('ביטול במכשיר אחד שורד מכשיר שני שמשך את השיחה לפני הסנכרון', async ({ fake, key, openDevice }) => {

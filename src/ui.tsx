@@ -1,5 +1,5 @@
 import React, {
-  createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore,
+  createContext, useCallback, useContext, useEffect, useId, useRef, useState, useSyncExternalStore,
 } from 'react'
 
 // ---------------------------------------------------------------------------
@@ -63,12 +63,14 @@ export function useSwipe(onNext: () => void, onPrev: () => void, skip?: () => bo
 // מונה גלובלי של גיליונות פתוחים — מונע מצב שבו סגירת גיליון פנימי
 // משאירה את הדף נעול לתמיד
 let openSheets = 0
+let savedScrollY = 0
 function lockScroll() {
   openSheets++
-  // אלמנט הגלילה כאן הוא html ולא body (html,body,#root { height:100% }),
-  // אז נועלים את שניהם — אחרת הדף גולל מאחורי הגיליון.
+  // אלמנט הגלילה כאן הוא html (html,body,#root { height:100% }) — נועלים רק אותו.
+  // overflow:hidden על body היה גוזר את התוכן לגובה החלון, ואז אין מה לגלול והדף
+  // קפץ לראש בכל פתיחת גיליון. על html בלבד המיקום נשמר והגלגלת חסומה.
   if (openSheets === 1) {
-    document.body.style.overflow = 'hidden'
+    savedScrollY = window.scrollY
     document.documentElement.style.overflow = 'hidden'
   }
 }
@@ -110,8 +112,13 @@ function shieldClicks(ms = 350) {
 function unlockScroll() {
   openSheets = Math.max(0, openSheets - 1)
   if (openSheets === 0) {
-    document.body.style.overflow = ''
     document.documentElement.style.overflow = ''
+    if (window.scrollY !== savedScrollY) {
+      const prev = document.documentElement.style.scrollBehavior
+      document.documentElement.style.scrollBehavior = 'auto'
+      window.scrollTo(0, savedScrollY)
+      document.documentElement.style.scrollBehavior = prev
+    }
     shieldClicks()
   }
 }
@@ -134,16 +141,41 @@ export function Sheet({
 }) {
   const closeRef = useRef(onClose)
   closeRef.current = onClose
+  const sheetRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
     const entry = () => closeRef.current()
     escStack.push(entry)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
       if (escStack[escStack.length - 1] !== entry) return
-      e.stopPropagation()
-      entry()
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        entry()
+        return
+      }
+      // כליאת מיקוד: Tab מסתובב בתוך הגיליון העליון ולא בורח למה שמאחוריו
+      if (e.key === 'Tab') {
+        const root = sheetRef.current
+        if (!root) return
+        const f = Array.from(
+          root.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+        ).filter((el) => el.offsetParent !== null)
+        if (!f.length) return e.preventDefault()
+        const active = document.activeElement as HTMLElement | null
+        const first = f[0]
+        const last = f[f.length - 1]
+        if (!active || !root.contains(active)) {
+          e.preventDefault()
+          ;(e.shiftKey ? last : first).focus()
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault()
+          first.focus()
+        } else if (e.shiftKey && active === first) {
+          e.preventDefault()
+          last.focus()
+        }
+      }
     }
     document.addEventListener('keydown', onKey)
     lockScroll()
@@ -159,6 +191,7 @@ export function Sheet({
   return (
     <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
+        ref={sheetRef}
         className="sheet"
         style={wide ? { maxWidth: 760 } : undefined}
         role="dialog"
@@ -354,6 +387,20 @@ export function Field({
   htmlFor?: string
   children: React.ReactNode
 }) {
+  // שדה יחיד (input/textarea/select) בלי מזהה — מקבל מזהה, כדי שהתווית תהיה השם הנגיש שלו
+  const gen = useId()
+  const only = React.Children.count(children) === 1 ? React.Children.toArray(children)[0] : null
+  const labelable = React.isValidElement(only) && typeof only.type === 'string' && ['input', 'textarea', 'select'].includes(only.type)
+  if (!htmlFor && labelable) {
+    const el = only as React.ReactElement<{ id?: string }>
+    const id = el.props.id ?? gen
+    return (
+      <div className="field" style={{ marginBottom: 12 }}>
+        <label htmlFor={id}>{label}</label>
+        {React.cloneElement(el, { id })}
+      </div>
+    )
+  }
   if (htmlFor) {
     return (
       <div className="field" style={{ marginBottom: 12 }}>

@@ -162,7 +162,7 @@ test('הודעה ממתינה שמעולם לא נענתה — "אטלס חוש�
   await advance(A.page, 60_000, 250)
   const perMinute = threadGets(fake, 'A').length - n0
   console.log(`[atlas2] unanswered after 20min: ${perMinute} polls/min`)
-  await expect(A.page.locator('.bubble.thinking')).toContainText(/לוקח יותר מהרגיל/)
+  await expect(A.page.locator('.bubble.thinking')).toContainText(/התשובה תגיע עד \d\d:20 לכל המאוחר/)
   // FIXME (minor): אין תקרה — 6 משיכות בדקה לנצח (גם ברקע) בגלל הודעה אחת שאבדה אצל הסוכן.
   expect(perMinute).toBeGreaterThanOrEqual(5)
 })

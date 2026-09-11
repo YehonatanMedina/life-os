@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  atlasReady, canUndo, commandFailed, describeCommand, discardMessage, pollAtlas, retrySend, sendToAtlas,
+  atlasReady, canUndo, commandFailed, describeCommand, discardMessage, nextSweepAt, pollAtlas, retrySend, sendToAtlas,
   undoCommand, useAtlas, type AtlasMessage,
 } from '../atlas'
 import { useTick, useToast, vibrate } from '../ui'
@@ -165,7 +165,7 @@ export default function AtlasView() {
             <span className="dots"><i /><i /><i /></span>
             <span className="tiny muted">
               אטלס חושב… {waitedSec >= 60 ? `${Math.floor(waitedSec / 60)}:${String(waitedSec % 60).padStart(2, '0')}` : `${waitedSec} שנ׳`}
-              {waitedSec > 240 && ' · לוקח יותר מהרגיל, אפשר לצאת — התשובה תחכה כאן'}
+              {waitedSec > 90 && ` · התשובה תגיע עד ${hhmm(nextSweepAt(now).getTime())} לכל המאוחר — אפשר לצאת, היא תחכה כאן`}
             </span>
           </div>
         )}
