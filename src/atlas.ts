@@ -19,7 +19,7 @@ import { decryptEnvelope, encryptText } from './crypto'
 import { aiKey } from './ai'
 import { cloudConfigured, hasPulledOnce, nudgePush } from './cloud'
 import { today } from './dates'
-import type { CalEvent, Exercise, ID, RecurRule, Task, WeekGoal, WorkoutDay } from './types'
+import type { CalEvent, Exercise, HabitDef, HabitStep, ID, RecurRule, Task, Track, WeeklyDef, WeekGoal, WorkoutDay } from './types'
 
 const TOKEN_KEY = 'life-os-gh-token'
 const LOGIN_KEY = 'life-os-gh-login'
@@ -63,7 +63,7 @@ interface AtlasCache {
 }
 
 type UndoEntry =
-  | { kind: 'event' | 'task' | 'rule' | 'workoutDay' | 'track'; id: ID; prev: any | null; patch?: Record<string, unknown> }
+  | { kind: 'event' | 'task' | 'rule' | 'workoutDay' | 'track' | 'weekly' | 'habit'; id: ID; prev: any | null; patch?: Record<string, unknown> }
   | { kind: 'exercise'; dayId: ID; id: ID; prev: Exercise | null; index?: number }
   | { kind: 'weekGoals'; ws: string; prev: WeekGoal[] | undefined }
   | { kind: 'settings'; prev: Record<string, unknown>; patch?: Record<string, unknown> }
@@ -415,6 +415,56 @@ function applyPending(messages: AtlasMessage[]) {
 
 const isDate = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
 const strip = (o: Record<string, any>) => Object.fromEntries(Object.entries(o ?? {}).filter(([, v]) => v !== undefined))
+const txt = (v: unknown) => typeof v === 'string' && !!v.trim()
+const int = (v: unknown, lo: number, hi: number) => typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi
+
+/**
+ * שדות מותרים לכל רשומה. שדה מהטיפוס הלא נכון נזרק ולא מגיע לחנות —
+ * order של NaN או kind לא מוכר היו שוברים את המסך שמצייר את הרשימה.
+ */
+function pick(o: Record<string, any>, ok: Record<string, (v: unknown) => boolean>): Record<string, any> {
+  return Object.fromEntries(Object.entries(strip(o)).filter(([k, v]) => ok[k]?.(v)))
+}
+const trackFields = (o: Record<string, any>) =>
+  pick(o, {
+    name: txt,
+    emoji: (v) => typeof v === 'string',
+    goal: (v) => typeof v === 'string',
+    color: (v) => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v),
+    order: (v) => typeof v === 'number' && Number.isFinite(v),
+    board: (v) => typeof v === 'boolean',
+  })
+const weeklyFields = (o: Record<string, any>) =>
+  pick(o, {
+    name: txt,
+    emoji: (v) => typeof v === 'string',
+    group: (v) => typeof v === 'string',
+    hint: (v) => typeof v === 'string',
+    kind: (v) => v === 'check' || v === 'progress',
+    targetMinutes: (v) => int(v, 5, 10080),
+    everyDays: (v) => int(v, 1, 365),
+    anchorDate: isDate,
+    alertDow: (v) => int(v, 0, 6),
+    order: (v) => typeof v === 'number' && Number.isFinite(v),
+    trackId: txt,
+  })
+function habitFields(o: Record<string, any>, id: ID) {
+  const out = pick(o, {
+    name: txt,
+    emoji: (v) => typeof v === 'string',
+    minutes: (v) => int(v, 1, 600),
+    order: (v) => typeof v === 'number' && Number.isFinite(v),
+    special: (v) => v === 'workout',
+  })
+  // צ׳קליסט: מקבלים גם רשימת מחרוזות פשוטה, ונותנים מזהה יציב לכל שלב
+  const raw = (o ?? {}).steps
+  if (Array.isArray(raw)) {
+    out.steps = raw
+      .map((x: any, i: number) => (txt(x) ? { id: `${id}-s${i}`, text: x } : txt(x?.text) ? { id: x.id || `${id}-s${i}`, text: x.text } : null))
+      .filter(Boolean) as HabitStep[]
+  }
+  return out
+}
 
 function applyCommand(c: AtlasCommand): UndoEntry | null {
   const s = store.get()
@@ -611,6 +661,68 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
       })
       return { kind: 'track', id, prev: null }
     }
+    case 'patchTrack': {
+      const prev = s.tracks.find((t) => t.id === c.trackId)
+      if (!prev) throw new Error('track not found')
+      const patch = trackFields(c.patch)
+      if (!Object.keys(patch).length) throw new Error('patchTrack: nothing valid')
+      actions.upsertTrack({ ...prev, ...patch, updatedAt: Date.now() } as Track)
+      return { kind: 'track', id: c.trackId, prev, patch }
+    }
+    case 'deleteTrack': {
+      const prev = s.tracks.find((t) => t.id === c.trackId)
+      if (!prev) throw new Error('track not found')
+      actions.deleteTrack(c.trackId)
+      return { kind: 'track', id: c.trackId, prev }
+    }
+    case 'addWeekly': {
+      const id = c.weekly?.id || derived('wk', c)
+      if (s.weekly.some((w) => w.id === id)) return null
+      const w = weeklyFields(c.weekly)
+      if (typeof w.name !== 'string' || !w.name.trim()) throw new Error('addWeekly: no name')
+      // אסימון progress בלי יעד דקות מצייר פס התקדמות מול undefined
+      if (w.kind === 'progress' && w.targetMinutes === undefined) throw new Error('addWeekly: progress needs targetMinutes')
+      actions.upsertWeekly({ emoji: '•', order: alive(s.weekly).length, kind: 'check', name: '', ...w, id, updatedAt: Date.now() } as WeeklyDef)
+      return { kind: 'weekly', id, prev: null }
+    }
+    case 'patchWeekly': {
+      const prev = s.weekly.find((w) => w.id === c.weeklyId)
+      if (!prev) throw new Error('weekly not found')
+      const patch = weeklyFields(c.patch)
+      if (!Object.keys(patch).length) throw new Error('patchWeekly: nothing valid')
+      const next = { ...prev, ...patch } as WeeklyDef
+      if (next.kind === 'progress' && next.targetMinutes === undefined) throw new Error('patchWeekly: progress needs targetMinutes')
+      actions.upsertWeekly({ ...next, updatedAt: Date.now() })
+      return { kind: 'weekly', id: c.weeklyId, prev, patch }
+    }
+    case 'deleteWeekly': {
+      const prev = s.weekly.find((w) => w.id === c.weeklyId)
+      if (!prev) throw new Error('weekly not found')
+      actions.deleteWeekly(c.weeklyId)
+      return { kind: 'weekly', id: c.weeklyId, prev }
+    }
+    case 'addHabit': {
+      const id = c.habit?.id || derived('hb', c)
+      if (s.habits.some((h) => h.id === id)) return null
+      const h = habitFields(c.habit, id)
+      if (typeof h.name !== 'string' || !h.name.trim()) throw new Error('addHabit: no name')
+      actions.upsertHabit({ emoji: '•', order: alive(s.habits).length, name: '', ...h, id, updatedAt: Date.now() } as HabitDef)
+      return { kind: 'habit', id, prev: null }
+    }
+    case 'patchHabit': {
+      const prev = s.habits.find((h) => h.id === c.habitId)
+      if (!prev) throw new Error('habit not found')
+      const patch = habitFields(c.patch, c.habitId)
+      if (!Object.keys(patch).length) throw new Error('patchHabit: nothing valid')
+      actions.upsertHabit({ ...prev, ...patch, updatedAt: Date.now() } as HabitDef)
+      return { kind: 'habit', id: c.habitId, prev, patch }
+    }
+    case 'deleteHabit': {
+      const prev = s.habits.find((h) => h.id === c.habitId)
+      if (!prev) throw new Error('habit not found')
+      actions.deleteHabit(c.habitId)
+      return { kind: 'habit', id: c.habitId, prev }
+    }
     default:
       throw new Error('unknown op ' + c.op)
   }
@@ -666,10 +778,27 @@ export function undoCommand(cmdId: string): boolean {
     case 'settings':
       actions.setSettings((u.patch ? revertPatch(store.get().settings as any, u.prev, u.patch) : u.prev) as any)
       break
-    case 'track':
-      if (u.prev) actions.upsertTrack(u.prev)
+    case 'track': {
+      const cur = store.get().tracks.find((t) => t.id === u.id)
+      if (u.prev && u.patch && cur) actions.upsertTrack(reverted(cur, u.prev, u.patch))
+      else if (u.prev) actions.upsertTrack({ ...u.prev, deleted: u.prev.deleted ?? false })
       else actions.deleteTrack(u.id)
       break
+    }
+    case 'weekly': {
+      const cur = store.get().weekly.find((w) => w.id === u.id)
+      if (u.prev && u.patch && cur) actions.upsertWeekly(reverted(cur, u.prev, u.patch))
+      else if (u.prev) actions.upsertWeekly({ ...u.prev, deleted: u.prev.deleted ?? false })
+      else actions.deleteWeekly(u.id)
+      break
+    }
+    case 'habit': {
+      const cur = store.get().habits.find((h) => h.id === u.id)
+      if (u.prev && u.patch && cur) actions.upsertHabit(reverted(cur, u.prev, u.patch))
+      else if (u.prev) actions.upsertHabit({ ...u.prev, deleted: u.prev.deleted ?? false })
+      else actions.deleteHabit(u.id)
+      break
+    }
   }
   const undo = { ...cache.undo }
   delete undo[cmdId]
@@ -693,6 +822,9 @@ export function describeCommand(c: AtlasCommand): string {
   const tk = (id: string) => s.tasks.find((t) => t.id === id)?.title ?? 'משימה'
   const rl = (id: string) => s.rules.find((r) => r.id === id)?.title ?? 'בלוק קבוע'
   const wd = (id: string) => (s.workoutPlan ?? []).find((d) => d.id === id)?.title ?? 'יום אימון'
+  const tr = (id: string) => s.tracks.find((t) => t.id === id)?.name ?? 'מסלול'
+  const wk = (id: string) => s.weekly.find((w) => w.id === id)?.name ?? 'אסימון שבועי'
+  const hb = (id: string) => s.habits.find((h) => h.id === id)?.name ?? 'הרגל'
   const ex = (dayId: string, id: string) =>
     (s.workoutPlan ?? []).find((d) => d.id === dayId)?.exercises.find((x) => x.id === id)?.name ?? 'תרגיל'
   switch (c.op) {
@@ -732,6 +864,22 @@ export function describeCommand(c: AtlasCommand): string {
       return `הגדרות עודכנו: ${Object.keys(c.patch ?? {}).join(', ')}`
     case 'addTrack':
       return `מסלול חדש: ${c.track?.name ?? ''}`
+    case 'patchTrack':
+      return `מסלול עודכן: ${tr(c.trackId)}`
+    case 'deleteTrack':
+      return `מסלול הוסר: ${tr(c.trackId)}`
+    case 'addWeekly':
+      return `אסימון שבועי חדש: ${c.weekly?.name ?? ''}`
+    case 'patchWeekly':
+      return `אסימון שבועי עודכן: ${wk(c.weeklyId)}`
+    case 'deleteWeekly':
+      return `אסימון שבועי הוסר: ${wk(c.weeklyId)}`
+    case 'addHabit':
+      return `הרגל חדש: ${c.habit?.name ?? ''}`
+    case 'patchHabit':
+      return `הרגל עודכן: ${hb(c.habitId)}`
+    case 'deleteHabit':
+      return `הרגל הוסר: ${hb(c.habitId)}`
     default:
       return c.op
   }

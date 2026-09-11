@@ -235,6 +235,91 @@ describe('ביצוע פקודות — עדכון ומחיקה', () => {
 })
 
 // ---------------------------------------------------------------------------
+describe('ביצוע פקודות — מסלולים, אסימונים שבועיים והרגלים', () => {
+  function seeded(): AppState {
+    return blankState({
+      weekly: [
+        { id: 'wk1', updatedAt: 1, name: 'גיטרה', emoji: '🎸', order: 0, kind: 'progress', targetMinutes: 180 },
+        { id: 'wk2', updatedAt: 1, name: 'כביסה', emoji: '🧺', order: 1, kind: 'check' },
+      ],
+      habits: [{ id: 'hb1', updatedAt: 1, name: 'שגרת בוקר', emoji: '🌅', order: 0, steps: [{ id: 's0', text: 'לסדר מיטה' }] }],
+    })
+  }
+
+  it('יצירה, עדכון ומחיקה של מסלול, אסימון שבועי והרגל', async () => {
+    await boot(seeded())
+    const CMDS: AtlasCommand[] = [
+      { id: 'c-1', op: 'patchTrack', trackId: 'trk-study', patch: { goal: 'מבחן ב־6.11', order: 'שלישי', name: '' } },
+      { id: 'c-2', op: 'deleteWeekly', weeklyId: 'wk1' },
+      { id: 'c-3', op: 'patchWeekly', weeklyId: 'wk2', patch: { name: 'כביסה ומצעים', everyDays: 14, alertDow: 5 } },
+      { id: 'c-4', op: 'addWeekly', weekly: { name: 'ריצה ארוכה', kind: 'progress', targetMinutes: 90, trackId: 'trk-life' } },
+      { id: 'c-5', op: 'addHabit', habit: { name: 'מתיחות', minutes: 10, steps: ['גב', { text: 'ירכיים' }, 7] } },
+      { id: 'c-6', op: 'patchHabit', habitId: 'hb1', patch: { name: 'בוקר', special: 'שינה' } },
+    ]
+    await thread([atlasMsg('a1', '2026-09-11T09:00:00+03:00', CMDS)])
+    expect(await At.pollAtlas()).toBe(true)
+    const s = get()
+    // שדה מהטיפוס הלא נכון נזרק, השאר נכנס
+    expect(s.tracks.find((t) => t.id === 'trk-study')).toMatchObject({ goal: 'מבחן ב־6.11', order: 1, name: 'לימודים' })
+    expect(s.weekly.find((w) => w.id === 'wk1')?.deleted).toBe(true)
+    expect(s.weekly.find((w) => w.id === 'wk2')).toMatchObject({ name: 'כביסה ומצעים', everyDays: 14, alertDow: 5, kind: 'check' })
+    expect(s.weekly.find((w) => w.id === 'wk-c-4')).toMatchObject({ name: 'ריצה ארוכה', kind: 'progress', targetMinutes: 90, trackId: 'trk-life', order: 1, emoji: '•' })
+    expect(s.habits.find((h) => h.id === 'hb-c-5')).toMatchObject({ name: 'מתיחות', minutes: 10, order: 1 })
+    expect(s.habits.find((h) => h.id === 'hb-c-5')?.steps).toEqual([{ id: 'hb-c-5-s0', text: 'גב' }, { id: 'hb-c-5-s1', text: 'ירכיים' }])
+    expect(s.habits.find((h) => h.id === 'hb1')).toMatchObject({ name: 'בוקר' })
+    expect(s.habits.find((h) => h.id === 'hb1')?.special).toBeUndefined()
+    expect(Object.keys(s.atlasApplied ?? {}).sort()).toEqual(CMDS.map((c) => c.id).sort())
+    for (const c of CMDS) expect(At.describeCommand(c)).toMatch(/[֐-׿]/)
+    expect(At.describeCommand(CMDS[1])).toContain('גיטרה')
+  })
+
+  it('פקודה בלי שדה תקין, ואסימון progress בלי יעד — נדחות ולא משנות כלום', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await boot(seeded())
+    await thread([
+      atlasMsg('a1', '2026-09-11T09:00:00+03:00', [
+        { id: 'b-1', op: 'patchWeekly', weeklyId: 'wk2', patch: { targetMinutes: 3 } },
+        { id: 'b-2', op: 'addWeekly', weekly: { name: 'קריאה', kind: 'progress' } },
+        { id: 'b-3', op: 'patchWeekly', weeklyId: 'wk2', patch: { kind: 'progress' } },
+        { id: 'b-4', op: 'deleteHabit', habitId: 'no-such' },
+        { id: 'b-5', op: 'deleteTrack', trackId: 'trk-life' },
+      ]),
+    ])
+    await At.pollAtlas()
+    const s = get()
+    expect(s.weekly.find((w) => w.id === 'wk2')).toMatchObject({ name: 'כביסה', kind: 'check' })
+    expect(s.weekly.find((w) => w.id === 'wk2')?.targetMinutes).toBeUndefined()
+    expect(s.weekly.some((w) => w.name === 'קריאה')).toBe(false)
+    expect(s.tracks.find((t) => t.id === 'trk-life')?.deleted).toBe(true)
+    for (const id of ['b-1', 'b-2', 'b-3', 'b-4']) expect(At.canUndo(id)).toBe(false)
+    expect(At.commandFailed('b-1')).toContain('patchWeekly')
+  })
+
+  it('ביטול מחזיר אסימון שנמחק, ומבטל עדכון של מסלול בלי לדרוס עריכה ידנית', async () => {
+    await boot(seeded())
+    await thread([
+      atlasMsg('a1', '2026-09-11T09:00:00+03:00', [
+        { id: 'u-1', op: 'deleteWeekly', weeklyId: 'wk1' },
+        { id: 'u-2', op: 'patchTrack', trackId: 'trk-study', patch: { goal: 'יעד של אטלס', emoji: '🎯' } },
+        { id: 'u-3', op: 'addHabit', habit: { name: 'קריאה' } },
+      ]),
+    ])
+    await At.pollAtlas()
+    // הוא ערך ידנית את האמוג׳י אחרי הפקודה — הביטול לא נוגע בו
+    S.actions.upsertTrack({ ...get().tracks.find((t) => t.id === 'trk-study')!, emoji: '📗' })
+    expect(At.undoCommand('u-1')).toBe(true)
+    expect(At.undoCommand('u-2')).toBe(true)
+    expect(At.undoCommand('u-3')).toBe(true)
+    const s = get()
+    expect(s.weekly.find((w) => w.id === 'wk1')).toMatchObject({ deleted: false, name: 'גיטרה', targetMinutes: 180 })
+    expect(s.tracks.find((t) => t.id === 'trk-study')).toMatchObject({ emoji: '📗', name: 'לימודים' })
+    expect(s.tracks.find((t) => t.id === 'trk-study')?.goal).toBeUndefined()
+    expect(s.habits.find((h) => h.id === 'hb-u-3')?.deleted).toBe(true)
+    expect(At.undoCommand('u-1')).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
 describe('undoCommand', () => {
   it('ביטול יצירה מסיר (מחיקה רכה) את מה שנוצר; ביטול פעמיים מחזיר false', async () => {
     await boot()
