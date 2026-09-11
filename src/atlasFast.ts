@@ -121,6 +121,14 @@ export const PERSONA = `אתה אטלס — מנהל החיים של המשתמ�
 { "op": "deleteExercise", "dayId", "exerciseId" }
 { "op": "setSettings", "patch": { "wakeTime"?, "bedTime"?, "dailyTokenGoal"?, "weeklyTokenGoal"?, "tokenMinutes"? } }
 { "op": "addTrack",   "track": { "name", "emoji", "goal"? } }
+{ "op": "patchTrack", "trackId", "patch": { "name"?, "emoji"?, "goal"?, "color"?, "order"? } }
+{ "op": "deleteTrack", "trackId" }
+{ "op": "addWeekly", "weekly": { "name", "emoji"?, "kind": "check"|"progress", "targetMinutes"? (חובה ל-progress), "group"?, "hint"?, "trackId"? } }
+{ "op": "patchWeekly", "weeklyId", "patch": { … } }
+{ "op": "deleteWeekly", "weeklyId" }
+{ "op": "addHabit", "habit": { "name", "emoji"?, "minutes"?, "steps"?: ["…"] } }
+{ "op": "patchHabit", "habitId", "patch": { … } }
+{ "op": "deleteHabit", "habitId" }
 כללים: כלל שבועי חייב days לא ריק; כלל חודשי חייב monthDay בין 1 ל-31; אירוע חייב title ו-date; משימה חייבת title. פעולה הפיכה וברורה — בצע. מחיקה או שינוי גדול (עשר משימות, כל התוכנית) — שאל קודם, אלא אם הוא ביקש במפורש. אל תיצור כפילויות: בדוק בהקשר אם זה כבר קיים. אל תבצע פעולות שהוא לא ביקש או לא הסכים להן.
 
 ## מה לא שלך — להעביר לאטלס העמוק
@@ -204,7 +212,7 @@ export function buildFastContext(s: AppState, now: number = Date.now()) {
         .sort((a, b) => (a.start ?? '').localeCompare(b.start ?? ''))
         .map((e) => ({ title: e.title, start: e.start, end: e.end, deep: e.deep || undefined })),
       wake: log.wake,
-      habits: alive(s.habits).map((h) => ({ name: h.name, done: !!log.habits?.[h.id] })),
+      habits: alive(s.habits).map((h) => ({ id: h.id, name: h.name, done: !!log.habits?.[h.id] })),
       workout: (() => {
         const plan = alive(s.workoutPlan ?? []).find((d) => d.dow === dow)
         const done = (s.workouts ?? []).find((w) => w.date === t && !w.deleted)
@@ -216,7 +224,7 @@ export function buildFastContext(s: AppState, now: number = Date.now()) {
       minutes: Math.round(weekMinutes(s, ws)),
       goalTokens: s.settings.weeklyTokenGoal,
       goals: wl.goals?.map((g) => ({ text: g.text, done: !!g.done })),
-      items: alive(s.weekly).map((w) => ({ name: w.name, done: !!wl.items?.[w.id] })),
+      items: alive(s.weekly).map((w) => ({ id: w.id, name: w.name, kind: w.kind, done: !!wl.items?.[w.id] })),
       lastWeekMinutes: Math.round(weekMinutes(s, addDays(ws, -7))),
     },
     tasks: { open: openTasks, doneLast3Days: doneRecently },
