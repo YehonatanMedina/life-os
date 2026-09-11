@@ -3,6 +3,7 @@ import {
   HE_STATUS, buildId, createGist, getPairing, getToken, setCredentials, syncNow, useCloudState,
 } from '../cloud'
 import { useApp } from '../store'
+import { getNotifyKey } from '../push'
 import { Field, useToast } from '../ui'
 
 const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new'
@@ -109,6 +110,30 @@ export default function CloudCard() {
             }}
           >
             {syncing ? 'מסנכרן…' : 'סנכרן עכשיו'}
+          </button>
+          <button
+            className="btn sm"
+            style={{ gridColumn: '1 / -1' }}
+            onClick={async () => {
+              // קישור חד־פעמי למכשיר חדש: חיבור (t+p), מפתח ההתראות (nk) ומפתח אטלס (ak).
+              // הוא נושא את הטוקן — פותחים אותו רק במכשיר שלך, והוא נמחק מהכתובת אחרי הפעם הראשונה.
+              const cfg: Record<string, string> = { t: getToken(), p: getPairing() }
+              if (s.settings.aiKey) cfg.ak = s.settings.aiKey
+              if (getNotifyKey()) cfg.nk = getNotifyKey()
+              const raw = new TextEncoder().encode(JSON.stringify(cfg))
+              let bin = ''
+              raw.forEach((b) => (bin += String.fromCharCode(b)))
+              const b64 = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+              const link = `${location.origin}${location.pathname}#setup=${b64}`
+              try {
+                await navigator.clipboard.writeText(link)
+                toast('קישור ההתקנה הועתק — פתח אותו במכשיר החדש')
+              } catch {
+                prompt('העתק את הקישור:', link)
+              }
+            }}
+          >
+            העתקת קישור התקנה למכשיר חדש
           </button>
         </div>
       )}

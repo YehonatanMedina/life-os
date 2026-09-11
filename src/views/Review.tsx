@@ -208,7 +208,7 @@ function WeekNumbers({ st }: { st: WeekStats }) {
           stroke={11}
           color={st.tokens >= st.goalTokens ? 'var(--good)' : undefined}
         >
-          <div className="n" style={{ fontSize: 28 }}>{st.tokens.toFixed(1)}</div>
+          <div className="n" style={{ fontSize: 30 }}>{st.tokens.toFixed(1)}</div>
           <div className="l">מתוך {st.goalTokens}</div>
         </Ring>
         <div className="grid3 grow" style={{ minWidth: 190 }}>
@@ -842,7 +842,7 @@ function GoalsStep({
         מה חייב להיות נכון בסוף השבוע הבא. לא רשימת משימות — <b>שלוש תוצאות לכל היותר</b>, כאלה
         שאפשר להגיד עליהן כן או לא. הן ילוו אותך במסך היום כל השבוע.
       </p>
-      <div className="card pad" style={{ background: 'var(--accent-soft)', borderColor: 'transparent' }}>
+      <div className="card pad rail" style={{ ['--rail' as any]: 'var(--accent)' }}>
         <div className="small">
           לשבוע <span className="ltr">{shortDate(nextWs)} – {shortDate(addDays(nextWs, 6))}</span> יש
           קיבולת של <b>{cap} אסימונים</b> ({minutesToHM(cap * s.settings.tokenMinutes)} נטו).
