@@ -76,13 +76,23 @@ function lockScroll() {
  * אחרי סגירת גיליון — חוסם קליקים לרגע, כדי שהקליק השני של דאבל־טאפ
  * לא ינחת על מה שהיה מתחת לגיליון (למשל סרגל הניווט).
  */
+let shield: HTMLDivElement | null = null
 function shieldClicks(ms = 350) {
   if (typeof document === 'undefined') return
+  shield?.remove()
   const el = document.createElement('div')
   el.setAttribute('aria-hidden', 'true')
   el.style.cssText = 'position:fixed;inset:0;z-index:9999;background:transparent'
+  // המגן נועד לאצבע (דאבל־טאפ). עכבר עובר דרכו: ב-pointerdown הוא מוסר, והקליק נוחת מתחתיו.
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') el.remove()
+  })
   document.body.appendChild(el)
-  window.setTimeout(() => el.remove(), ms)
+  shield = el
+  window.setTimeout(() => {
+    el.remove()
+    if (shield === el) shield = null
+  }, ms)
 }
 
 function unlockScroll() {

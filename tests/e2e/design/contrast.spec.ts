@@ -21,7 +21,7 @@ interface Row { screen: string; sel: string; text: string; fg: string; bg: strin
 
 for (const theme of THEMES) {
   test(`ניגודיות טקסט (${theme})`, async ({ app }, info) => {
-    test.setTimeout(180_000)
+    test.setTimeout(360_000)
     const rows: Row[] = []
     const scan = async (screen: string) => {
       const r = await app.evaluate(

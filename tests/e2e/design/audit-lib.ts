@@ -125,11 +125,13 @@ export async function auditScreen(page: Page, screen: string, opts: { root?: str
       }
       expect('.card.pad', 'padding', '14px', 'card.pad')
       expect('.card-h', 'padding', '12px 13px 6px', 'card-h')
-      expect('.item', 'padding', '11px 13px', 'item')
+      // צעדי שגרה מוזחים ב-44px בכוונה (README) — לא סטייה
+      expect('.item:not([style*="44px"])', 'padding', '11px 13px', 'item')
       expect('.sec', 'gap', '10px', 'sec-gap')
       expect('.page', 'gap', '22px', 'page-gap')
       // כותרות כרטיס שנבנו ידנית (.spread עם padding) במקום .card-h
-      for (const el of root.querySelectorAll('.card > .spread:first-child, .card > div.spread')) {
+      // בתוך .card.pad כותרת ה-.spread יושבת על ריפוד הכרטיס — זה הסגנון המתועד; רק כרטיס בלי ריפוד צריך .card-h
+      for (const el of root.querySelectorAll('.card:not(.pad) > .spread:first-child, .card:not(.pad) > div.spread')) {
         if (!visible(el) || !el.querySelector('b')) continue
         const p = getComputedStyle(el).padding
         res.spacing.push({ kind: 'adhoc-card-header', path: cssPath(el), text: (el.querySelector('b')?.textContent ?? '').slice(0, 30), detail: `padding: ${p}` })
