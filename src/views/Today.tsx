@@ -1218,13 +1218,8 @@ function DailyHabits({ date }: { date: string }) {
                         actions.toggleStep(date, st.id)
                         vibrate()
                         const fresh = dayLog(store.get(), date)
-                        if (steps.every((x) => fresh.steps[x.id])) {
-                          // גם הסימון האוטומטי מקבל חותמת — אחרת ביטול ידני במכשיר אחר עלול להידרס
-                          actions.patchDay(date, {
-                            habits: { ...fresh.habits, [h.id]: true },
-                            habitsAt: { ...(fresh.habitsAt ?? {}), [h.id]: Date.now() },
-                          })
-                        }
+                        // גם הסימון האוטומטי מקבל חותמת — אחרת ביטול ידני במכשיר אחר עלול להידרס
+                        if (steps.every((x) => fresh.steps[x.id])) actions.setHabit(date, h.id, true)
                       }}
                     />
                     <div

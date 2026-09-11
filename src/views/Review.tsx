@@ -639,7 +639,8 @@ export function WeeklyFlow({ ws, onClose }: { ws: string; onClose: () => void })
     actions.patchWeek(ws, {
       review: { submittedAt: Date.now(), answers, score: score || 0, snapshot: buildSnapshot(s, ws) },
     })
-    actions.patchWeek(nextWs, { goals: clean, plannedAt: Date.now() })
+    actions.setWeekGoals(nextWs, clean)
+    actions.patchWeek(nextWs, { plannedAt: Date.now() })
     vibrate([30, 50, 30])
     toast('השבוע נסגר. שבוע חדש.')
     onClose()

@@ -136,6 +136,9 @@ test.describe('ניווט במחשב', () => {
       ['1', 'היום'],
       [',', 'הגדרות'],
     ]
+    // המאזין למקשים נרשם ב-effect אחרי הציור הראשון — מחכים שהסרגל יהיה על המסך
+    await expect(active).toHaveText('היום')
+    await app.waitForTimeout(150)
     for (const [key, label] of map) {
       await app.keyboard.press(key)
       await expect(active).toHaveText(label)

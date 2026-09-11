@@ -37,9 +37,14 @@ export default function NotifyCard() {
             disabled={busy}
             onClick={async () => {
               setBusy(true)
-              const ok = await writeNotifySchedule(true)
-              setBusy(false)
-              toast(ok ? 'הלוח עודכן ✓' : 'העדכון נכשל')
+              try {
+                const ok = await writeNotifySchedule(true)
+                toast(ok ? 'הלוח עודכן' : 'העדכון נכשל')
+              } catch {
+                toast('העדכון נכשל')
+              } finally {
+                setBusy(false)
+              }
             }}
           >
             רענון הלוח עכשיו
@@ -49,10 +54,13 @@ export default function NotifyCard() {
             disabled={busy}
             onClick={async () => {
               setBusy(true)
-              await disablePush()
-              setOn(false)
-              setBusy(false)
-              toast('ההתראות כובו במכשיר הזה')
+              try {
+                await disablePush()
+                setOn(false)
+                toast('ההתראות כובו במכשיר הזה')
+              } finally {
+                setBusy(false)
+              }
             }}
           >
             כיבוי
@@ -64,11 +72,11 @@ export default function NotifyCard() {
           disabled={busy}
           onClick={async () => {
             setBusy(true)
-            const r = await enablePush()
+            const r = await enablePush().catch(() => 'error' as const)
             setBusy(false)
             if (r === 'ok') {
               setOn(true)
-              toast('התראות הודלקו ✓')
+              toast('התראות הודלקו')
             } else if (r === 'denied') toast('ההרשאה נדחתה — אפשר לאשר בהגדרות האתר בדפדפן')
             else if (r === 'no-key') toast('חסר מפתח התראות — פתח את קישור החיבור המעודכן במכשיר הזה')
             else if (r === 'unsupported') toast('הדפדפן לא תומך')

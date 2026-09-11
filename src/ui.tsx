@@ -76,22 +76,34 @@ function lockScroll() {
  * אחרי סגירת גיליון — חוסם קליקים לרגע, כדי שהקליק השני של דאבל־טאפ
  * לא ינחת על מה שהיה מתחת לגיליון (למשל סרגל הניווט).
  */
-let shield: HTMLDivElement | null = null
+/**
+ * מגן קליקים לאצבע: הטאפ השני של דאבל־טאפ שסגר גיליון לא ינחת על מה שהיה מתחתיו.
+ * ספירה ולא שכבה: נבלע לכל היותר קליק מגע אחד בתוך 350 מ״ש, ועכבר תמיד עובר —
+ * כך גם כשטיימרים מוקפאים (רקע, בדיקות) שום דבר לא נתקע.
+ */
+let shieldArmed = false
+let shieldTimer: number | undefined
+let lastPointerType = 'mouse'
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', (e) => { lastPointerType = e.pointerType || 'mouse' }, true)
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (!shieldArmed) return
+      shieldArmed = false
+      if (lastPointerType !== 'touch') return
+      e.stopPropagation()
+      e.preventDefault()
+    },
+    true,
+  )
+}
 function shieldClicks(ms = 350) {
   if (typeof document === 'undefined') return
-  shield?.remove()
-  const el = document.createElement('div')
-  el.setAttribute('aria-hidden', 'true')
-  el.style.cssText = 'position:fixed;inset:0;z-index:9999;background:transparent'
-  // המגן נועד לאצבע (דאבל־טאפ). עכבר עובר דרכו: ב-pointerdown הוא מוסר, והקליק נוחת מתחתיו.
-  el.addEventListener('pointerdown', (e) => {
-    if (e.pointerType !== 'touch') el.remove()
-  })
-  document.body.appendChild(el)
-  shield = el
-  window.setTimeout(() => {
-    el.remove()
-    if (shield === el) shield = null
+  shieldArmed = true
+  if (shieldTimer) window.clearTimeout(shieldTimer)
+  shieldTimer = window.setTimeout(() => {
+    shieldArmed = false
   }, ms)
 }
 
@@ -378,9 +390,11 @@ export function Confirm({
 // ---------------------------------------------------------------------------
 // טיק כל שנייה — לטיימר ולקו "עכשיו"
 // ---------------------------------------------------------------------------
-export function useTick(ms = 1000): number {
+/** דופק לציור מחדש. null = בלי אינטרוול (כשאין מה לעדכן). */
+export function useTick(ms: number | null = 1000): number {
   const [, setN] = useState(0)
   useEffect(() => {
+    if (!ms) return
     const t = setInterval(() => setN((n) => n + 1), ms)
     return () => clearInterval(t)
   }, [ms])

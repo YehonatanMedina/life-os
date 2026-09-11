@@ -199,7 +199,12 @@ export async function writeNotifySchedule(force = false): Promise<boolean> {
 export async function enablePush(): Promise<'ok' | 'denied' | 'no-key' | 'unsupported' | 'error'> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return 'unsupported'
   if (!getNotifyKey()) return 'no-key'
-  const perm = await Notification.requestPermission()
+  let perm: NotificationPermission
+  try {
+    perm = await Notification.requestPermission()
+  } catch {
+    return 'error'
+  }
   if (perm !== 'granted') return 'denied'
   try {
     const reg = await navigator.serviceWorker.ready

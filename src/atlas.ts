@@ -355,6 +355,7 @@ function applyPending(messages: AtlasMessage[]) {
   }
 }
 
+const isDate = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
 const strip = (o: Record<string, any>) => Object.fromEntries(Object.entries(o ?? {}).filter(([, v]) => v !== undefined))
 
 function applyCommand(c: AtlasCommand): UndoEntry | null {
@@ -363,7 +364,11 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
     case 'addEvent': {
       const id = c.event?.id || derived('e', c)
       if (s.events.some((e) => e.id === id)) return null
-      actions.putEvent({ allDay: false, kind: 'personal', ...strip(c.event), id, touched: true } as CalEvent)
+      const ev = strip(c.event)
+      // אירוע בלי תאריך תקין היה חי בזיכרון עד הרענון ומפיל כל מסך שמצייר אותו
+      if (!isDate(ev.date) || typeof ev.title !== 'string' || !ev.title) throw new Error('addEvent: bad date/title')
+      if (ev.endDate !== undefined && !isDate(ev.endDate)) delete ev.endDate
+      actions.putEvent({ allDay: false, kind: 'personal', ...ev, id, touched: true } as CalEvent)
       return { kind: 'event', id, prev: null }
     }
     case 'patchEvent': {
@@ -493,7 +498,11 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
     case 'setSettings': {
       const patch = strip(c.patch)
       const allowed = ['wakeTime', 'bedTime', 'dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'name', 'reviewDow']
-      const safe = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)))
+      const NUM = ['dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'reviewDow']
+      // רק מפתחות מותרים, ורק מהטיפוס הנכון — "6" או NaN היו הופכים את הקיבולת ל-NaN
+      const safe = Object.fromEntries(
+        Object.entries(patch).filter(([k, v]) => allowed.includes(k) && (NUM.includes(k) ? Number.isFinite(v) : typeof v === 'string')),
+      )
       const prev = Object.fromEntries(Object.keys(safe).map((k) => [k, (s.settings as any)[k]]))
       actions.setSettings(safe)
       return { kind: 'settings', prev }

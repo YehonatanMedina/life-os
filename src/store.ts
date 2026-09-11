@@ -57,13 +57,37 @@ function mergeKeyed<T>(a: Keyed<T>, b: Keyed<T>): { map: Record<string, T>; at: 
   const stamp = (r: Keyed<T>, k: string) => r.at?.[k] ?? r.updatedAt ?? 0
   const map: Record<string, T> = {}
   const at: Record<string, number> = {}
-  for (const k of new Set([...Object.keys(a.map ?? {}), ...Object.keys(b.map ?? {})])) {
+  // מפתח שיש לו חותמת אבל אין לו ערך הוא מצבה (נמחק) — והיא משתתפת בהכרעה
+  const keys = new Set([
+    ...Object.keys(a.map ?? {}), ...Object.keys(b.map ?? {}),
+    ...Object.keys(a.at ?? {}), ...Object.keys(b.at ?? {}),
+  ])
+  for (const k of keys) {
     // בדיקת נוכחות ולא בדיקת אמת — הערך false הוא ערך, לא היעדר
     const inA = !!a.map && k in a.map
     const inB = !!b.map && k in b.map
-    const win = !inB ? a : !inA ? b : stamp(a, k) >= stamp(b, k) ? a : b
-    map[k] = (win.map as Record<string, T>)[k]
-    at[k] = stamp(win, k)
+    if (inA && inB) {
+      const win = stamp(a, k) >= stamp(b, k) ? a : b
+      map[k] = (win.map as Record<string, T>)[k]
+      at[k] = stamp(win, k)
+      continue
+    }
+    if (!inA && !inB) {
+      // שתי מצבות — שומרים את החדשה
+      at[k] = Math.max(a.at?.[k] ?? 0, b.at?.[k] ?? 0)
+      continue
+    }
+    // ערך בצד אחד בלבד. הצד השני מנצח רק עם מצבה מפורשת וחדשה יותר —
+    // לא עם updatedAt של הרשומה, אחרת הרגל שסומן רק כאן היה נמחק בגלל נגיעה אחרת שם.
+    const have = inA ? a : b
+    const tomb = (inA ? b : a).at?.[k]
+    const s = stamp(have, k)
+    if (tomb !== undefined && tomb > s) {
+      at[k] = tomb
+      continue
+    }
+    map[k] = (have.map as Record<string, T>)[k]
+    at[k] = s
   }
   return { map, at }
 }
@@ -306,63 +330,10 @@ export function materialize(state: AppState): AppState {
  * בהתקנה גנרית חדשה.
  */
 const MIGRATIONS: Array<{ id: string; run: (s: AppState) => AppState }> = [
-  {
-    // 28.8: אין ויתורים — לומדים גם בחגים וגם בימי מבחן. שלושת הבלוקים של
-    // החברה במקום פריט אחד, וטיסה 29.9–6.10 ביומן.
-    id: 'no-easy-days-2026-08',
-    run: (s) => {
-      const mine = s.tracks.some((t) => t.id === 'trk-exams' && !t.deleted)
-      if (!mine) return s
-      const now = Date.now()
-      let weekly = s.weekly
-      const gf = weekly.find((w) => w.id === 'wk-gf' && !w.deleted)
-      if (gf) {
-        const base = gf.order
-        weekly = weekly.map((w) => (w.id === 'wk-gf' ? { ...w, deleted: true, updatedAt: now } : w))
-        weekly = [
-          ...weekly,
-          { id: 'wk-gf-talk', updatedAt: now, name: 'דיברתי איתה', emoji: '💬', order: base, kind: 'check' as const, group: 'gf' },
-          { id: 'wk-gf-fun', updatedAt: now, name: 'עשיתי איתה', emoji: '💛', order: base + 0.1, kind: 'check' as const, group: 'gf' },
-          { id: 'wk-gf-init', updatedAt: now, name: 'יזמתי איתה', emoji: '✨', order: base + 0.2, kind: 'check' as const, group: 'gf' },
-        ]
-      }
-      let events = s.events
-      if (!events.some((e) => e.id === 'ev-flight-2610')) {
-        events = [
-          ...events,
-          {
-            id: 'ev-flight-2610', updatedAt: now, title: 'טיסה ✈️', date: '2026-09-29',
-            endDate: '2026-10-06', allDay: true, kind: 'personal' as const,
-            notes: 'לא ידוע כמה אפשר יהיה לעבוד — נחיה ונראה. אם תרצה ציפייה מותאמת לימים האלה, קבע "קיבולת ליום" מתוך עריכת האירוע.',
-          },
-        ]
-      }
-      return {
-        ...s,
-        weekly,
-        events,
-        settings: { ...s.settings, easyHoliday: false, easyExamDay: false },
-        settingsUpdatedAt: Date.now(),
-      }
-    },
-  },
-  {
-    // 28.8: שלב אחרון בשגרת הבוקר — לקרוא חדשות
-    id: 'morning-news-2026-08',
-    run: (s) => {
-      if (!s.tracks.some((t) => t.id === 'trk-exams' && !t.deleted)) return s
-      const now = Date.now()
-      return {
-        ...s,
-        habits: s.habits.map((h) => {
-          if (h.id !== 'hb-morning' || h.deleted) return h
-          const steps = h.steps ?? []
-          if (steps.some((x) => x.text.includes('חדשות'))) return h
-          return { ...h, steps: [...steps, { id: 'hm-news', text: 'לקרוא חדשות' }], updatedAt: now }
-        }),
-      }
-    },
-  },
+  // שתי המיגרציות של אוגוסט 2026 כבר רצו על כל המכשירים (הרשימה מסונכרנת). הגוף הוסר
+  // מהמאגר הציבורי — הוא הכיל תוכן אישי. המזהים נשארים כדי שלא ירוצו שוב.
+  { id: 'no-easy-days-2026-08', run: (s) => s },
+  { id: 'morning-news-2026-08', run: (s) => s },
 ]
 
 function applyMigrations(s: AppState): AppState {
@@ -914,6 +885,15 @@ export const actions = {
       habitsAt: { ...backfillAt(cur?.habits, cur?.habitsAt, cur?.updatedAt ?? 0), [habitId]: Date.now() },
     })
   },
+  /** קובע הרגל לערך מסוים (לא מחליף) — לסימון אוטומטי מסיום אימון או מכל השלבים */
+  setHabit(date: ISODate, habitId: string, val: boolean, extra: Partial<DayLog> = {}) {
+    const cur = store.get().days.find((d) => d.date === date)
+    actions.patchDay(date, {
+      ...extra,
+      habits: { ...(cur?.habits ?? {}), [habitId]: val },
+      habitsAt: { ...backfillAt(cur?.habits, cur?.habitsAt, cur?.updatedAt ?? 0), [habitId]: Date.now() },
+    })
+  },
   toggleStep(date: ISODate, stepId: string) {
     const cur = store.get().days.find((d) => d.date === date)
     const val = !(cur?.steps?.[stepId])
@@ -1057,9 +1037,15 @@ export const actions = {
 
   /** מטרות־העל של שבוע. נקבעות בסקירה, מוצגות במסך היום כל השבוע. */
   setWeekGoals(ws: ISODate, goals: WeekGoal[]) {
-    // רשימה חדשה — כל מטרה מקבלת חותמת עכשיו, כדי שמטרה שהוסרה לא תחזור מהצד השני
+    const cur = store.get().weeks.find((w) => w.weekStart === ws)
     const now = Date.now()
-    actions.patchWeek(ws, { goals, goalsAt: Object.fromEntries(goals.map((g) => [g.id, now])) })
+    const prev = Object.fromEntries((cur?.goals ?? []).map((g) => [g.id, g]))
+    // חותמת קיימת לכל מטרה שלא השתנתה, חותמת חדשה למטרה שנוספה או נערכה,
+    // ומצבה (חותמת בלי ערך) לכל מטרה שהוסרה — כך ההסרה מנצחת גם בצד השני
+    const goalsAt = backfillAt(prev, cur?.goalsAt, cur?.updatedAt ?? 0)
+    for (const id of Object.keys(prev)) if (!goals.some((g) => g.id === id)) goalsAt[id] = now
+    for (const g of goals) if (JSON.stringify(prev[g.id]) !== JSON.stringify(g)) goalsAt[g.id] = now
+    actions.patchWeek(ws, { goals, goalsAt })
   },
   toggleWeekGoal(ws: ISODate, goalId: ID) {
     const cur = store.get().weeks.find((w) => w.weekStart === ws)

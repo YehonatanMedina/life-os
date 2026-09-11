@@ -28,7 +28,9 @@ const EXAMPLES = [
 export default function AtlasView() {
   const a = useAtlas()
   const toast = useToast()
-  const now = useTick(1000)
+  // דופק רק בזמן המתנה לתשובה — לספירת השניות ליד "אטלס חושב…"
+  const waiting = a.messages.find((m) => m.from === 'user' && m.pending)
+  const now = useTick(waiting ? 1000 : null)
   const [text, setText] = useState('')
   const [listening, setListening] = useState(false)
   const recRef = useRef<any>(null)
@@ -46,7 +48,6 @@ export default function AtlasView() {
     if (el) el.scrollTop = el.scrollHeight
   }, [a.messages.length])
 
-  const waiting = a.messages.find((m) => m.from === 'user' && m.pending)
   const waitedSec = waiting ? Math.max(0, Math.round((now - Date.parse(waiting.at)) / 1000)) : 0
 
   const speechOk = useMemo(

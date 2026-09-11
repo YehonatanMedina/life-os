@@ -142,10 +142,16 @@ function forCloud(s: AppState): AppState {
  * חתימה של המצב לזיהוי "יש מה לדחוף". הטיימר נכנס בצורה גסה בלבד —
  * התחלה, עצירה ומסלול — כדי שדופק של כל 20 שניות לא יגרור דחיפה.
  */
+let snapFor: AppState | null = null
+let snapCache = ''
 function snapshotOf(s: AppState): string {
+  // אותו אובייקט מצב = אותה חתימה; החנות מחליפה את האובייקט בכל שינוי
+  if (s === snapFor) return snapCache
   const t = s.timer
   const timer = t ? `${t.running ? 1 : 0}|${t.trackId}|${t.startedAt}|${t.label}` : ''
-  return JSON.stringify({ ...forCloud(s), lastSyncAt: 0, timer })
+  snapFor = s
+  snapCache = JSON.stringify({ ...forCloud(s), lastSyncAt: 0, timer })
+  return snapCache
 }
 
 const LIST_KEYS = [
@@ -261,7 +267,7 @@ function buildNewsFeedback(s: AppState): string {
   })
   return JSON.stringify(
     {
-      about: 'משוב של יהונתן על מהדורות הבוקר. נכתב על ידי האפליקציה, נקרא על ידי עורך החדשות.',
+      about: 'משוב המשתמש על מהדורות הבוקר. נכתב על ידי האפליקציה, נקרא על ידי עורך החדשות.',
       updatedAt: new Date().toISOString(),
       editions,
     },
@@ -331,13 +337,23 @@ let remoteBehind = false
 export async function pullOnce(): Promise<boolean> {
   const remote = await readRemote()
   if (!remote) return false
-  const before = snapshotOf(store.get())
-  if (consumeFreshInstall() || isPristine(store.get())) {
-    // מכשיר חדש (או שרק נפתח פעם אחת בלי תוכן): מה שבענן הוא התמונה, לא תוספת
-    // לתוכן הפתיחה. מזהה המכשיר נשאר שלנו — אחרת כל המכשירים היו נקראים באותו שם.
-    store.replace({ ...remote, timer: null, deviceId: store.get().deviceId })
+  const local = store.get()
+  const before = snapshotOf(local)
+  // רק במבט הראשון על המחסן: מכשיר חדש או בתולי לוקח את התמונה כמו שהיא.
+  // אחר כך המצב המקומי כבר *הוא* המחסן ומיזוג רגיל נכון וזול יותר.
+  if (consumeFreshInstall() || (!hasPulledOnce() && isPristine(local))) {
+    // המחסן הוא האמת — כולל ההגדרות: מכשיר שרק נפתח (סגר את כרטיס ההסבר, בחר ערכה)
+    // לא דורס שעת קימה, שם ומפתח שחיים במחסן. הטיימר נשאר מקומי.
+    store.replace({
+      ...remote,
+      timer: local.timer,
+      deviceId: local.deviceId,
+      atlasApplied: { ...(remote.atlasApplied || {}), ...(local.atlasApplied || {}) },
+    })
   } else {
-    store.set((local) => mergeStates(local, remote))
+    const merged = mergeStates(local, remote)
+    // מיזוג שלא שינה כלום לא מייצר מצב חדש — אחרת כל משיכה מציירת את כל העץ וכותבת לדיסק
+    if (snapshotOf(merged) !== before) store.set(() => merged)
   }
   // אם תוצאת המיזוג שונה ממה שבמחסן — אנחנו מחזיקים משהו שהוא לא. כותבים.
   remoteBehind = contentOf(store.get()) !== contentOf(remote)

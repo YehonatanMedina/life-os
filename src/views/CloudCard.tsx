@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import {
-  HE_STATUS, buildId, createGist, getPairing, getToken, setCredentials, syncNow, useCloudState,
+  HE_STATUS, b64u, buildId, createGist, getPairing, getToken, setCredentials, syncNow, useCloudState,
 } from '../cloud'
 import { useApp } from '../store'
 import { getNotifyKey } from '../push'
@@ -17,6 +17,7 @@ export default function CloudCard() {
   const s = useApp()
   const toast = useToast()
   const [syncing, setSyncing] = useState(false)
+  const [linkShown, setLinkShown] = useState('')
   const [open, setOpen] = useState(false)
   const [token, setToken] = useState(getToken())
   const [gist, setGist] = useState(getPairing())
@@ -120,21 +121,27 @@ export default function CloudCard() {
               const cfg: Record<string, string> = { t: getToken(), p: getPairing() }
               if (s.settings.aiKey) cfg.ak = s.settings.aiKey
               if (getNotifyKey()) cfg.nk = getNotifyKey()
-              const raw = new TextEncoder().encode(JSON.stringify(cfg))
-              let bin = ''
-              raw.forEach((b) => (bin += String.fromCharCode(b)))
-              const b64 = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-              const link = `${location.origin}${location.pathname}#setup=${b64}`
+              const link = `${location.origin}${location.pathname}#setup=${b64u(new TextEncoder().encode(JSON.stringify(cfg)))}`
               try {
                 await navigator.clipboard.writeText(link)
-                toast('קישור ההתקנה הועתק — פתח אותו במכשיר החדש')
+                toast('הועתק. הקישור מכיל את האסימון — להעביר רק בערוץ שלך, ולפתוח פעם אחת')
               } catch {
-                prompt('העתק את הקישור:', link)
+                setLinkShown(link)
               }
             }}
           >
             העתקת קישור התקנה למכשיר חדש
           </button>
+          {linkShown && (
+            <input
+              className="input ltr"
+              readOnly
+              value={linkShown}
+              aria-label="קישור ההתקנה"
+              style={{ gridColumn: '1 / -1' }}
+              onFocus={(e) => e.currentTarget.select()}
+            />
+          )}
         </div>
       )}
 

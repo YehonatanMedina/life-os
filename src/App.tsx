@@ -114,8 +114,8 @@ function Shell() {
   const s = useApp()
   const [view, setView] = useState<View>('today')
   const [calDate, setCalDate] = useState<string | undefined>()
-  // כשהטיימר רץ, כותרת הלשונית מתקתקת כל שנייה כמו התג בסרגל
-  const now = useTick(s.timer ? 1000 : 30000)
+  // התאריך בכותרת מתעדכן לבד גם אם החלון פתוח לילה שלם
+  useTick(60000)
 
   // ערכת נושא
   useEffect(() => {
@@ -193,17 +193,23 @@ function Shell() {
     }
   }, [])
 
-  // כותרת הלשונית מציגה את הטיימר
+  // כותרת הלשונית מציגה את הטיימר — אינטרוול משלה, בלי לצייר את כל העץ מחדש
   useEffect(() => {
     const base = 'מערכת ההפעלה'
-    if (!s.timer) {
+    const t = s.timer
+    if (!t) {
       document.title = base
       return
     }
-    const el = s.timer.accumulated + (s.timer.running ? (Date.now() - s.timer.startedAt) / 60000 : 0)
-    const left = Math.max(0, s.timer.targetMinutes - el)
-    document.title = `${Math.ceil(left)} דק׳ · ${base}`
-  }, [s.timer, now])
+    const upd = () => {
+      const el = t.accumulated + (t.running ? (Date.now() - t.startedAt) / 60000 : 0)
+      document.title = `${Math.ceil(Math.max(0, t.targetMinutes - el))} דק׳ · ${base}`
+    }
+    upd()
+    if (!t.running) return
+    const i = window.setInterval(upd, 1000)
+    return () => clearInterval(i)
+  }, [s.timer])
 
   // מקשי קיצור במחשב
   useEffect(() => {
@@ -329,7 +335,7 @@ function Shell() {
 
 function TimerBadge({ onClick, compact }: { onClick: () => void; compact?: boolean }) {
   const s = useApp()
-  useTick(1000)
+  useTick(s.timer ? 1000 : null)
   if (!s.timer) return null
   const el = s.timer.accumulated + (s.timer.running ? (Date.now() - s.timer.startedAt) / 60000 : 0)
   const left = Math.max(0, s.timer.targetMinutes * 60 - el * 60)

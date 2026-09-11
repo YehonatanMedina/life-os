@@ -5,7 +5,7 @@
 // לנכסים (אייקונים, גופנים): קודם מטמון, ורשת ברקע.
 // לבקשות ל-API של GitHub: אף פעם לא נוגעים — הסנכרון חייב להיות אמיתי.
 // ---------------------------------------------------------------------------
-const VERSION = 'v5'
+const VERSION = 'v6'
 const SHELL = 'life-os-shell-' + VERSION
 const ASSETS = 'life-os-assets-' + VERSION
 
@@ -71,6 +71,8 @@ self.addEventListener('fetch', (e) => {
 
   // סנכרון — תמיד רשת אמיתית, בלי מטמון
   if (url.hostname === 'api.github.com' || url.hostname === 'gist.githubusercontent.com') return
+  // בקשה שביקשה במפורש רשת (בדיקת הגרסה: cache:'no-store') לא עוברת דרך המטמון
+  if (req.cache === 'no-store' || req.cache === 'reload') return
   // חדשות הבוקר והניתוח השבועי — תמיד טריים; שניהם נשמרים ב-localStorage לאופליין
   if (url.pathname.includes('/news/') || url.pathname.includes('/insights/')) return
 

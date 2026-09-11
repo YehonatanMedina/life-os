@@ -12,7 +12,8 @@ export default function FocusTimer() {
   const on = useFocusMode()
   const s = useApp()
   const toast = useToast()
-  useTick(1000)
+  // דופק רק כשהמסך פתוח ויש טיימר — אחרת אין מה לצייר
+  useTick(on && s.timer ? 1000 : null)
   const t = s.timer
   const lockRef = useRef<any>(null)
 

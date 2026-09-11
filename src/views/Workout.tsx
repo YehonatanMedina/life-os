@@ -190,14 +190,7 @@ export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => v
     actions.patchWorkout(date, { finishedAt: Date.now() })
     // סימון ההרגל "אימון" של אותו יום — כדי שלא צריך לסמן פעמיים
     const hb = alive(s.habits).find((h) => h.special === 'workout')
-    if (hb) {
-      const cur = s.days.find((x) => x.date === date)
-      actions.patchDay(date, {
-        habits: { ...(cur?.habits ?? {}), [hb.id]: true },
-        habitsAt: { ...(cur?.habitsAt ?? {}), [hb.id]: Date.now() },
-        workout: day?.kind === 'run' || day?.kind === 'walk' ? 'run' : 'strength',
-      })
-    }
+    if (hb) actions.setHabit(date, hb.id, true, { workout: day?.kind === 'run' || day?.kind === 'walk' ? 'run' : 'strength' })
     vibrate([30, 50, 30])
     toast('האימון נשמר')
     onClose()
