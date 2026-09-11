@@ -723,7 +723,10 @@ export function EventSheet({
   const savingRef = useRef(false)
   const [confirmDel, setConfirmDel] = useState(false)
 
-  useEffect(() => {
+  // הטיוטה נגזרת מהאירוע בזמן הציור (לא באפקט) — הגיליון נפתח ונסגר באותו ציור של הלחיצה
+  const [src, setSrc] = useState<CalEvent | null | undefined>(undefined)
+  if (ev !== src) {
+    setSrc(ev)
     if (ev) {
       // מתאפס רק כשנפתח גיליון חדש — לא בסגירה, אחרת דאבל־קליק על "שמירה" עובר
       savingRef.current = false
@@ -746,9 +749,9 @@ export function EventSheet({
         remind: ev.remind,
       })
     } else setDraft(null)
-  }, [ev])
+  }
 
-  if (!draft) return null
+  if (!ev || !draft) return null
   const up = (p: Partial<CalEvent>) => setDraft((d) => (d ? { ...d, ...p } : d))
   const tracks = alive(s.tracks).sort((a, b) => a.order - b.order)
 

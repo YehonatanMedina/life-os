@@ -68,7 +68,7 @@ describe('ביטול של פקודה שהרשומה שלה נערכה אחר כ�
   // ההחלטה המוצעת (ראו הדוח): ביטול של patch מחזיר רק את השדות שהפקודה שינתה, ורק אם הם עדיין
   // מחזיקים את הערך שהפקודה שמה. שדות שהמשתמש ערך אחרי הפקודה — נשארים שלו.
   // FIXME (major): היום undo עושה putTask({...prev}) — החלפה מלאה של הרשומה, ומוחק עריכה מאוחרת.
-  it.fails('ביטול patchTask לא דורס כותרת שהמשתמש ערך אחרי הפקודה', async () => {
+  it('ביטול patchTask לא דורס כותרת שהמשתמש ערך אחרי הפקודה', async () => {
     const A = await boot(blankState({ tasks: [task({ id: 't1', title: 'ת', est: 1 })] }))
     await thread(A, [atlasMsg('a1', T(9), [{ id: 'p1', op: 'patchTask', taskId: 't1', patch: { status: 'done' } }])])
     await A.At.pollAtlas()
@@ -82,20 +82,9 @@ describe('ביטול של פקודה שהרשומה שלה נערכה אחר כ�
     expect(t.est).toBe(3)
   })
 
-  it('התנהגות נוכחית (מתועדת): ביטול patchTask מחזיר את הרשומה כולה — העריכה המאוחרת אובדת', async () => {
-    const A = await boot(blankState({ tasks: [task({ id: 't1', title: 'ת', est: 1 })] }))
-    await thread(A, [atlasMsg('a1', T(9), [{ id: 'p1', op: 'patchTask', taskId: 't1', patch: { status: 'done' } }])])
-    await A.At.pollAtlas()
-    tick(60_000)
-    A.S.actions.patchTask('t1', { title: 'כותרת שערכתי' })
-    tick(60_000)
-    A.At.undoCommand('p1')
-    expect(A.state().tasks[0].title).toBe('ת') // <- אובדן מידע
-  })
-
   // FIXME (major): אותו דבר בין מכשירים — העריכה של B נדרסת בכל המכשירים, כי ה-putTask של הביטול
   //   מקבל updatedAt חדש ומנצח במיזוג.
-  it.fails('עריכה במכשיר B אחרי הפקודה שורדת ביטול במכשיר A', async () => {
+  it('עריכה במכשיר B אחרי הפקודה שורדת ביטול במכשיר A', async () => {
     const A = await boot(blankState({ tasks: [task({ id: 't1', title: 'ת' })] }))
     await thread(A, [atlasMsg('a1', T(9), [{ id: 'p1', op: 'patchTask', taskId: 't1', patch: { status: 'done' } }])])
     await A.At.pollAtlas()
@@ -112,7 +101,7 @@ describe('ביטול של פקודה שהרשומה שלה נערכה אחר כ�
     expect(B.state().tasks[0].status).toBe('todo')
   })
 
-  it.fails('ביטול patchEvent לא דורס הערות שהמשתמש הוסיף אחרי הפקודה', async () => {
+  it('ביטול patchEvent לא דורס הערות שהמשתמש הוסיף אחרי הפקודה', async () => {
     const A = await boot(blankState({ events: [event({ id: 'e1', date: '2026-09-20', title: 'א', start: '10:00', end: '11:00', allDay: false })] }))
     await thread(A, [atlasMsg('a1', T(9), [{ id: 'p1', op: 'patchEvent', eventId: 'e1', patch: { start: '12:00', end: '13:00' } }])])
     await A.At.pollAtlas()
@@ -123,7 +112,7 @@ describe('ביטול של פקודה שהרשומה שלה נערכה אחר כ�
     expect(A.state().events[0]).toMatchObject({ start: '10:00', end: '11:00', notes: 'להביא מסמכים' })
   })
 
-  it.fails('ביטול setSettings לא דורס הגדרה אחרת שהמשתמש שינה אחרי הפקודה', async () => {
+  it('ביטול setSettings לא דורס הגדרה אחרת שהמשתמש שינה אחרי הפקודה', async () => {
     const A = await boot()
     await thread(A, [atlasMsg('a1', T(9), [{ id: 's1', op: 'setSettings', patch: { wakeTime: '06:00', bedTime: '22:00' } }])])
     await A.At.pollAtlas()

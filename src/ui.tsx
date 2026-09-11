@@ -183,7 +183,20 @@ export function Sheet({
 // ---------------------------------------------------------------------------
 // טוסט
 // ---------------------------------------------------------------------------
-type ToastMsg = { id: number; text: string; action?: { label: string; run: () => void } }
+type ToastMsg = { id: number; tick: number; text: string; action?: { label: string; run: () => void } }
+// "אותה פעולה": שתי הודעות שנדחפו באותו מחזור סינכרוני (לפני שהמיקרו-משימה רצה)
+let toastTick = 0
+let tickQueued = false
+function currentTick() {
+  if (!tickQueued) {
+    tickQueued = true
+    queueMicrotask(() => {
+      tickQueued = false
+      toastTick++
+    })
+  }
+  return toastTick
+}
 const ToastCtx = createContext<(text: string, action?: ToastMsg['action']) => void>(() => {})
 export const useToast = () => useContext(ToastCtx)
 
@@ -193,12 +206,15 @@ export function ToastHost({ children }: { children: React.ReactNode }) {
 
   const push = useCallback((text: string, action?: ToastMsg['action']) => {
     const id = idRef.current++
-    setMsgs((m) => [...m.slice(-2), { id, text, action }])
+    setMsgs((m) => [...m.slice(-2), { id, tick: currentTick(), text, action }])
     setTimeout(() => setMsgs((m) => m.filter((x) => x.id !== id)), action ? 7000 : 2600)
   }, [])
 
-  // הודעה עם כפתור פעולה (למשל "ביטול") לא נדרסת על ידי הודעה רגילה
-  const shown = [...msgs].reverse().find((m) => m.action) ?? msgs[msgs.length - 1]
+  // הודעה עם כפתור פעולה (למשל "ביטול") לא נדרסת על ידי הודעה רגילה מאותה פעולה —
+  // אבל הודעה חדשה שהמשתמש גרם לה אחר כך (למשל "השבוע נסגר") כן מוצגת.
+  const last = msgs[msgs.length - 1]
+  const act = [...msgs].reverse().find((m) => m.action)
+  const shown = last && act && !last.action && last.tick === act.tick ? act : last
 
   return (
     <ToastCtx.Provider value={push}>

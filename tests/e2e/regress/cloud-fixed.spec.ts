@@ -74,9 +74,10 @@ test('cloud #8 + #7 — כפתור קישור ההתקנה מייצר {t,p,ak,nk
   remote.settings.wakeTime = '05:45'
   fake.setGistFile('life-os.json', await encryptJSON(remote, key))
 
+  // A מחזיק את אותו מצב כמו המחסן (אחרת תיקו ב-settingsUpdatedAt → A דוחף 07:30 למחסן)
   const A = await openDevice({
     tag: 'A',
-    state: baseState({ deviceId: 'dA', aiKey: ai }),
+    state: { ...remote, deviceId: 'dA' },
     login: true,
     extra: { 'life-os-notify-key': 'nk-test-123' },
     allowConsole: [/status of 404/],
@@ -119,7 +120,9 @@ test('cloud #8 + #7 — כפתור קישור ההתקנה מייצר {t,p,ak,nk
 
   // לשונית שכבר פתוחה בלי חיבור — הדבקת הקישור משנה רק את ה-hash (בלי מסמך חדש)
   const D = await openDevice({ tag: 'D', state: null, creds: false, allowConsole: [/status of 404/] })
-  await waitStatus(D.page, 'לא מחובר', 10_000)
+  await expect(D.page.getByText('הרגלי היום')).toBeVisible()
+  // בלי חיבור אין נקודת סנכרון בכלל — מוודאים שאין אישורים ואז מדביקים את הקישור
+  expect(await D.page.evaluate(() => localStorage.getItem('life-os-gh-token'))).toBeNull()
   await D.page.evaluate((h) => {
     location.hash = h
   }, '#setup=' + b64)

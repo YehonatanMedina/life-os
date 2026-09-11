@@ -97,29 +97,30 @@ test.describe('clock() — שעון אחד בכרטיס, בסרגל, במיקו�
 test.describe('מגן הקליקים (ui.tsx › shieldClicks)', () => {
   test.use({ seed: onboarded })
 
-  test('עכבר עובר דרך המגן מיד אחרי סגירת גיליון, ולא נשארת שכבה', async ({ app }) => {
-    const shields = () =>
+  // a561495: המגן הוא ספירה (click בלכידה) ולא שכבה. ב-2272316 (שכבה שמוסרת ב-pointerdown)
+  // הקליק הראשון של העכבר אחרי הסגירה עדיין נבלע — Chrome משגר click רק על אב משותף של יעדי
+  // mousedown/mouseup, ולאלמנט שנותק אין כזה. נמדד כאן לפני ההחלפה: had=1 → הניווט לא קרה.
+  test('עכבר עובר מיד אחרי סגירת גיליון (בתוך 350 מ״ש), ואין שום שכבה ב-DOM', async ({ app }) => {
+    const overlays = () =>
       app.evaluate(() => document.querySelectorAll('body > div[aria-hidden="true"][style*="9999"]').length)
     await go(app, 'הגדרות')
     // "+ חדש" הראשון בהגדרות הוא של הבלוקים הקבועים
     await app.getByRole('button', { name: '+ חדש' }).first().click()
     const dlg = app.getByRole('dialog', { name: 'בלוק קבוע' })
     await expect(dlg).toBeVisible()
-    // בפיתוח (StrictMode) הפתיחה שותלת מגן לרגע — לכל היותר אחד, ונעלם
-    expect(await shields()).toBeLessThanOrEqual(1)
-    await app.waitForTimeout(500)
-    expect(await shields()).toBe(0)
+    expect(await overlays()).toBe(0)
 
     const todayBtn = app.locator('nav.sidebar').getByRole('button', { name: 'היום', exact: true })
     const box = (await todayBtn.boundingBox())!
+    const t0 = Date.now()
     await dlg.getByRole('button', { name: 'סגירה' }).click()
-    await expect(dlg).toBeHidden()
-    expect(await shields()).toBe(1)
-    // קליק עכבר בלי בדיקות actionability — בתוך חלון ה-350 מ״ש של המגן
+    // קליק עכבר בלי בדיקות actionability — מיד, בתוך חלון ה-350 מ״ש
     await app.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    const elapsed = Date.now() - t0
     await expect(app.locator('nav.sidebar button[aria-current="true"]')).toHaveText(/היום/, { timeout: 1_500 })
-    expect(await shields()).toBe(0)
-    await app.waitForTimeout(500)
-    expect(await shields()).toBe(0)
+    expect(elapsed, 'הקליק נמדד בתוך חלון המגן').toBeLessThan(350)
+    expect(await overlays()).toBe(0)
+    await app.waitForTimeout(400)
+    expect(await overlays()).toBe(0)
   })
 })

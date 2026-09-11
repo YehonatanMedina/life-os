@@ -56,15 +56,36 @@ interface AtlasCache {
   todayEtag?: string
   /** מה שבוצע ואפשר לבטל: מזהה פקודה -> איך מחזירים */
   undo: Record<string, UndoEntry>
+  /** פקודות שנכשלו: מזהה -> הסיבה — כדי שהצ׳יפ יגיד "לא בוצע" ולא ייראה כהצלחה */
+  failed?: Record<string, string>
   lastPollAt?: number
   error?: string
 }
 
 type UndoEntry =
-  | { kind: 'event' | 'task' | 'rule' | 'workoutDay' | 'track'; id: ID; prev: any | null }
+  | { kind: 'event' | 'task' | 'rule' | 'workoutDay' | 'track'; id: ID; prev: any | null; patch?: Record<string, unknown> }
   | { kind: 'exercise'; dayId: ID; id: ID; prev: Exercise | null; index?: number }
   | { kind: 'weekGoals'; ws: string; prev: WeekGoal[] | undefined }
-  | { kind: 'settings'; prev: Record<string, unknown> }
+  | { kind: 'settings'; prev: Record<string, unknown>; patch?: Record<string, unknown> }
+
+/**
+ * ביטול של עדכון: מחזירים רק שדות שהפקודה שינתה ושעדיין מחזיקים את הערך שהיא
+ * כתבה. שדה שהמשתמש ערך אחר כך (כאן או במכשיר אחר) נשאר שלו.
+ */
+function revertPatch(current: Record<string, any>, prev: Record<string, any>, patch: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const k of Object.keys(patch)) {
+    if (JSON.stringify(current[k]) === JSON.stringify(patch[k])) out[k] = prev[k]
+  }
+  return out
+}
+/** הרשומה אחרי הביטול — שדה שהפקודה הוסיפה ושלא היה קודם נמחק, לא נשאר כ-undefined */
+function reverted<T extends Record<string, any>>(current: T, prev: Record<string, any>, patch: Record<string, unknown>): T {
+  const next: Record<string, any> = { ...current, ...revertPatch(current, prev, patch) }
+  for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k]
+  next.deleted = !!next.deleted
+  return next as T
+}
 
 // -- מצב מקומי ------------------------------------------------------------------
 let cache: AtlasCache = load()
@@ -244,13 +265,15 @@ export async function pollAtlas(): Promise<boolean> {
     const th = await readFile('thread.json', cache.threadEtag)
     if (th.status === 200 && th.text) {
       const plain = await decryptEnvelope(th.text, key)
-      const remote = JSON.parse(plain) as { messages?: AtlasMessage[] }
-      const merged = mergeThread(cache.messages, remote.messages ?? [])
+      const remote = JSON.parse(plain) as { messages?: unknown }
+      const merged = mergeThread(cache.messages, remote?.messages)
       save({ messages: merged, threadEtag: th.etag, lastPollAt: Date.now(), error: undefined })
       changed = true
       applyWhenSafe(merged)
     } else if (th.status === 304 || th.status === 404) {
       save({ lastPollAt: Date.now(), error: undefined })
+      // השיחה במטמון עשויה להכיל פקודות שעוד לא בוצעו (מטמון שנשמר לפני הסנכרון)
+      if (th.status === 304 && cache.messages.length) applyWhenSafe(cache.messages)
     } else if (th.status === 401 || th.status === 403) {
       save({ error: 'אין גישה למאגר של אטלס — הטוקן פג או חסר הרשאה.' })
     }
@@ -273,11 +296,25 @@ export async function pollAtlas(): Promise<boolean> {
  * השיחה מהמאגר היא האמת. מה שנשאר מקומי: הודעות שלו שעדיין לא הגיעו לשם
  * (ממתינות או נכשלו).
  */
-function mergeThread(local: AtlasMessage[], remote: AtlasMessage[]): AtlasMessage[] {
-  const have = new Set(remote.map((m) => m.id))
+const isMsg = (m: any): m is AtlasMessage =>
+  !!m && typeof m === 'object' && typeof m.id === 'string' && (m.from === 'user' || m.from === 'atlas') && typeof m.text === 'string'
+
+function mergeThread(local: AtlasMessage[], remoteRaw: unknown): AtlasMessage[] {
+  // רק הודעות תקינות, ובלי כפילויות — הראשונה לכל מזהה
+  const seen = new Set<string>()
+  const remote: AtlasMessage[] = []
+  for (const m of Array.isArray(remoteRaw) ? remoteRaw : []) {
+    if (!isMsg(m) || seen.has(m.id)) continue
+    seen.add(m.id)
+    remote.push({ ...m, at: typeof m.at === 'string' ? m.at : new Date(Number(m.at) || 0).toISOString(), pending: false })
+  }
   const answered = new Set(remote.filter((m) => m.replyTo).map((m) => m.replyTo))
-  const extra = local.filter((m) => m.from === 'user' && !have.has(m.id) && !answered.has(m.id))
-  const out = [...remote.map((m) => ({ ...m, pending: false })), ...extra]
+  const oldest = remote.length >= 80 ? Math.min(...remote.map((m) => Date.parse(m.at) || 0)) : 0
+  const extra = local
+    .filter((m) => isMsg(m) && m.from === 'user' && !seen.has(m.id) && !answered.has(m.id))
+    // הודעה שישנה מכל חלון השיחה במאגר כבר לא באמת ממתינה — הסוכן חתך אותה
+    .map((m) => (m.pending && oldest && (Date.parse(m.at) || 0) < oldest ? { ...m, pending: false } : m))
+  const out = [...remote, ...extra]
   // לפי זמן אמיתי, לא לפי המחרוזת — ISO עם אזורי זמן שונים לא ממוין לקסיקוגרפית
   return out.sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0)).slice(-120)
 }
@@ -330,6 +367,7 @@ function applyPending(messages: AtlasMessage[]) {
   const s = store.get()
   const done = s.atlasApplied ?? {}
   const undo: Record<string, UndoEntry> = { ...cache.undo }
+  const failed: Record<string, string> = { ...(cache.failed ?? {}) }
   const applied: Record<string, number> = {}
   for (const m of messages) {
     if (m.from !== 'atlas' || !m.commands?.length) continue
@@ -343,6 +381,7 @@ function applyPending(messages: AtlasMessage[]) {
         console.error('atlas command failed', c, e)
         // מסמנים כבוצעה כדי שלא תרוץ שוב ושוב בכל משיכה
         applied[c.id] = Date.now()
+        failed[c.id] = String((e as Error)?.message ?? e)
       }
     }
   }
@@ -350,8 +389,10 @@ function applyPending(messages: AtlasMessage[]) {
     actions.markAtlasApplied(applied)
     // מנקים ביטולים ישנים — 200 אחרונים
     const keys = Object.keys(undo)
-    for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete undo[k]
-    save({ undo })
+    for (const k of keys.slice(0, Math.max(0, keys.length - 1000))) delete undo[k]
+    const fkeys = Object.keys(failed)
+    for (const k of fkeys.slice(0, Math.max(0, fkeys.length - 1000))) delete failed[k]
+    save({ undo, failed })
   }
 }
 
@@ -374,8 +415,11 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
     case 'patchEvent': {
       const prev = s.events.find((e) => e.id === c.eventId)
       if (!prev) throw new Error('event not found')
-      actions.patchEvent(c.eventId, strip(c.patch))
-      return { kind: 'event', id: c.eventId, prev }
+      const patch = strip(c.patch)
+      if (patch.date !== undefined && !isDate(patch.date)) throw new Error('patchEvent: bad date')
+      actions.patchEvent(c.eventId, patch)
+      // patchEvent מסמן touched — גם זה חלק מהשינוי שהביטול מחזיר
+      return { kind: 'event', id: c.eventId, prev, patch: { ...patch, touched: true } }
     }
     case 'deleteEvent': {
       const prev = s.events.find((e) => e.id === c.eventId)
@@ -386,12 +430,19 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
     case 'addRule': {
       const id = c.rule?.id || derived('rl', c)
       if (s.rules.some((r) => r.id === id)) return null
+      const rl = strip(c.rule)
+      const isHM = (v: unknown) => typeof v === 'string' && /^\d{2}:\d{2}$/.test(v)
+      if (typeof rl.title !== 'string' || !rl.title.trim() || !isHM(rl.start) || !isHM(rl.end)) throw new Error('addRule: bad title/times')
+      if (rl.days !== undefined && !(Array.isArray(rl.days) && rl.days.every((d: unknown) => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6))) throw new Error('addRule: bad days')
+      if (rl.from !== undefined && !isDate(rl.from)) delete rl.from
+      if (rl.freq !== 'monthly' && !(rl.days as unknown[] | undefined)?.length) throw new Error('addRule: no days')
+      if (rl.freq === 'monthly' && !(Number.isInteger(rl.monthDay) && rl.monthDay >= 1 && rl.monthDay <= 31)) throw new Error('addRule: bad monthDay')
       const r = {
         active: true,
         days: [],
         kind: 'block',
         from: today(),
-        ...strip(c.rule),
+        ...rl,
         id,
         updatedAt: Date.now(),
       } as unknown as RecurRule
@@ -401,8 +452,9 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
     case 'patchRule': {
       const prev = s.rules.find((r) => r.id === c.ruleId)
       if (!prev) throw new Error('rule not found')
-      actions.upsertRule({ ...prev, ...strip(c.patch), id: prev.id })
-      return { kind: 'rule', id: prev.id, prev }
+      const patch = strip(c.patch)
+      actions.upsertRule({ ...prev, ...patch, id: prev.id })
+      return { kind: 'rule', id: prev.id, prev, patch }
     }
     case 'deleteRule': {
       const prev = s.rules.find((r) => r.id === c.ruleId)
@@ -413,16 +465,21 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
     case 'addTask': {
       const id = c.task?.id || derived('t', c)
       if (s.tasks.some((t) => t.id === id)) return null
-      actions.putTask({ status: 'todo', ...strip(c.task), id } as Task)
+      const tk = strip(c.task)
+      if (typeof tk.title !== 'string' || !tk.title.trim()) throw new Error('addTask: no title')
+      if (tk.due !== undefined && !isDate(tk.due)) throw new Error('addTask: bad due')
+      actions.putTask({ status: 'todo', ...tk, id } as Task)
       return { kind: 'task', id, prev: null }
     }
     case 'patchTask': {
       const prev = s.tasks.find((t) => t.id === c.taskId)
       if (!prev) throw new Error('task not found')
       const patch = strip(c.patch)
+      if (typeof patch.title === 'string' && !patch.title.trim()) delete patch.title
+      if (patch.due !== undefined && !isDate(patch.due)) throw new Error('patchTask: bad due')
       if (patch.status === 'done' && prev.status !== 'done') patch.doneAt = Date.now()
       actions.patchTask(c.taskId, patch)
-      return { kind: 'task', id: c.taskId, prev }
+      return { kind: 'task', id: c.taskId, prev, patch }
     }
     case 'deleteTask': {
       const prev = s.tasks.find((t) => t.id === c.taskId)
@@ -444,11 +501,13 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
     case 'addWorkoutDay': {
       const id = c.day?.id || derived('wd', c)
       if ((s.workoutPlan ?? []).some((d) => d.id === id)) return null
+      const wd = strip(c.day)
+      if (!Number.isInteger(wd.dow) || wd.dow < 0 || wd.dow > 6 || typeof wd.title !== 'string') throw new Error('addWorkoutDay: bad day')
       const day: WorkoutDay = {
         kind: 'gym',
         title: '',
         dow: 0,
-        ...strip(c.day),
+        ...wd,
         id,
         updatedAt: Date.now(),
         exercises: (c.day?.exercises ?? []).map((x: any, i: number) => ({
@@ -463,8 +522,9 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
     case 'patchWorkoutDay': {
       const prev = (s.workoutPlan ?? []).find((d) => d.id === c.dayId)
       if (!prev) throw new Error('day not found')
-      actions.patchWorkoutDay(c.dayId, strip(c.patch))
-      return { kind: 'workoutDay', id: c.dayId, prev }
+      const patch = strip(c.patch)
+      actions.patchWorkoutDay(c.dayId, patch)
+      return { kind: 'workoutDay', id: c.dayId, prev, patch }
     }
     case 'deleteWorkoutDay': {
       const prev = (s.workoutPlan ?? []).find((d) => d.id === c.dayId)
@@ -500,23 +560,35 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
       const allowed = ['wakeTime', 'bedTime', 'dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'name', 'reviewDow']
       const NUM = ['dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'reviewDow']
       // רק מפתחות מותרים, ורק מהטיפוס הנכון — "6" או NaN היו הופכים את הקיבולת ל-NaN
-      const safe = Object.fromEntries(
-        Object.entries(patch).filter(([k, v]) => allowed.includes(k) && (NUM.includes(k) ? Number.isFinite(v) : typeof v === 'string')),
-      )
+      const RANGE: Record<string, [number, number]> = { dailyTokenGoal: [1, 24], weeklyTokenGoal: [1, 168], tokenMinutes: [10, 240], reviewDow: [0, 6] }
+      const okVal = (k: string, v: unknown) =>
+        NUM.includes(k)
+          ? typeof v === 'number' && Number.isFinite(v) && v >= RANGE[k][0] && v <= RANGE[k][1]
+          : k === 'wakeTime' || k === 'bedTime'
+            ? typeof v === 'string' && /^\d{2}:\d{2}$/.test(v)
+            : typeof v === 'string'
+      const safe = Object.fromEntries(Object.entries(patch).filter(([k, v]) => allowed.includes(k) && okVal(k, v)))
+      if (!Object.keys(safe).length) throw new Error('setSettings: nothing valid')
       const prev = Object.fromEntries(Object.keys(safe).map((k) => [k, (s.settings as any)[k]]))
       actions.setSettings(safe)
-      return { kind: 'settings', prev }
+      return { kind: 'settings', prev, patch: safe }
     }
     case 'addTrack': {
       const id = c.track?.id || derived('tr', c)
       if (s.tracks.some((t) => t.id === id)) return null
+      const tr = strip(c.track)
+      if (typeof tr.name !== 'string' || !tr.name.trim()) throw new Error('addTrack: no name')
+      if (typeof tr.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(tr.color)) delete tr.color
+      if (typeof tr.order !== 'number' || !Number.isFinite(tr.order)) delete tr.order
+      if (typeof tr.emoji !== 'string') delete tr.emoji
+      if (typeof tr.goal !== 'string') delete tr.goal
       actions.upsertTrack({
         color: '#5b5bd6',
         board: true,
         order: alive(s.tracks).length,
         emoji: '📌',
         name: '',
-        ...strip(c.track),
+        ...tr,
         id,
         updatedAt: Date.now(),
       })
@@ -532,22 +604,34 @@ export function undoCommand(cmdId: string): boolean {
   const u = cache.undo[cmdId]
   if (!u) return false
   switch (u.kind) {
-    case 'event':
-      if (u.prev) actions.putEvent({ ...u.prev, deleted: u.prev.deleted ?? false })
+    case 'event': {
+      const cur = store.get().events.find((e) => e.id === u.id)
+      if (u.prev && u.patch && cur) actions.putEvent(reverted(cur, u.prev, u.patch))
+      else if (u.prev) actions.putEvent({ ...u.prev, deleted: u.prev.deleted ?? false })
       else actions.deleteEvent(u.id)
       break
-    case 'task':
-      if (u.prev) actions.putTask({ ...u.prev, deleted: u.prev.deleted ?? false })
+    }
+    case 'task': {
+      const cur = store.get().tasks.find((t) => t.id === u.id)
+      if (u.prev && u.patch && cur) actions.putTask(reverted(cur, u.prev, u.patch))
+      else if (u.prev) actions.putTask({ ...u.prev, deleted: u.prev.deleted ?? false })
       else actions.deleteTask(u.id)
       break
-    case 'rule':
-      if (u.prev) actions.upsertRule({ ...u.prev, deleted: u.prev.deleted ?? false })
+    }
+    case 'rule': {
+      const cur = store.get().rules.find((r) => r.id === u.id)
+      if (u.prev && u.patch && cur) actions.upsertRule(reverted(cur, u.prev, u.patch))
+      else if (u.prev) actions.upsertRule({ ...u.prev, deleted: u.prev.deleted ?? false })
       else actions.deleteRule(u.id)
       break
-    case 'workoutDay':
-      if (u.prev) actions.upsertWorkoutDay({ ...u.prev, deleted: u.prev.deleted ?? false })
+    }
+    case 'workoutDay': {
+      const cur = (store.get().workoutPlan ?? []).find((d) => d.id === u.id)
+      if (u.prev && u.patch && cur) actions.upsertWorkoutDay(reverted(cur, u.prev, u.patch))
+      else if (u.prev) actions.upsertWorkoutDay({ ...u.prev, deleted: u.prev.deleted ?? false })
       else actions.deleteWorkoutDay(u.id)
       break
+    }
     case 'exercise':
       if (u.prev) {
         // החלפה מלאה במקום המקורי — לא מיזוג, ולא הוספה בסוף עם ברירות מחדל
@@ -563,7 +647,7 @@ export function undoCommand(cmdId: string): boolean {
       actions.setWeekGoals(u.ws, u.prev ?? [])
       break
     case 'settings':
-      actions.setSettings(u.prev as any)
+      actions.setSettings((u.patch ? revertPatch(store.get().settings as any, u.prev, u.patch) : u.prev) as any)
       break
     case 'track':
       if (u.prev) actions.upsertTrack(u.prev)
@@ -579,9 +663,14 @@ export function undoCommand(cmdId: string): boolean {
 export function canUndo(cmdId: string): boolean {
   return !!cache.undo[cmdId]
 }
+/** למה הפקודה נכשלה (או '' אם בוצעה) */
+export function commandFailed(cmdId: string): string {
+  return cache.failed?.[cmdId] ?? ''
+}
 
 // -- תיאור פקודה בעברית --------------------------------------------------------------
 export function describeCommand(c: AtlasCommand): string {
+  if (!c || typeof c !== 'object' || typeof c.op !== 'string') return 'פקודה לא מוכרת'
   const s = store.get()
   const ev = (id: string) => s.events.find((e) => e.id === id)?.title ?? 'אירוע'
   const tk = (id: string) => s.tasks.find((t) => t.id === id)?.title ?? 'משימה'
@@ -633,5 +722,7 @@ export function describeCommand(c: AtlasCommand): string {
 
 /** הפתק של הבוקר — רק אם הוא של היום */
 export function todayNote(c: AtlasCache): AtlasToday | null {
-  return c.today && c.today.date === today() ? c.today : null
+  // פתק פגום (טקסט שאינו מחרוזת) לא מפיל את "היום" — פשוט אין פתק
+  const t = c.today
+  return t && typeof t === 'object' && typeof t.text === 'string' && t.date === today() ? t : null
 }

@@ -433,8 +433,13 @@ export function TaskSheet({ task, onClose }: { task: Task | null; onClose: () =>
   const [del, setDel] = useState(false)
   const [newSub, setNewSub] = useState('')
 
-  useEffect(() => setD(task ? { ...task, sub: task.sub ? [...task.sub] : [] } : null), [task])
-  if (!d) return null
+  const [src, setSrc] = useState(task)
+  if (task !== src) {
+    // שינוי הרשומה → טיוטה חדשה באותו ציור (לא באפקט, שהיה מאחר בציור אחד)
+    setSrc(task)
+    setD(task ? { ...task, sub: task.sub ? [...task.sub] : [] } : null)
+  }
+  if (!task || !d) return null
 
   const up = (p: Partial<Task>) => setD((x) => (x ? { ...x, ...p } : x))
   const tracks = alive(s.tracks).sort((a, b) => a.order - b.order)

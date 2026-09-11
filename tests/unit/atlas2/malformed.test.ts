@@ -90,7 +90,7 @@ describe('הודעות פגומות בתוך messages', () => {
 
   // FIXME (major): ערך null אחד ב-messages → mergeThread זורק (null.id) → כל השיחה "לא ניתנת לקריאה",
   // שום הודעה לא מוצגת ושום פקודה לא מבוצעת עד שהסוכן ישכתב את הקובץ.
-  it.fails('null בתוך messages לא מפיל את כל השיחה', async () => {
+  it('null בתוך messages לא מפיל את כל השיחה', async () => {
     const h = await boot()
     await thread(h, [null, atlasMsg('ok', T(10), [{ id: 'c-ok', op: 'addTask', task: { title: 'תקינה' } }])])
     expect(await h.At.pollAtlas()).toBe(true)
@@ -126,7 +126,7 @@ describe('הודעות פגומות בתוך messages', () => {
 
   // FIXME (minor): mergeThread לא מסנן כפילויות מהמאגר — שתי בועות עם אותו key
   // (אזהרת React בקונסול, שתי בועות זהות על המסך).
-  it.fails('אותו מזהה הודעה פעמיים במאגר — מוצג פעם אחת', async () => {
+  it('אותו מזהה הודעה פעמיים במאגר — מוצג פעם אחת', async () => {
     const h = await boot()
     await thread(h, [atlasMsg('a1', T(9)), atlasMsg('a1', T(9))])
     await h.At.pollAtlas()
@@ -209,7 +209,7 @@ describe('פקודות חסרות שדות', () => {
   //   addEvent בלי date / עם date שאינו ISO, addRule עם days שאינו מערך (הגדרות → r.days.map קורס),
   //   addTask בלי title (היום/סקירה → t.title.length קורס), addTrack עם name שאינו מחרוזת.
   //   sanitize() בטעינה הבאה זורק אותן — כלומר הן "נעלמות" ברענון, אבל עד אז המסכים קורסים.
-  it.fails('רשומות פגומות מבחינת מבנה לא נכנסות למצב', async () => {
+  it('רשומות פגומות מבחינת מבנה לא נכנסות למצב', async () => {
     const h = await boot(SLOPPY_STATE())
     await thread(h, [
       atlasMsg('a1', T(9), [
@@ -231,7 +231,7 @@ describe('פקודות חסרות שדות', () => {
 
   // FIXME (major): setSettings מסנן רק לפי שם המפתח, לא לפי סוג/טווח — name כאובייקט קורס ברינדור,
   //   tokenMinutes: 0 → חלוקה באפס בקיבולת, reviewDow: 9 → אין יום סקירה, wakeTime מספר → פרסור שעה נכשל.
-  it.fails('setSettings דוחה ערכים מהסוג/הטווח הלא נכון', async () => {
+  it('setSettings דוחה ערכים מהסוג/הטווח הלא נכון', async () => {
     const h = await boot()
     await thread(h, [atlasMsg('a1', T(9), [{ id: 'b-set-types', op: 'setSettings', patch: { wakeTime: 12345, tokenMinutes: 0, dailyTokenGoal: -5, name: { evil: true }, reviewDow: 9 } }])])
     await h.At.pollAtlas()
@@ -252,31 +252,28 @@ describe('פקודות חסרות שדות', () => {
     expect(h.state().settings).toMatchObject({ wakeTime: '07:30', reviewDow: 0 })
   })
 
-  it('monthDay: 40 — הכלל נוצר ומתאים ליום האחרון בכל חודש (התנהגות נוכחית, מתועדת)', async () => {
+  it('monthDay: 40 — נדחה: יום בחודש הוא 1–31, הפקודה מסומנת ולא נוצר כלום', async () => {
     const h = await boot()
     await thread(h, [atlasMsg('a1', T(9), [{ id: 'md', op: 'addRule', rule: { title: 'יום 40', freq: 'monthly', monthDay: 40, start: '10:00', end: '11:00' } }])])
     await h.At.pollAtlas()
-    const evs = h.state().events.filter((e) => e.ruleId === 'rl-md' && !e.deleted).map((e) => e.date)
-    expect(evs.length).toBeGreaterThan(0)
-    for (const d of evs) {
-      const [y, m, day] = d.split('-').map(Number)
-      expect(day).toBe(new Date(y, m, 0).getDate())
-    }
+    expect(h.state().rules.find((r) => r.id === 'rl-md')).toBeUndefined()
+    expect(h.state().events.some((e) => e.ruleId === 'rl-md')).toBe(false)
+    expect(h.state().atlasApplied?.md).toBeTruthy()
+    expect(h.At.undoCommand('md')).toBe(false)
   })
 
-  it('addRule עם days: [] ובלי freq — נוצר בלי מופעים, לא זורק, ניתן לביטול', async () => {
+  it('addRule עם days: [] ובלי freq — נדחה: כלל בלי ימים הוא זבל, הפקודה מסומנת ולא נוצר כלום', async () => {
     const h = await boot()
     await thread(h, [atlasMsg('a1', T(9), [{ id: 'nd', op: 'addRule', rule: { title: 'ריק', days: [], start: '10:00', end: '11:00' } }])])
     await h.At.pollAtlas()
-    expect(h.state().rules.find((r) => r.id === 'rl-nd')).toMatchObject({ title: 'ריק', days: [], active: true })
-    expect(h.state().events.filter((e) => e.ruleId === 'rl-nd')).toHaveLength(0)
-    expect(h.At.undoCommand('nd')).toBe(true)
-    expect(h.state().rules.find((r) => r.id === 'rl-nd')?.deleted).toBe(true)
+    expect(h.state().rules.find((r) => r.id === 'rl-nd')).toBeUndefined()
+    expect(h.state().atlasApplied?.nd).toBeTruthy()
+    expect(h.At.undoCommand('nd')).toBe(false)
   })
 
   // FIXME (major): describeCommand → default מחזיר c.op כמו שהוא. op שהוא אובייקט/מערך → React זורק
   //   "Objects are not valid as a React child" והמסך של אטלס כולו לבן (ראו tests/e2e/atlas2/malformed.spec.ts).
-  it.fails('describeCommand מחזיר תמיד מחרוזת — גם ל-op שאינו מחרוזת', async () => {
+  it('describeCommand מחזיר תמיד מחרוזת — גם ל-op שאינו מחרוזת', async () => {
     const h = await boot()
     expect(typeof h.At.describeCommand({ id: 'x', op: { $: 1 } as any })).toBe('string')
     expect(typeof h.At.describeCommand({ id: 'x', op: undefined as any })).toBe('string')
@@ -307,7 +304,7 @@ describe('עומס', () => {
 
   // FIXME (minor): ניקוי הביטולים משאיר 200 אחרונים — בתשובה של 300 פקודות, 100 הראשונות
   //   מאבדות את "ביטול" מיד, באותה תשובה שבה הופיעו.
-  it.fails('300 פקודות בתשובה אחת — כולן ניתנות לביטול מיד אחרי הביצוע', async () => {
+  it('300 פקודות בתשובה אחת — כולן ניתנות לביטול מיד אחרי הביצוע', async () => {
     const h = await boot()
     const cmds: AtlasCommand[] = []
     for (let i = 0; i < 300; i++) cmds.push({ id: `m-${i}`, op: 'addTask', task: { title: `משימה ${i}` } })

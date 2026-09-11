@@ -74,7 +74,7 @@ test('פתק של 2,000 תווים (עם שורות ומילים ארוכות) �
   await expect(composer(A.page)).toBeVisible()
 })
 
-test('פתק פגום: today.json בלי date / עם date לא תקין / text לא מחרוזת — לא מפיל', async ({ fake, key, openDevice }) => {
+test('פתק פגום: today.json בלי date / עם date מספרי — נמשך, לא מוצג, לא מפיל', async ({ fake, key, openDevice }) => {
   const ai = await seedCloud(fake, key)
   await writeThread(fake, ai, [])
   await writeToday(fake, ai, { text: 'בלי תאריך' })
@@ -82,12 +82,20 @@ test('פתק פגום: today.json בלי date / עם date לא תקין / text �
   await waitSynced(A.page)
   await expect.poll(async () => (await readAtlasCache(A.page))?.today?.text, { timeout: 15_000 }).toBe('בלי תאריך')
   await expect(A.page.locator('.atlas-card')).toHaveCount(0)
-  await writeToday(fake, ai, { date: today, text: { html: '<b>x</b>' } })
+  await writeToday(fake, ai, { date: 12345, text: 'תאריך מספרי' })
   await composerPoll(A.page)
-  await expect.poll(async () => JSON.stringify((await readAtlasCache(A.page))?.today?.text), { timeout: 15_000 }).toContain('html')
+  await expect.poll(async () => (await readAtlasCache(A.page))?.today?.text, { timeout: 15_000 }).toBe('תאריך מספרי')
   await A.page.getByRole('button', { name: 'היום', exact: true }).filter({ visible: true }).first().click()
-  await sleep(500)
-  // FIXME (major, ראו הדוח): AtlasCard מרנדר {note.text} ישירות — text שאינו מחרוזת מפיל את "היום"
-  // הבדיקה מתעדת: או שהכרטיס לא מוצג, או שהוא מוצג כטקסט — אבל המסך חי
+  await expect(A.page.locator('.atlas-card')).toHaveCount(0)
+})
+
+test('today.json עם text שאינו מחרוזת — לא מפיל את "היום"', async ({ fake, key, openDevice }) => {
+  const ai = await seedCloud(fake, key)
+  await writeThread(fake, ai, [])
+  await writeToday(fake, ai, { date: today, text: { html: '<b>x</b>' } })
+  const A = await openDevice({ tag: 'A', state: baseState({ deviceId: 'dA', aiKey: ai }), login: true, allowConsole: ALLOW })
+  await waitSynced(A.page)
+  await expect.poll(async () => JSON.stringify((await readAtlasCache(A.page))?.today?.text ?? null), { timeout: 15_000 }).toContain('html')
   await expect(A.page.getByRole('button', { name: 'אטלס', exact: true }).filter({ visible: true }).first()).toBeVisible()
+  await expect(A.page.getByText('משהו נשבר בטעינה')).toHaveCount(0)
 })

@@ -78,6 +78,18 @@ export async function work(page: Page, minutes: number) {
   await page.clock.runFor(1_100)
 }
 
+/**
+ * הסקירה על השבוע הנוכחי. כשיש "סקירה ממתינה" (גם השגויה של פגם #2) המסך
+ * נפתח על השבוע שעבר — לוחצים "השבוע" כדי לראות את המספרים של עכשיו.
+ */
+export async function openReview(page: Page) {
+  await nav(page, 'סקירה')
+  // הכפתור קיים רק כשהמסך לא על השבוע הנוכחי
+  const btn = page.getByRole('button', { name: 'השבוע', exact: true })
+  if (await btn.isVisible()) await btn.click()
+  await expect(page.locator('.sec-h, .sec .spread').filter({ hasText: 'שבוע' }).first().locator('.chip', { hasText: 'בעיצומו' })).toBeVisible()
+}
+
 /** גודל המצב השמור בבייטים (UTF-8) */
 export async function storageBytes(page: Page): Promise<number> {
   return page.evaluate(() => new Blob([localStorage.getItem('life-os-v1') || '']).size)

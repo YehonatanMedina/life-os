@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { actions, getPersistError, subscribePersistError, useApp, weekLog } from './store'
-import { addDays, clock, today as todayISO, weekStart, niceDate } from './dates'
+import { addDays, clock, isAfterMidnight, today as todayISO, weekStart, niceDate } from './dates'
 import { ToastHost, setFocusMode, useTick } from './ui'
 import Today from './views/Today'
 import CalendarView from './views/CalendarView'
 import Projects from './views/Projects'
-import Review, { ReviewLock, reviewWeekOf } from './views/Review'
+import Review, { ReviewLock, reviewPending, reviewWeekOf } from './views/Review'
 import SettingsView from './views/Settings'
 import FocusTimer from './views/FocusTimer'
 import AtlasView from './views/Atlas'
@@ -228,12 +228,12 @@ function Shell() {
   }, [])
 
   // נעילת סקירה שבועית — הסקירה מסכמת את השבוע שהסתיים, לא את זה שהתחיל
-  const reviewWs = reviewWeekOf(todayISO())
+  const reviewWs = reviewWeekOf(todayISO(), s.settings.reviewDow)
   const wl = weekLog(s, reviewWs)
   const isReviewDay = new Date().getDay() === s.settings.reviewDow
   const snoozed = (wl.snoozeUntil ?? 0) > Date.now()
-  const hasData = s.sessions.some((x) => !x.deleted) || s.days.length > 0
-  const locked = s.settings.reviewLock && isReviewDay && !wl.review && !snoozed && hasData
+  // נועלים רק על שבוע שיש בו מה לסכם — לא על שבוע ריק במכשיר שרק נפתח
+  const locked = s.settings.reviewLock && isReviewDay && reviewPending(s) === reviewWs && !snoozed
 
   const goto = (v: string, arg?: any) => {
     setView(v as View)
@@ -275,7 +275,10 @@ function Shell() {
       <header className="topbar">
         <div className="grow">
           <h1>{view === 'settings' ? 'הגדרות' : NAV.find((n) => n.id === view)?.label}</h1>
-          <div className="sub">{niceDate(todayISO())}</div>
+          <div className="sub">
+            {niceDate(todayISO())}
+            {isAfterMidnight() && ' · היום מתחלף ב־03:30'}
+          </div>
         </div>
         <TimerBadge onClick={() => setFocusMode(true)} compact />
         <SyncDot compact />

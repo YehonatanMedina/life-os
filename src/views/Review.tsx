@@ -11,7 +11,7 @@ import {
 import { Bar, Check, Ring, Sheet, onColor, useToast, vibrate } from '../ui'
 import { buildInsights, buildWeekStats, digestForClaude, type Insight, type WeekStats } from '../insights'
 import { fetchInsight, type Insight as AiInsight } from '../ai'
-import type { ID, Review as ReviewT, Task, WeekGoal } from '../types'
+import type { ID, Review as ReviewT, Task, WeekGoal, DayLog } from '../types'
 
 // ---------------------------------------------------------------------------
 export function buildSnapshot(s: ReturnType<typeof useApp>, ws: string): ReviewT['snapshot'] {
@@ -34,17 +34,33 @@ export function buildSnapshot(s: ReturnType<typeof useApp>, ws: string): ReviewT
 }
 
 /** השבוע שהסקירה סוגרת: זה שהסתיים, לא זה שהתחיל */
-export function reviewWeekOf(dateISO: string): string {
-  return addDays(weekStart(dateISO), -7)
+export function reviewWeekOf(dateISO: string, reviewDow = 0): string {
+  const ws = weekStart(dateISO)
+  // יום סקירה ראשון: השבוע שנגמר אתמול. יום סקירה אחר (למשל שבת): השבוע שמסתיים
+  // עכשיו — מיום הסקירה ועד סוף השבוע; לפני יום הסקירה עדיין השבוע הקודם.
+  if (reviewDow === 0) return addDays(ws, -7)
+  return new Date(dateISO + 'T12:00').getDay() >= reviewDow ? ws : addDays(ws, -7)
+}
+
+/** יומן יום עם תוכן של ממש — תשובת שינה שנכתבה על אתמול לא הופכת שבוע ריק ל"שבוע" */
+function daySubstance(d: DayLog): boolean {
+  return (
+    Object.values(d.habits ?? {}).some(Boolean) ||
+    Object.values(d.steps ?? {}).some(Boolean) ||
+    !!d.workout ||
+    !!d.wake ||
+    !!d.wakeTime ||
+    !!d.nap
+  )
 }
 
 /** האם סגירת השבוע שהסתיים עדיין פתוחה */
 export function reviewPending(s: ReturnType<typeof useApp>): string | null {
-  const ws = reviewWeekOf(todayISO())
+  const ws = reviewWeekOf(todayISO(), s.settings.reviewDow)
   const wl = weekLog(s, ws)
   if (wl.review) return null
   // בלי נתונים בכלל אין מה לסכם
-  const has = weekMinutes(s, ws) > 0 || s.days.some((d) => !d.deleted && d.date >= ws && d.date < addDays(ws, 7))
+  const has = weekMinutes(s, ws) > 0 || s.days.some((d) => !d.deleted && d.date >= ws && d.date < addDays(ws, 7) && daySubstance(d))
   return has ? ws : null
 }
 
@@ -52,7 +68,10 @@ export function reviewPending(s: ReturnType<typeof useApp>): string | null {
 export default function Review() {
   const s = useApp()
   const pending = reviewPending(s)
-  const [wsOffset, setWsOffset] = useState(() => (pending ? -1 : 0))
+  // השבוע שממתין לסגירה יכול להיות הקודם או הנוכחי (תלוי ביום הסקירה)
+  const [wsOffset, setWsOffset] = useState(() =>
+    pending ? Math.round((Date.parse(pending) - Date.parse(weekStart(todayISO()))) / (7 * 86_400_000)) : 0,
+  )
   const ws = addDays(weekStart(todayISO()), wsOffset * 7)
   const wl = weekLog(s, ws)
   const [flow, setFlow] = useState<string | null>(null)

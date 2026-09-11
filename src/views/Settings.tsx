@@ -500,8 +500,13 @@ function HabitSheet({ habit, onClose }: { habit: HabitDef | null; onClose: () =>
   const [d, setD] = useState<HabitDef | null>(null)
   const [del, setDel] = useState(false)
   const [step, setStep] = useState('')
-  React.useEffect(() => setD(habit ? { ...habit, steps: habit.steps ? [...habit.steps] : [] } : null), [habit])
-  if (!d) return null
+  const [src, setSrc] = useState(habit)
+  if (habit !== src) {
+    // שינוי הרשומה → טיוטה חדשה באותו ציור (לא באפקט, שהיה מאחר בציור אחד)
+    setSrc(habit)
+    setD(habit ? { ...habit, steps: habit.steps ? [...habit.steps] : [] } : null)
+  }
+  if (!habit || !d) return null
   const up = (p: Partial<HabitDef>) => setD((x) => (x ? { ...x, ...p } : x))
   const exists = s.habits.some((h) => h.id === d.id && !h.deleted)
 
@@ -617,8 +622,12 @@ function WeeklySheet({ w, onClose }: { w: WeeklyDef | null; onClose: () => void 
   const toast = useToast()
   const [d, setD] = useState<WeeklyDef | null>(null)
   const [del, setDel] = useState(false)
-  React.useEffect(() => setD(w ? { ...w } : null), [w])
-  if (!d) return null
+  const [src, setSrc] = useState(w)
+  if (w !== src) {
+    setSrc(w)
+    setD(w ? { ...w } : null)
+  }
+  if (!w || !d) return null
   const up = (p: Partial<WeeklyDef>) => setD((x) => (x ? { ...x, ...p } : x))
   const exists = s.weekly.some((x) => x.id === d.id && !x.deleted)
 
@@ -749,8 +758,12 @@ function RuleSheet({ rule, onClose }: { rule: RecurRule | null; onClose: () => v
   const toast = useToast()
   const [d, setD] = useState<RecurRule | null>(null)
   const [del, setDel] = useState(false)
-  React.useEffect(() => setD(rule ? { ...rule, days: [...rule.days] } : null), [rule])
-  if (!d) return null
+  const [src, setSrc] = useState(rule)
+  if (rule !== src) {
+    setSrc(rule)
+    setD(rule ? { ...rule, days: [...rule.days] } : null)
+  }
+  if (!rule || !d) return null
   const exists = s.rules.some((r) => r.id === d.id && !r.deleted)
   const up = (p: Partial<RecurRule>) => setD((x) => (x ? { ...x, ...p } : x))
   const tracks = alive(s.tracks).sort((a, b) => a.order - b.order)

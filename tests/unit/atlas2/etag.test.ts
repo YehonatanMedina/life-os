@@ -54,7 +54,7 @@ describe('ביצוע דחוי אחרי טעינה מחדש', () => {
   // FIXME (major): pollAtlas מפעיל applyWhenSafe רק על 200. אם השיחה נשמרה בזיכרון (עם threadEtag)
   //   בזמן שהביצוע נדחה (המחסן עוד לא ענה) והדף נסגר — בטעינה הבאה thread.json עונה 304,
   //   ואף אחד לא מבצע את הפקודות שבזיכרון. הן אובדות עד שהסוכן ישכתב את הקובץ.
-  it.fails('פקודות שבזיכרון המקומי ועדיין לא ב-atlasApplied מבוצעות גם כשהשרת עונה 304', async () => {
+  it('פקודות שבזיכרון המקומי ועדיין לא ב-atlasApplied מבוצעות גם כשהשרת עונה 304', async () => {
     const cached = {
       messages: [atlasMsg('a1', T(9), [{ id: 'c-lost', op: 'addTask', task: { title: 'נדחתה ונשכחה' } }])],
       today: null,
@@ -66,21 +66,6 @@ describe('ביצוע דחוי אחרי טעינה מחדש', () => {
     await h.At.pollAtlas()
     expect(h.state().tasks.find((t) => t.id === 't-c-lost')?.title).toBe('נדחתה ונשכחה')
     expect(h.state().atlasApplied?.['c-lost']).toBeTruthy()
-  })
-
-  it('התנהגות נוכחית (מתועדת): אותו תרחיש — הפקודה לא מבוצעת לעולם, גם אחרי כמה משיכות', async () => {
-    const cached = {
-      messages: [atlasMsg('a1', T(9), [{ id: 'c-lost', op: 'addTask', task: { title: 'נדחתה ונשכחה' } }])],
-      today: null,
-      undo: {},
-      threadEtag: '"t1"',
-    }
-    const h = await boot(blankState(), cached)
-    h.routes['thread.json'] = () => ({ status: 304 })
-    for (let i = 0; i < 3; i++) await h.At.pollAtlas()
-    expect(h.state().tasks).toHaveLength(0)
-    expect(h.state().atlasApplied).toEqual({})
-    expect(h.cache().messages).toHaveLength(1) // ההודעה מוצגת — עם הצ׳יפ "משימה חדשה" — אבל המשימה לא קיימת
   })
 
   it('כשהמחסן לא מוגדר (רק טוקן + מפתח) — הביצוע מיידי, בלי המתנה למשיכה', async () => {

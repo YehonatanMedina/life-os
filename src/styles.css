@@ -1471,8 +1471,12 @@ label.field > span, .field > span {
 .bubble-meta { margin-top: 4px; display: flex; justify-content: flex-end; }
 .bubble.me .bubble-meta { color: var(--on-accent); opacity: .9; }
 .cmds { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
-.cmd { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); }
+.cmd { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); min-width: 0; }
+.cmd .grow { overflow-wrap: anywhere; }
+.bubble { min-width: 0; overflow-wrap: anywhere; }
 .cmd::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--good); flex: none; }
+.cmd.fail::before { background: var(--bad); }
+.cmd-fail { flex: none; font-size: 12px; font-weight: 600; color: var(--bad-text); }
 .bubble.thinking { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
 .dots { display: inline-flex; gap: 4px; }
 .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); animation: dot 1.2s infinite ease-in-out; }

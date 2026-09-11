@@ -18,7 +18,8 @@ const ALLOW = [/status of 404/]
 
 /** מכשיר עם שעון מזויף שמותקן לפני שהאפליקציה נטענת */
 async function clockedDevice(openDevice: any, opts: { tag: string; state: any }) {
-  const D = await openDevice({ ...opts, url: 'about:blank', login: true, allowConsole: ALLOW })
+  // דף סטטי באותו מקור (לא about:blank — שם localStorage חסום וסקריפט הזריעה זורק)
+  const D = await openDevice({ ...opts, url: '/manifest.webmanifest', login: true, allowConsole: ALLOW })
   await D.page.clock.install({ time: new Date() })
   await reload(D.page, '/')
   return D
@@ -58,7 +59,7 @@ test('קצב: 2.5 שניות ואז 5 דקות; אחרי שליחה — מיד �
   await expect.poll(() => fake.issues.length).toBe(1)
   await advance(A.page, 1_000, 500)
   expect(threadGets(fake, 'A').length, 'משיכה מיד אחרי שליחה').toBe(base + 1)
-  await advance(A.page, 60_000)
+  await advance(A.page, 60_000, 250) // צעד עדין — כדי ש-lastPollAt לא יזוז עם השעון בזמן שה-fetch חוזר
   const fast = threadGets(fake, 'A').length - base - 1
   console.log(`[atlas2] while awaiting: ${fast} polls in 60s`)
   expect(fast).toBeGreaterThanOrEqual(5)
@@ -77,7 +78,7 @@ test('קצב: 2.5 שניות ואז 5 דקות; אחרי שליחה — מיד �
 
   // אחרי התשובה: 60 שניות — כמה משיכות?
   const afterReply = threadGets(fake, 'A').length
-  await advance(A.page, 60_000)
+  await advance(A.page, 60_000, 250)
   const after = threadGets(fake, 'A').length - afterReply
   console.log(`[atlas2] after reply: ${after} polls in 60s (fastUntil keeps 10s cadence for 15 min after send)`)
   // FIXME (minor): fastUntil = שליחה + 15 דקות, לא מתאפס כשהתשובה מגיעה — עוד ~90 משיכות (304) בחינם.
@@ -122,7 +123,7 @@ test('ברקע: כשלא מחכים — אין משיכות; כשמחכים — 
   await advance(A.page, 1_000, 500)
   await setHidden(A.page, true)
   const n0 = threadGets(fake, 'A').length
-  await advance(A.page, 30_000)
+  await advance(A.page, 30_000, 250)
   const hiddenPolls = threadGets(fake, 'A').length - n0
   console.log(`[atlas2] hidden while awaiting: ${hiddenPolls} polls in 30s`)
   expect(hiddenPolls).toBeGreaterThanOrEqual(2)
@@ -158,7 +159,7 @@ test('הודעה ממתינה שמעולם לא נענתה — "אטלס חוש�
   await expect.poll(() => fake.issues.length).toBe(1)
   await advance(A.page, 20 * 60_000, 30_000) // 20 דקות — מעבר ל-fastUntil
   const n0 = threadGets(fake, 'A').length
-  await advance(A.page, 60_000)
+  await advance(A.page, 60_000, 250)
   const perMinute = threadGets(fake, 'A').length - n0
   console.log(`[atlas2] unanswered after 20min: ${perMinute} polls/min`)
   await expect(A.page.locator('.bubble.thinking')).toContainText(/לוקח יותר מהרגיל/)

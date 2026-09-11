@@ -38,7 +38,7 @@ describe('חותמות לפי מפתח — הנתיבים שעוקפים את פ
 
   // ב-HEAD 685363b זה הנתיב של WeeklyFlow.finish; בעץ העבודה הוא עבר ל-setWeekGoals (נסגר),
   // אבל patchWeek הגולמי עדיין כותב goals בלי goalsAt — כל קורא עתידי ייפול לאותו בור.
-  it.fails('patchWeek גולמי עם goals (בלי goalsAt): סימון במכשיר השני שורד עריכה מאוחרת של אותו שבוע', async () => {
+  it('patchWeek גולמי עם goals (בלי goalsAt): סימון במכשיר השני שורד עריכה מאוחרת של אותו שבוע', async () => {
     pin(NOW)
     const ws = '2026-09-13'
     const A = await freshStore(blankState())
@@ -58,7 +58,7 @@ describe('חותמות לפי מפתח — הנתיבים שעוקפים את פ
 
   // ב-HEAD 685363b זה הנתיב של Today.tsx (כל הצעדים) ו-Workout.tsx (סיום אימון); בעץ העבודה
   // שניהם עברו ל-actions.setHabit עם backfill (נסגר). patchDay הגולמי עדיין לא משלים חותמות.
-  it.fails('patchDay גולמי עם habitsAt חלקי על רשומה ישנה: ביטול ידני של הרגל אחר במכשיר השני שורד', async () => {
+  it('patchDay גולמי עם habitsAt חלקי על רשומה ישנה: ביטול ידני של הרגל אחר במכשיר השני שורד', async () => {
     pin(NOW)
     const date = '2026-09-11'
     // רשומה מלפני החותמות — habits בלי habitsAt

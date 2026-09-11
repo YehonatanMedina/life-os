@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  atlasReady, canUndo, describeCommand, discardMessage, pollAtlas, retrySend, sendToAtlas,
+  atlasReady, canUndo, commandFailed, describeCommand, discardMessage, pollAtlas, retrySend, sendToAtlas,
   undoCommand, useAtlas, type AtlasMessage,
 } from '../atlas'
 import { useTick, useToast, vibrate } from '../ui'
@@ -84,6 +84,8 @@ export default function AtlasView() {
     rec.continuous = true
     const base = text.trim()
     rec.onresult = (ev: any) => {
+      // המנוע מאחר: תוצאה שמגיעה אחרי שעצרנו (או אחרי שליחה) לא מזהמת את התיבה
+      if (recRef.current !== rec) return
       let finals = ''
       let interim = ''
       for (let i = 0; i < ev.results.length; i++) {
@@ -232,12 +234,18 @@ function Bubble({
         {m.commands && m.commands.length > 0 && (
           <div className="cmds">
             {m.commands.map((c) => (
-              <div key={c.id} className="cmd">
+              <div key={c.id} className={`cmd${commandFailed(c.id) ? ' fail' : ''}`}>
                 <span className="grow">{describeCommand(c)}</span>
-                {canUndo(c.id) && (
+                {canUndo(c.id) ? (
                   <button className="btn xs ghost" onClick={() => onUndo(c.id)}>
                     ביטול
                   </button>
+                ) : (
+                  commandFailed(c.id) && (
+                    <span className="cmd-fail" title={commandFailed(c.id)}>
+                      לא בוצע
+                    </span>
+                  )
                 )}
               </div>
             ))}

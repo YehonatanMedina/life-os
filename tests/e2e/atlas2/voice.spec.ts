@@ -4,9 +4,12 @@
 // not-allowed מציגה טוסט. רץ בשני הפרופילים.
 // ---------------------------------------------------------------------------
 import type { Page } from '@playwright/test'
-import { test as base, expect, waitSynced, readAtlasCache } from '../cloud/fixtures'
+import { test as base, expect, waitSynced, readAtlasCache, reload } from '../cloud/fixtures'
 import { baseState } from '../cloud/state'
-import { seedCloud, writeThread, openAtlas, composer } from './helpers'
+import { seedCloud, writeThread, openAtlas } from './helpers'
+
+/** התיבה — לפי המקום, לא לפי ה-placeholder (הוא משתנה ל"מקשיב…" בזמן הקלטה) */
+const composer = (page: Page) => page.locator('.composer textarea')
 
 const ALLOW = [/status of 404/]
 
@@ -45,6 +48,8 @@ const SR_INIT = () => {
       this.onend?.()
     }
   }
+  // גם הלא-מקודם — כרומיום חדש חושף SpeechRecognition בלי קידומת, והאפליקציה מעדיפה אותו
+  ;(window as any).SpeechRecognition = FakeSR
   ;(window as any).webkitSpeechRecognition = FakeSR
 }
 
@@ -62,7 +67,7 @@ test('דיבור: ביניים → סופי ממלאים את התיבה; שלי
   await writeThread(fake, ai, [])
   const A = await openDevice({ tag: 'A', state: baseState({ deviceId: 'dA', aiKey: ai }), login: true, allowConsole: ALLOW })
   await A.context.addInitScript(SR_INIT)
-  await A.page.reload()
+  await reload(A.page)
   await waitSynced(A.page)
   await openAtlas(A.page)
   const mic = A.page.getByRole('button', { name: 'דבר' })
@@ -99,7 +104,7 @@ test('טקסט שהוקלד לפני ההקלטה נשמר; עצירה ידני�
   await writeThread(fake, ai, [])
   const A = await openDevice({ tag: 'A', state: baseState({ deviceId: 'dA', aiKey: ai }), login: true, allowConsole: ALLOW })
   await A.context.addInitScript(SR_INIT)
-  await A.page.reload()
+  await reload(A.page)
   await waitSynced(A.page)
   await openAtlas(A.page)
   await composer(A.page).fill('הערה:')
@@ -157,7 +162,7 @@ test('אטלס לא מחובר (בלי מפתח) — המיקרופון מושב
   await seedCloud(fake, key, {}, undefined)
   const A = await openDevice({ tag: 'A', state: baseState({ deviceId: 'dA' }), login: true, allowConsole: ALLOW })
   await A.context.addInitScript(SR_INIT)
-  await A.page.reload()
+  await reload(A.page)
   await waitSynced(A.page)
   await openAtlas(A.page)
   await expect(A.page.getByRole('button', { name: 'דבר' })).toBeDisabled()

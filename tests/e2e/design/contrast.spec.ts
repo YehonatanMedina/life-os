@@ -109,7 +109,8 @@ for (const theme of THEMES) {
     await scan('projects')
     await nav(app, 'atlas')
     await scan('atlas')
-    await app.locator('button.card.alert, .card.rail.alert').first().waitFor({ state: 'detached' }).catch(() => {})
+    // ההתראה לא נעלמת לבד — המתנה קצרה בלבד, אחרת היא אוכלת את כל תקציב הבדיקה והדף נסגר
+    await app.locator('button.card.alert, .card.rail.alert').first().waitFor({ state: 'detached', timeout: 1500 }).catch(() => {})
 
     // אסימוני הצבע עצמם — בלי תלות באלמנט
     const tokens = await app.evaluate(() => {

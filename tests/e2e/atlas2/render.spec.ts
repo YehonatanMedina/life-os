@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 import { test, expect, waitSynced, gotoTab, readState } from '../cloud/fixtures'
 import { baseState } from '../cloud/state'
+import { newKey } from '../cloud/crypto'
 import { seedCloud, writeThread, writeToday, openAtlas, atlasMsg, userMsg, minutesAgo, today, assertNoHorizontalOverflow } from './helpers'
 
 test.describe.configure({ mode: 'parallel' })
@@ -23,7 +24,6 @@ test('טקסט עוין בהודעות ובצ׳יפים — מוצג כטקסט,
     userMsg('u1', minutesAgo(6), SCRIPT),
     atlasMsg('a-script', minutesAgo(5), [
       { id: 'c-script', op: 'addTask', task: { title: SCRIPT, due: today } },
-      { id: 'c-long', op: 'addEvent', event: { title: LONG, date: today, start: '20:00', end: '21:00' } },
     ], { text: SCRIPT, replyTo: 'u1' }),
     atlasMsg('a-ent', minutesAgo(4), [], { text: ENTITIES }),
     atlasMsg('a-rtl', minutesAgo(3), [], { text: RTL }),
@@ -59,10 +59,6 @@ test('טקסט עוין בהודעות ובצ׳יפים — מוצג כטקסט,
     expect(b!.x, `bubble ${i} left`).toBeGreaterThanOrEqual(list!.x - 1)
     expect(b!.x + b!.width, `bubble ${i} right`).toBeLessThanOrEqual(list!.x + list!.width + 1)
   }
-  // הצ׳יפ עם 5,000 תווים לא מרחיב את הבועה מעבר לרשימה
-  const cmdLong = await A.page.locator('.cmd', { hasText: 'נוסף ליומן:' }).boundingBox()
-  expect(cmdLong!.x + cmdLong!.width).toBeLessThanOrEqual(list!.x + list!.width + 1)
-  expect(cmdLong!.x).toBeGreaterThanOrEqual(list!.x - 1)
   // הקומפוזר עדיין נגיש ובגובה סביר
   const comp = await A.page.locator('.composer').boundingBox()
   const vp = A.page.viewportSize()!
@@ -75,10 +71,36 @@ test('טקסט עוין בהודעות ובצ׳יפים — מוצג כטקסט,
   await assertNoHorizontalOverflow(A.page, '.app')
   const s = await readState(A.page)
   expect(s.tasks.find((t) => t.id === 't-c-script')?.title).toBe(SCRIPT)
-  expect(s.events.find((e) => e.id === 'e-c-long')?.title).toBe(LONG)
   await gotoTab(A.page, 'יומן')
   await assertNoHorizontalOverflow(A.page, '.app')
   expect(await A.page.evaluate(() => (window as any).__pwned)).toBeUndefined()
+})
+
+// FIXME (minor): .cmd / .cmd .grow בלי word-break — כותרת בלי רווחים של 5,000 תווים בצ׳יפ מותחת את
+//   .chat-list ל-36,000px (גלילה אופקית של כל השיחה). .bubble-text כן עוטף (word-break: break-word).
+test.fixme('צ׳יפ עם כותרת של 5,000 תווים בלי רווח — לא מותח את השיחה לרוחב', async ({ fake, key, openDevice }) => {
+  const ai = await seedCloud(fake, key)
+  await writeThread(fake, ai, [atlasMsg('a1', minutesAgo(1), [{ id: 'c-long', op: 'addEvent', event: { title: LONG, date: today, start: '20:00', end: '21:00' } }], { text: 'הוספתי' })])
+  const A = await openDevice({ tag: 'A', state: baseState({ deviceId: 'dA', aiKey: ai }), login: true, allowConsole: ALLOW })
+  await waitSynced(A.page)
+  await openAtlas(A.page)
+  await expect(A.page.locator('.cmd')).toHaveCount(1, { timeout: 15_000 })
+  await assertNoHorizontalOverflow(A.page)
+  const list = await A.page.locator('.chat-list').boundingBox()
+  const cmd = await A.page.locator('.cmd').boundingBox()
+  expect(cmd!.x + cmd!.width).toBeLessThanOrEqual(list!.x + list!.width + 1)
+  expect((await readState(A.page)).events.find((e) => e.id === 'e-c-long')?.title).toBe(LONG)
+})
+
+test('צ׳יפ עם 5,000 תווים בלי רווח נשבר בתוך הבועה — לא מותח את .chat-list', async ({ fake, key, openDevice }) => {
+  const ai = await seedCloud(fake, key)
+  await writeThread(fake, ai, [atlasMsg('a1', minutesAgo(1), [{ id: 'c-long', op: 'addEvent', event: { title: LONG, date: today, start: '20:00', end: '21:00' } }], { text: 'הוספתי' })])
+  const A = await openDevice({ tag: 'A', state: baseState({ deviceId: 'dA', aiKey: ai }), login: true, allowConsole: ALLOW })
+  await waitSynced(A.page)
+  await openAtlas(A.page)
+  await expect(A.page.locator('.cmd')).toHaveCount(1, { timeout: 15_000 })
+  const r = await A.page.evaluate(() => { const el = document.querySelector('.chat-list') as HTMLElement; return el.scrollWidth - el.clientWidth })
+  expect(r, `.cmd overflow: chat-list is ${r}px wider than its box`).toBeLessThanOrEqual(1)
 })
 
 test('פתק הבוקר עם HTML ותווי כיוון — טקסט בכרטיס "היום"', async ({ fake, key, openDevice }) => {
@@ -96,7 +118,8 @@ test('פתק הבוקר עם HTML ותווי כיוון — טקסט בכרטי�
 })
 
 test('מצב כהה: אותו טקסט עוין, אותה פריסה', async ({ fake, key, openDevice }) => {
-  const ai = await seedCloud(fake, key, { settings: { ...baseState({ deviceId: 'x' }).settings, theme: 'dark', aiKey: ai } })
+  const ai = newKey()
+  await seedCloud(fake, key, { settings: { ...baseState({ deviceId: 'x' }).settings, theme: 'dark', aiKey: ai } }, ai)
   await writeThread(fake, ai, [atlasMsg('a-long', minutesAgo(1), [], { text: LONG }), atlasMsg('a-rtl', minutesAgo(1), [], { text: RTL })])
   const st = baseState({ deviceId: 'dA', aiKey: ai })
   st.settings.theme = 'dark'

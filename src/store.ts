@@ -401,8 +401,8 @@ function sanitize(p: any): AppState {
       : null
   return {
     ...p,
-    tracks: arr(p.tracks),
-    tasks: arr(p.tasks),
+    tracks: arr(p.tracks, (t) => typeof t.name === 'string'),
+    tasks: arr(p.tasks, (t) => typeof t.title === 'string'),
     events: arr(p.events, (e) => isDate(e.date)),
     rules: arr(p.rules, (r) => Array.isArray(r.days)),
     habits: arr(p.habits),
@@ -602,6 +602,31 @@ function backfillAt(
   const out = { ...(at ?? {}) }
   for (const k of Object.keys(map ?? {})) if (!(k in out)) out[k] = fallback
   return out
+}
+
+/**
+ * חותמות למפה שעודכנה ב-patch גולמי (בלי מפת חותמות מפורשת): כל מפתח שערכו
+ * השתנה מקבל "עכשיו", מפתח שנעלם מקבל מצבה, והשאר נופלים ל-updatedAt הישן.
+ * כך גם קריאה ישירה ל-patchDay/patchWeek/patchWorkout לא דורסת את המכשיר השני.
+ */
+function stampMap(
+  curMap: Record<string, unknown> | undefined,
+  curAt: Record<string, number> | undefined,
+  nextMap: Record<string, unknown> | undefined,
+  nextAt: Record<string, number> | undefined,
+  oldUpdatedAt: number,
+): Record<string, number> | undefined {
+  if (nextMap === undefined && nextAt === undefined) return curAt
+  const out = backfillAt(curMap, curAt, oldUpdatedAt)
+  const now = Date.now()
+  if (nextMap) {
+    for (const k of Object.keys(nextMap)) {
+      const changed = !curMap || !(k in curMap) || JSON.stringify(curMap[k]) !== JSON.stringify(nextMap[k])
+      if (changed && !(nextAt && k in nextAt)) out[k] = now
+    }
+    for (const k of Object.keys(curMap ?? {})) if (!(k in nextMap) && !(nextAt && k in nextAt)) out[k] = now
+  }
+  return { ...out, ...(nextAt ?? {}) }
 }
 
 export const actions = {
@@ -874,7 +899,9 @@ export const actions = {
         habits: {},
         steps: {},
       }
-      return { ...s, days: upsertList(s.days, { ...base, ...patch, updatedAt: Date.now() }) }
+      const habitsAt = stampMap(base.habits, base.habitsAt, patch.habits, patch.habitsAt, base.updatedAt)
+      const stepsAt = stampMap(base.steps, base.stepsAt, patch.steps, patch.stepsAt, base.updatedAt)
+      return { ...s, days: upsertList(s.days, { ...base, ...patch, habitsAt, stepsAt, updatedAt: Date.now() }) }
     })
   },
   toggleHabit(date: ISODate, habitId: string) {
@@ -914,7 +941,11 @@ export const actions = {
         items: {},
         progress: {},
       }
-      return { ...s, weeks: upsertList(s.weeks, { ...base, ...patch, updatedAt: Date.now() }) }
+      const byId = (g?: WeekGoal[]) => (g ? Object.fromEntries(g.map((x) => [x.id, x])) : undefined)
+      const itemsAt = stampMap(base.items, base.itemsAt, patch.items, patch.itemsAt, base.updatedAt)
+      const progressAt = stampMap(base.progress, base.progressAt, patch.progress, patch.progressAt, base.updatedAt)
+      const goalsAt = stampMap(byId(base.goals), base.goalsAt, byId(patch.goals), patch.goalsAt, base.updatedAt)
+      return { ...s, weeks: upsertList(s.weeks, { ...base, ...patch, itemsAt, progressAt, goalsAt, updatedAt: Date.now() }) }
     })
   },
   toggleWeeklyItem(ws: ISODate, itemId: string) {
@@ -1005,7 +1036,8 @@ export const actions = {
         kind: 'gym',
         sets: {},
       }
-      return { ...s, workouts: upsertList(list, { ...base, ...patch, updatedAt: Date.now() }) }
+      const setsAt = stampMap(base.sets, base.setsAt, patch.sets, patch.setsAt, base.updatedAt)
+      return { ...s, workouts: upsertList(list, { ...base, ...patch, setsAt, updatedAt: Date.now() }) }
     })
   },
   /** רישום סט בודד. null מוחק אותו. */
