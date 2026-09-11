@@ -232,7 +232,7 @@ test('מכשיר שני: מקבל atlasApplied בסנכרון ולא מבצע ש
   await writeReply(fake, ai, user)
 
   // -- B: סנכרון קודם (המחסן עונה מיד), משיכת אטלס אחרי 2.5 שניות --------------------
-  const B = await openDevice({ tag: 'B', state: baseState({ deviceId: 'dB', aiKey: ai }), login: true })
+  const B = await openDevice({ tag: 'B', state: baseState({ deviceId: 'dB', aiKey: ai }), login: true, allowConsole: [/status of 404/] })
   await waitSynced(B.page)
   await expect.poll(async () => (await readAtlasCache(B.page))?.messages?.length ?? 0, { timeout: 15_000 }).toBe(2)
   await sleep(1_000)
@@ -252,7 +252,7 @@ test('מכשיר שני: מקבל atlasApplied בסנכרון ולא מבצע ש
   // -- B2: המחסן איטי (9 שניות) — משיכת אטלס מגיעה קודם, אבל הביצוע נדחה עד המשיכה הראשונה ----
   fake.hooks.push(({ tag, method, path }) => (tag === 'B2' && method === 'GET' && path.startsWith('/gists/') ? { delayMs: 9_000 } : undefined))
   const n = fake.patches.length
-  const B2 = await openDevice({ tag: 'B2', state: baseState({ deviceId: 'dB2', aiKey: ai }), login: true })
+  const B2 = await openDevice({ tag: 'B2', state: baseState({ deviceId: 'dB2', aiKey: ai }), login: true, allowConsole: [/status of 404/] })
   // השיחה כבר מוצגת, אבל שום פקודה לא בוצעה לפני שהמחסן ענה
   await expect.poll(async () => (await readAtlasCache(B2.page))?.messages?.length ?? 0, { timeout: 8_000 }).toBe(2)
   expect(Object.keys((await readState(B2.page)).atlasApplied ?? {})).toEqual([])
@@ -290,7 +290,7 @@ test('ביטול במכשיר אחד שורד מכשיר שני שמשך את ה
   await writeReply(fake, ai, { id: 'u-test2', at: new Date(at - 30_000).toISOString(), text: 'קבעתי' })
 
   fake.hooks.push(({ tag, method, path }) => (tag === 'B2' && method === 'GET' && path.startsWith('/gists/') ? { delayMs: 9_000 } : undefined))
-  const B2 = await openDevice({ tag: 'B2', state: baseState({ deviceId: 'dB2', aiKey: ai }), login: true })
+  const B2 = await openDevice({ tag: 'B2', state: baseState({ deviceId: 'dB2', aiKey: ai }), login: true, allowConsole: [/status of 404/] })
   await expect.poll(async () => Object.keys((await readState(B2.page)).atlasApplied ?? {}).length, { timeout: 25_000 }).toBe(7)
   await waitSynced(B2.page, 30_000)
   await quiet(fake, 3_000)

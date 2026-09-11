@@ -8,6 +8,7 @@ import {
   atlasReady, canUndo, commandFailed, describeCommand, discardMessage, nextSweepAt, pollAtlas, retrySend, sendToAtlas,
   undoCommand, useAtlas, type AtlasMessage,
 } from '../atlas'
+import { fastReady } from '../atlasFast'
 import { useTick, useToast, vibrate } from '../ui'
 import { hhmm, iso, niceDate } from '../dates'
 
@@ -32,6 +33,8 @@ export default function AtlasView() {
   const waiting = a.messages.find((m) => m.from === 'user' && m.pending)
   const now = useTick(waiting ? 1000 : null)
   const [text, setText] = useState('')
+  // "משימה גדולה": שליחה ישירה לאטלס העמוק (קוד, תכנון ארוך) — במקום שהמהיר יחליט
+  const [deep, setDeep] = useState(false)
   const [listening, setListening] = useState(false)
   const recRef = useRef<any>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -60,7 +63,9 @@ export default function AtlasView() {
     if (!t) return
     setText('')
     stopListening()
-    const ok = await sendToAtlas(t, listening ? 'voice' : 'text')
+    const wantDeep = deep
+    setDeep(false)
+    const ok = await sendToAtlas(t, listening ? 'voice' : 'text', { deep: wantDeep })
     if (ok) vibrate(8)
   }
 
@@ -113,6 +118,7 @@ export default function AtlasView() {
   useEffect(() => () => stopListening(), [])
 
   const ready = atlasReady()
+  const fast = fastReady()
 
   return (
     <div className="chat">
@@ -137,7 +143,10 @@ export default function AtlasView() {
             <h3>אטלס</h3>
             <p className="small muted">
               מנהל החיים שלך. רואה את כל המערכת — יומן, משימות, אימונים, שעות עבודה — ויכול לשנות בה
-              כל דבר. כשמשהו לא ברור לו, הוא שואל לפני שהוא פועל. תשובה לוקחת בדרך כלל דקה־שתיים.
+              כל דבר. כשמשהו לא ברור לו, הוא שואל לפני שהוא פועל.{' '}
+              {fast
+                ? 'עונה תוך שניות. משימות גדולות (שינוי בקוד, תכנון ארוך) עוברות לאטלס העמוק ולוקחות דקות.'
+                : 'תשובה לוקחת בדרך כלל דקות — המסלול המהיר כבוי (הגדרות → אטלס).'}
             </p>
             <div className="chat-examples">
               {EXAMPLES.map((ex) => (
@@ -171,12 +180,33 @@ export default function AtlasView() {
         )}
       </div>
 
+      {deep && (
+        <div className="tiny faint" style={{ padding: '0 2px 4px' }}>
+          משימה גדולה: תישלח ישירות לאטלס העמוק (קוד, תכנון ארוך) — תשובה תוך דקות עד שעה.
+        </div>
+      )}
       <div className="composer">
+        {fast && (
+          <button
+            className={`btn icon-btn deep-toggle${deep ? ' on' : ''}`}
+            type="button"
+            aria-label="משימה גדולה"
+            title="משימה גדולה — לאטלס העמוק"
+            aria-pressed={deep}
+            disabled={!ready}
+            onClick={() => setDeep((v) => !v)}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 3l9 5-9 5-9-5 9-5z" />
+              <path d="M3 13l9 5 9-5" />
+            </svg>
+          </button>
+        )}
         <textarea
           ref={taRef}
           className="textarea"
           rows={1}
-          placeholder={listening ? 'מקשיב…' : 'כתוב לאטלס…'}
+          placeholder={listening ? 'מקשיב…' : deep ? 'משימה גדולה לאטלס העמוק…' : 'כתוב לאטלס…'}
           value={text}
           disabled={!ready}
           onChange={(e) => setText(e.target.value)}
@@ -229,8 +259,15 @@ function Bubble({
   return (
     <>
       {showDate && <div className="chat-date">{niceDate(dayOf(m.at))}</div>}
-      <div className={`bubble ${m.from === 'user' ? 'me' : 'atlas'}${m.failed ? ' failed' : ''}`}>
-        <div className="bubble-text">{m.text}</div>
+      <div className={`bubble ${m.from === 'user' ? 'me' : 'atlas'}${m.failed ? ' failed' : ''}${m.streaming ? ' streaming' : ''}`} aria-live={m.streaming ? 'polite' : undefined}>
+        {m.streaming && !m.text ? (
+          <span className="dots"><i /><i /><i /></span>
+        ) : (
+          <div className="bubble-text">
+            {m.text}
+            {m.streaming && <span className="caret" aria-hidden />}
+          </div>
+        )}
         {m.commands && m.commands.length > 0 && (
           <div className="cmds">
             {m.commands.map((c) => (
@@ -252,7 +289,9 @@ function Bubble({
           </div>
         )}
         <div className="bubble-meta tiny faint">
-          {m.failed ? (
+          {m.streaming ? (
+            <span>אטלס כותב…</span>
+          ) : m.failed ? (
             <span className="row" style={{ gap: 6 }}>
               <span style={{ color: 'var(--bad)' }}>לא נשלח</span>
               <button className="btn xs" onClick={onRetry}>שלח שוב</button>

@@ -9,6 +9,11 @@
 // הכל מוצפן במפתח הניתוח (settings.aiKey), שיושב גם בפרומפט הפרטי של
 // הסוכן — כך שבשום קובץ ובשום מאגר אין טקסט גלוי.
 //
+// שני מסלולים, זיכרון אחד: הודעה רגילה הולכת למסלול המהיר (atlasFast.ts —
+// Sonnet ישירות מהדפדפן, תשובה תוך שניות) והאפליקציה עצמה כותבת את השיחה
+// ל-thread.json; מה שדורש קוד או חשיבה ארוכה מועבר למסלול העמוק (Issue →
+// שגרה בענן). שניהם קוראים וכותבים את אותו thread.json ואת אותו memory.json.
+//
 // פקודה מבוצעת פעם אחת בלבד בכל המכשירים: המזהים של הרשומות שנוצרות
 // נגזרים ממזהה הפקודה (ולכן שני מכשירים שביצעו במקביל יוצרים אותה רשומה),
 // ורשימת הפקודות שבוצעו מסונכרנת יחד עם שאר המצב.
@@ -17,6 +22,7 @@ import { useSyncExternalStore } from 'react'
 import { actions, alive, store } from './store'
 import { decryptEnvelope, encryptText } from './crypto'
 import { aiKey } from './ai'
+import { askFast, fastReady, type ThreadTurn } from './atlasFast'
 import { cloudConfigured, hasPulledOnce, nudgePush } from './cloud'
 import { today } from './dates'
 import type { CalEvent, Exercise, HabitDef, HabitStep, ID, RecurRule, Task, Track, WeeklyDef, WeekGoal, WorkoutDay } from './types'
@@ -36,10 +42,14 @@ export interface AtlasMessage {
   text: string
   commands?: AtlasCommand[]
   replyTo?: string
+  /** באיזה מסלול נענתה/נשלחה: מהיר (Sonnet מהאפליקציה) או עמוק (השגרה בענן) */
+  lane?: 'fast' | 'deep'
   /** רק מקומית: נשלחה ועדיין אין תשובה */
   pending?: boolean
   /** רק מקומית: השליחה נכשלה — אפשר לנסות שוב */
   failed?: boolean
+  /** רק מקומית: התשובה המהירה עוד נכתבת */
+  streaming?: boolean
 }
 
 export interface AtlasToday {
@@ -60,6 +70,9 @@ interface AtlasCache {
   failed?: Record<string, string>
   lastPollAt?: number
   error?: string
+  /** הזיכרון של אטלס (memory.json, מפוענח) — נכנס להקשר של המסלול המהיר */
+  memory?: string
+  memoryEtag?: string
 }
 
 type UndoEntry =
@@ -181,6 +194,34 @@ async function readFile(name: string, etag?: string): Promise<{ status: number; 
   return { status: 200, text: await r.text(), etag: r.headers.get('etag') ?? undefined }
 }
 
+/** הקובץ עם ה-sha שלו — נדרש כדי לכתוב אותו חזרה דרך contents API */
+async function readFileMeta(name: string): Promise<{ status: number; text?: string; sha?: string }> {
+  const r = await gh(`/repos/${await repo()}/contents/${name}`, { cache: 'no-store' })
+  if (r.status === 404) return { status: 404 }
+  if (!r.ok) return { status: r.status }
+  const j = await r.json()
+  const text = typeof j?.content === 'string' ? new TextDecoder().decode(Uint8Array.from(atob(j.content.replace(/\n/g, '')), (c) => c.charCodeAt(0))) : ''
+  return { status: 200, text, sha: j?.sha }
+}
+
+const b64std = (s: string) => {
+  const bytes = new TextEncoder().encode(s)
+  let bin = ''
+  bytes.forEach((b) => (bin += String.fromCharCode(b)))
+  return btoa(bin)
+}
+
+/** כותב קובץ למאגר הפרטי; 409/422 (sha ישן) — הקורא מנסה שוב עם sha טרי */
+async function writeFile(name: string, text: string, sha: string | undefined, message: string): Promise<'ok' | 'conflict' | 'error'> {
+  const r = await gh(`/repos/${await repo()}/contents/${name}`, {
+    method: 'PUT',
+    body: JSON.stringify({ message, content: b64std(text), ...(sha ? { sha } : {}) }),
+  })
+  if (r.ok) return 'ok'
+  if (r.status === 409 || r.status === 422) return 'conflict'
+  return 'error'
+}
+
 // -- שליחה ----------------------------------------------------------------------
 export function newMessageId(): string {
   return `u-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
@@ -190,7 +231,7 @@ export function newMessageId(): string {
  * שולח הודעה לאטלס. ההודעה מופיעה מיד בשיחה כ"ממתינה", ונסגרת כשהתשובה
  * מגיעה. אם השליחה נכשלת — נשארת עם סימון ואפשר לשלוח שוב.
  */
-export async function sendToAtlas(text: string, source: 'text' | 'voice' = 'text'): Promise<boolean> {
+export async function sendToAtlas(text: string, source: 'text' | 'voice' = 'text', opts: { deep?: boolean } = {}): Promise<boolean> {
   const clean = text.trim()
   if (!clean) return false
   const s = store.get()
@@ -199,14 +240,26 @@ export async function sendToAtlas(text: string, source: 'text' | 'voice' = 'text
     save({ error: 'אין חיבור לאטלס — צריך את קישור ההתקנה מהמחשב.' })
     return false
   }
-  const msg: AtlasMessage = { id: newMessageId(), at: new Date().toISOString(), from: 'user', text: clean, pending: true }
+  void source
+  const lane: 'fast' | 'deep' = opts.deep || !fastReady() ? 'deep' : 'fast'
+  const msg: AtlasMessage = { id: newMessageId(), at: new Date().toISOString(), from: 'user', text: clean, pending: true, lane }
   save({ messages: [...cache.messages, msg], error: undefined })
+  if (lane === 'fast') return runFast(msg.id)
   // ההקשר במחסן צריך להיות טרי לפני שהסוכן קורא אותו
   nudgePush()
   return retrySend(msg.id)
 }
 
+/** שליחה חוזרת — באותו מסלול שבו ההודעה נשלחה */
 export async function retrySend(id: string): Promise<boolean> {
+  const msg = cache.messages.find((m) => m.id === id)
+  if (!msg) return false
+  if (msg.lane === 'fast' && fastReady()) return runFast(id)
+  return sendDeep(id)
+}
+
+/** המסלול העמוק: Issue מוצפן במאגר הפרטי, והשגרה בענן עונה */
+async function sendDeep(id: string): Promise<boolean> {
   const msg = cache.messages.find((m) => m.id === id)
   if (!msg) return false
   const key = aiKey(store.get())
@@ -221,7 +274,7 @@ export async function retrySend(id: string): Promise<boolean> {
     })
     if (!r.ok) throw new Error(`issue ${r.status}`)
     save({
-      messages: cache.messages.map((m) => (m.id === id ? { ...m, pending: true, failed: false } : m)),
+      messages: cache.messages.map((m) => (m.id === id ? { ...m, pending: true, failed: false, lane: 'deep' as const } : m)),
       error: undefined,
     })
     // מיד אחרי שליחה — משיכה צפופה
@@ -237,12 +290,174 @@ export async function retrySend(id: string): Promise<boolean> {
 }
 
 export function discardMessage(id: string) {
-  save({ messages: cache.messages.filter((m) => m.id !== id) })
+  save({ messages: cache.messages.filter((m) => m.id !== id && m.replyTo !== id) })
+}
+
+// -- המסלול המהיר --------------------------------------------------------------
+/** ההודעות שהמודל המהיר רואה: השיחה שנענתה, בלי ממתינות/כושלות */
+function threadForModel(exceptId: string): ThreadTurn[] {
+  return cache.messages
+    .filter((m) => m.id !== exceptId && !m.pending && !m.failed && !m.streaming && m.text)
+    .map((m) => ({ from: m.from, text: m.text, ops: m.commands?.map((c) => describeCommand(c)) }))
+}
+
+const inFlight = new Set<string>()
+
+/**
+ * עונה להודעה במסלול המהיר: בועה של אטלס נכתבת תוך כדי זרימה, הפקודות
+ * מבוצעות בסיום, והשיחה נכתבת ל-thread.json ברקע. אם המודל מבקש להעביר —
+ * ההודעה עוברת למסלול העמוק והבועה נשארת כהסבר.
+ */
+async function runFast(id: string): Promise<boolean> {
+  const user = cache.messages.find((m) => m.id === id)
+  if (!user || inFlight.has(id)) return false
+  inFlight.add(id)
+  const holderId = `a-f-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
+  // התשובה תמיד אחרי ההודעה שלו גם כשהן באותה אלפית שנייה — הסדר בשיחה הוא לפי הזמן
+  const at = new Date(Math.max(Date.now(), (Date.parse(user.at) || 0) + 1)).toISOString()
+  const holder: AtlasMessage = { id: holderId, at, from: 'atlas', text: '', lane: 'fast', replyTo: id, streaming: true }
+  save({
+    messages: [...cache.messages.filter((m) => !(m.replyTo === id && m.streaming)).map((m) => (m.id === id ? { ...m, pending: true, failed: false, lane: 'fast' as const } : m)), holder],
+    error: undefined,
+  })
+  let lastPaint = 0
+  const paint = (text: string) => {
+    const now = Date.now()
+    if (now - lastPaint < 60) return
+    lastPaint = now
+    cache = { ...cache, messages: cache.messages.map((m) => (m.id === holderId ? { ...m, text } : m)) }
+    listeners.forEach((l) => l())
+  }
+  try {
+    const reply = await askFast({ text: user.text, thread: threadForModel(id), memory: cache.memory ?? '', state: store.get() }, paint)
+    if (reply.escalate) {
+      // ההסבר נשאר כבועה בלי replyTo — כדי שההודעה תיחשב עדיין ממתינה עד שהעמוק יענה
+      const note = reply.text || 'על זה אני צריך זמן — מעביר לאטלס העמוק.'
+      save({
+        messages: cache.messages.map((m) =>
+          m.id === holderId ? { ...m, text: note, streaming: false, replyTo: undefined } : m.id === id ? { ...m, lane: 'deep' as const } : m,
+        ),
+      })
+      void pushThread()
+      if (reply.memory) void appendMemory(reply.memory)
+      nudgePush()
+      return sendDeep(id)
+    }
+    save({
+      messages: cache.messages.map((m) =>
+        m.id === holderId
+          ? { ...m, text: reply.text || (reply.commands.length ? 'בוצע.' : '…'), commands: reply.commands.length ? reply.commands : undefined, streaming: false }
+          : m.id === id
+            ? { ...m, pending: false, failed: false }
+            : m,
+      ),
+    })
+    applyWhenSafe(cache.messages)
+    void pushThread()
+    if (reply.memory) void appendMemory(reply.memory)
+    return true
+  } catch (e) {
+    save({
+      messages: cache.messages.filter((m) => m.id !== holderId).map((m) => (m.id === id ? { ...m, pending: false, failed: true } : m)),
+      error: String((e as Error)?.message ?? e),
+    })
+    return false
+  } finally {
+    inFlight.delete(id)
+  }
+}
+
+/** מה נכנס ל-thread.json: בלי דגלים מקומיים, בלי מה שעדיין בדרך */
+function persistable(m: AtlasMessage): AtlasMessage | null {
+  if (m.pending || m.failed || m.streaming) return null
+  const out: AtlasMessage = { id: m.id, at: m.at, from: m.from, text: m.text }
+  if (m.commands?.length) out.commands = m.commands
+  if (m.replyTo) out.replyTo = m.replyTo
+  if (m.lane) out.lane = m.lane
+  return out
+}
+
+let pushChain: Promise<void> = Promise.resolve()
+/**
+ * כותב את השיחה למאגר הפרטי — איחוד לפי מזהה עם מה שכבר שם (המאגר גובר על
+ * כפילות), ממוין לפי זמן, 80 אחרונות. כתיבות מסודרות בתור; התנגשות → ניסיון
+ * נוסף עם sha טרי. כישלון שקט: השיחה נשארת במטמון ותיכתב בפעם הבאה.
+ */
+export function pushThread(): Promise<void> {
+  pushChain = pushChain.then(() => pushThreadNow().catch(() => undefined))
+  return pushChain
+}
+async function pushThreadNow() {
+  const key = aiKey(store.get())
+  if (!key || !token()) return
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const cur = await readFileMeta('thread.json')
+    if (cur.status !== 200 && cur.status !== 404) return
+    let remote: AtlasMessage[] = []
+    if (cur.status === 200 && cur.text) {
+      try {
+        const parsed = JSON.parse(await decryptEnvelope(cur.text, key)) as { messages?: unknown }
+        remote = Array.isArray(parsed?.messages) ? (parsed.messages as any[]).filter(isMsg) : []
+      } catch {
+        // קובץ לא קריא — לא דורסים אותו
+        return
+      }
+    }
+    const byId = new Map<string, AtlasMessage>()
+    for (const m of cache.messages) {
+      const p = persistable(m)
+      if (p) byId.set(p.id, p)
+    }
+    for (const m of remote) byId.set(m.id, m)
+    const merged = [...byId.values()].sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0)).slice(-80)
+    // אין מה לכתוב אם המאגר כבר מכיל את כל מה שאצלנו
+    if (remote.length === merged.length && merged.every((m, i) => remote[i]?.id === m.id && remote[i]?.text === m.text)) return
+    const text = await encryptText(JSON.stringify({ updatedAt: new Date().toISOString(), messages: merged }), key)
+    const res = await writeFile('thread.json', text, cur.sha, 'אטלס (מהיר)')
+    if (res !== 'conflict') return
+  }
+}
+
+/** מוסיף שורה לזיכרון של אטלס (memory.json) — האפליקציה כותבת, השגרה בענן קוראת */
+async function appendMemory(line: string) {
+  const key = aiKey(store.get())
+  if (!key || !token()) return
+  const stamp = today().slice(5).replace('-', '.').replace(/^0/, '')
+  const entry = `[${stamp} מהיר] ${line.replace(/\s+/g, ' ').trim()}`
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const cur = await readFileMeta('memory.json')
+    if (cur.status !== 200 && cur.status !== 404) return
+    let notes = ''
+    if (cur.status === 200 && cur.text) {
+      try {
+        const parsed = JSON.parse(await decryptEnvelope(cur.text, key)) as { notes?: unknown }
+        notes = typeof parsed?.notes === 'string' ? parsed.notes : ''
+      } catch {
+        return
+      }
+    }
+    if (notes.includes(entry)) return
+    let next = notes ? `${notes}\n${entry}` : entry
+    // הזיכרון לא גדל בלי סוף — המסלול העמוק משכתב אותו, כאן רק גוזמים מההתחלה
+    while (next.length > 8000) {
+      const cut = next.indexOf('\n')
+      if (cut < 0) break
+      next = next.slice(cut + 1)
+    }
+    const text = await encryptText(JSON.stringify({ updatedAt: new Date().toISOString(), notes: next }), key)
+    const res = await writeFile('memory.json', text, cur.sha, 'אטלס (מהיר) — זיכרון')
+    if (res === 'ok') {
+      save({ memory: next })
+      return
+    }
+    if (res !== 'conflict') return
+  }
 }
 
 // -- משיכה ----------------------------------------------------------------------
 let polling = false
 let fastUntil = 0
+let memoryMissingUntil = 0
 let timer: number | undefined
 
 /**
@@ -301,6 +516,20 @@ export async function pollAtlas(): Promise<boolean> {
       save({ today: note, todayEtag: td.etag })
       changed = true
     }
+
+    // הזיכרון של אטלס — למסלול המהיר. קובץ פגום פשוט לא נכנס; קובץ שעוד לא קיים
+    // (לפני הריצה הראשונה של השגרה) לא נבדק שוב כל כמה שניות.
+    if (Date.now() >= memoryMissingUntil) {
+      const mem = await readFile('memory.json', cache.memoryEtag)
+      if (mem.status === 200 && mem.text) {
+        try {
+          const parsed = JSON.parse(await decryptEnvelope(mem.text, key)) as { notes?: unknown }
+          save({ memory: typeof parsed?.notes === 'string' ? parsed.notes : '', memoryEtag: mem.etag })
+        } catch {
+          save({ memoryEtag: mem.etag })
+        }
+      } else if (mem.status === 404) memoryMissingUntil = Date.now() + 10 * 60_000
+    }
   } catch (e) {
     save({ error: 'לא הצלחתי לקרוא את אטלס: ' + String((e as Error)?.message ?? e) })
   } finally {
@@ -328,7 +557,13 @@ function mergeThread(local: AtlasMessage[], remoteRaw: unknown): AtlasMessage[] 
   const answered = new Set(remote.filter((m) => m.replyTo).map((m) => m.replyTo))
   const oldest = remote.length >= 80 ? Math.min(...remote.map((m) => Date.parse(m.at) || 0)) : 0
   const extra = local
-    .filter((m) => isMsg(m) && m.from === 'user' && !seen.has(m.id) && !answered.has(m.id))
+    .filter(
+      (m) =>
+        isMsg(m) &&
+        !seen.has(m.id) &&
+        // הודעות שלו שעוד לא נענו במאגר; ותשובות מהירות שנכתבו כאן ועוד לא הגיעו לשם
+        ((m.from === 'user' && !answered.has(m.id)) || (m.from === 'atlas' && m.lane === 'fast')),
+    )
     // הודעה שישנה מכל חלון השיחה במאגר כבר לא באמת ממתינה — הסוכן חתך אותה
     .map((m) => (m.pending && oldest && (Date.parse(m.at) || 0) < oldest ? { ...m, pending: false } : m))
   const out = [...remote, ...extra]

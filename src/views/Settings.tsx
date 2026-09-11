@@ -13,6 +13,7 @@ import type { HabitDef, HabitStep, RecurRule, WeeklyDef } from '../types'
 import { saveFile } from '../cloud'
 import { promptInstall, useInstallState } from '../install'
 import CloudCard from './CloudCard'
+import AtlasCard from './AtlasCard'
 import NotifyCard from './NotifyCard'
 import DatesCard from './DatesCard'
 
@@ -342,6 +343,9 @@ export default function SettingsView() {
 
       {/* ------------------------------------------------ התקנה */}
       <InstallCard />
+
+      {/* ------------------------------------------------ אטלס */}
+      <AtlasCard />
 
       {/* ------------------------------------------------ סנכרון */}
       <CloudCard />

@@ -5,6 +5,7 @@
 import { test as base, expect, type BrowserContext, type Locator, type Page } from '@playwright/test'
 import type { AppState } from '../../../src/types'
 import { FakeGithub, installFakeGithub, type Patch } from './fakeGithub'
+import { FakeAnthropic, installFakeAnthropic } from './fakeAnthropic'
 import { decryptJSON, newKey } from './crypto'
 
 export { expect }
@@ -38,6 +39,8 @@ export type OpenOpts = {
 
 type Fixtures = {
   fake: FakeGithub
+  /** Claude API מזויף — המסלול המהיר של אטלס */
+  claude: FakeAnthropic
   key: string
   openDevice: (opts: OpenOpts) => Promise<Device>
 }
@@ -46,10 +49,13 @@ export const test = base.extend<Fixtures>({
   fake: async ({}, use) => {
     await use(new FakeGithub())
   },
+  claude: async ({}, use) => {
+    await use(new FakeAnthropic())
+  },
   key: async ({}, use) => {
     await use(newKey())
   },
-  openDevice: async ({ browser, contextOptions, fake, key }, use) => {
+  openDevice: async ({ browser, contextOptions, fake, claude, key }, use) => {
     const devices: Device[] = []
     await use(async (opts) => {
       const context = await browser.newContext({ ...contextOptions, storageState: opts.storageState })
@@ -63,6 +69,7 @@ export const test = base.extend<Fixtures>({
         return route.abort()
       })
       await installFakeGithub(context, fake, opts.tag)
+      await installFakeAnthropic(context, claude, opts.tag)
       const seed = {
         creds: opts.creds === false ? null : { token: FAKE_TOKEN, gist: fake.gistId, key },
         state: opts.state ? JSON.stringify(opts.state) : null,

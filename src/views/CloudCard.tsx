@@ -120,6 +120,7 @@ export default function CloudCard() {
               // הוא נושא את הטוקן — פותחים אותו רק במכשיר שלך, והוא נמחק מהכתובת אחרי הפעם הראשונה.
               const cfg: Record<string, string> = { t: getToken(), p: getPairing() }
               if (s.settings.aiKey) cfg.ak = s.settings.aiKey
+              if (s.settings.apiKey) cfg.ck = s.settings.apiKey
               if (getNotifyKey()) cfg.nk = getNotifyKey()
               const link = `${location.origin}${location.pathname}#setup=${b64u(new TextEncoder().encode(JSON.stringify(cfg)))}`
               try {

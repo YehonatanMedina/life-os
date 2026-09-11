@@ -354,6 +354,11 @@ export interface Settings {
    * מונחים גלויים בשום מקום.
    */
   aiKey?: string
+  /**
+   * מפתח API של Claude למסלול המהיר של אטלס (Sonnet ישירות מהדפדפן). יושב
+   * בהגדרות המסונכרנות — מוצפן במחסן, לעולם לא בקוד.
+   */
+  apiKey?: string
 }
 
 export interface Timer {

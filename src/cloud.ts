@@ -551,6 +551,8 @@ function consumeSetupLink() {
       if (getToken() && getGistId()) pendingAk = cfg.ak
       else actions.setSettings({ aiKey: cfg.ak })
     }
+    // מפתח ה-API של המסלול המהיר — ההגדרות ממילא מסונכרנות, זה רק כדי שיעבוד מהרגע הראשון
+    if (cfg && typeof cfg.ck === 'string' && cfg.ck && !store.get().settings.apiKey) actions.setSettings({ apiKey: cfg.ck })
     history.replaceState(null, '', location.pathname + location.search)
   } catch {
     /* ignore */

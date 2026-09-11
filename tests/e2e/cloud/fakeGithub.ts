@@ -7,6 +7,7 @@
 //   PATCH /gists/:id                             -> מיזוג הקבצים + רישום ביומן patches
 //   POST  /gists                                 -> יצירת גיסט (מחזיר את המזהה הקבוע)
 //   GET   /repos/:owner/life-os-atlas/contents/:f -> raw / 304 לפי ETag / 404
+//   PUT   /repos/:owner/life-os-atlas/contents/:f -> כתיבה עם sha (409 אם ישן), רישום ב-writes
 //   POST  /repos/:owner/life-os-atlas/issues     -> שומר את הגוף, מחזיר 201
 //
 // hooks: פונקציות שמקבלות את הבקשה ויכולות להחזיר תשובה חלופית (401, 409, 500)
@@ -52,6 +53,8 @@ export class FakeGithub {
   /** קבצי המאגר של אטלס */
   repo = new Map<string, { text: string; etag: string }>()
   issues: Issue[] = []
+  /** כתיבות של האפליקציה לקובצי המאגר (המסלול המהיר כותב thread.json / memory.json) */
+  writes: Array<{ tag: string; name: string; at: number; message: string }> = []
   requests: Array<{ tag: string; method: string; path: string; at: number; status: number }> = []
   hooks: Hook[] = []
   private issueSeq = 100
@@ -177,6 +180,24 @@ export class FakeGithub {
         JSON.stringify({ name: contents[2], encoding: 'base64', content: Buffer.from(f.text).toString('base64'), sha: sha(f.text) }),
         { etag: f.etag },
       )
+    }
+    if (contents && method === 'PUT') {
+      if (contents[1] !== this.login) return done(404, JSON.stringify({ message: 'Not Found' }))
+      let parsed: any = {}
+      try {
+        parsed = JSON.parse(body ?? '{}')
+      } catch {
+        return done(422, JSON.stringify({ message: 'bad json' }))
+      }
+      const name = decodeURIComponent(contents[2])
+      const cur = this.repo.get(name)
+      // כמו GitHub: קובץ קיים דורש sha תואם; קובץ חדש — בלי sha
+      if (cur && parsed.sha !== sha(cur.text)) return done(409, JSON.stringify({ message: 'sha does not match' }))
+      if (!cur && parsed.sha) return done(422, JSON.stringify({ message: 'no such file' }))
+      const text = Buffer.from(String(parsed.content ?? ''), 'base64').toString('utf8')
+      this.setRepoFile(name, text)
+      this.writes.push({ tag, name, at: Date.now(), message: String(parsed.message ?? '') })
+      return done(cur ? 200 : 201, JSON.stringify({ content: { name, sha: sha(text) }, commit: { sha: sha(text + Date.now()) } }))
     }
     const issues = path.match(/^\/repos\/([^/]+)\/life-os-atlas\/issues$/)
     if (issues && method === 'POST') {
