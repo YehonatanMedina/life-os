@@ -19,13 +19,13 @@
 // ורשימת הפקודות שבוצעו מסונכרנת יחד עם שאר המצב.
 // ---------------------------------------------------------------------------
 import { useSyncExternalStore } from 'react'
-import { actions, alive, store } from './store'
+import { actions, alive, store, workoutHasData } from './store'
 import { decryptEnvelope, encryptText } from './crypto'
 import { aiKey } from './ai'
 import { askFast, fastReady, type ThreadTurn } from './atlasFast'
 import { cloudConfigured, hasPulledOnce, nudgePush } from './cloud'
 import { today } from './dates'
-import type { CalEvent, Exercise, HabitDef, HabitStep, ID, RecurRule, Task, Track, WeeklyDef, WeekGoal, WorkoutDay } from './types'
+import type { CalEvent, Exercise, HabitDef, HabitStep, ID, RecurRule, Task, Track, WeeklyDef, WeekGoal, WorkoutDay, WorkoutLog } from './types'
 
 const TOKEN_KEY = 'life-os-gh-token'
 const LOGIN_KEY = 'life-os-gh-login'
@@ -78,6 +78,7 @@ interface AtlasCache {
 type UndoEntry =
   | { kind: 'event' | 'task' | 'rule' | 'workoutDay' | 'track' | 'weekly' | 'habit'; id: ID; prev: any | null; patch?: Record<string, unknown> }
   | { kind: 'exercise'; dayId: ID; id: ID; prev: Exercise | null; index?: number }
+  | { kind: 'workoutLog'; date: string; prev: Partial<WorkoutLog> | null }
   | { kind: 'weekGoals'; ws: string; prev: WeekGoal[] | undefined }
   | { kind: 'settings'; prev: Record<string, unknown>; patch?: Record<string, unknown> }
 
@@ -834,6 +835,19 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
       actions.deleteWorkoutDay(c.dayId)
       return { kind: 'workoutDay', id: c.dayId, prev }
     }
+    // האימון של תאריך מסוים — בלי לשנות את התוכנית השבועית. זה מה שקורה
+    // כשלוחצים "עשיתי אימון אחר" במסך האימון, רק שאטלס יכול להקדים ולעשות
+    // את זה מראש (חדר כושר סגור, נסיעה, פציעה).
+    case 'setWorkoutFor': {
+      if (!isDate(c.date)) throw new Error('setWorkoutFor: bad date')
+      const day = alive(s.workoutPlan ?? []).find((d) => d.id === c.dayId)
+      if (!day) throw new Error('day not found')
+      const cur = (s.workouts ?? []).find((w) => w.date === c.date && !w.deleted)
+      if (cur?.dayId === day.id && cur.title === day.title) return null
+      const prev = cur ? { dayId: cur.dayId, title: cur.title, kind: cur.kind } : null
+      actions.patchWorkout(c.date, { dayId: day.id, title: day.title, kind: day.kind })
+      return { kind: 'workoutLog', date: c.date, prev }
+    }
     case 'addExercise': {
       const day = (s.workoutPlan ?? []).find((d) => d.id === c.dayId)
       if (!day) throw new Error('day not found')
@@ -996,6 +1010,14 @@ export function undoCommand(cmdId: string): boolean {
       else actions.deleteWorkoutDay(u.id)
       break
     }
+    case 'workoutLog': {
+      // אם לא היה רישום קודם ולא נרשם מאז כלום — מוחקים. נרשמו סטים בינתיים,
+      // הם לא הולכים לאיבוד: רק ההצמדה לתוכנית חוזרת למה שהייתה.
+      if (u.prev) actions.patchWorkout(u.date, u.prev)
+      else if (!workoutHasData((store.get().workouts ?? []).find((w) => w.date === u.date && !w.deleted)))
+        actions.deleteWorkout(u.date)
+      break
+    }
     case 'exercise':
       if (u.prev) {
         // החלפה מלאה במקום המקורי — לא מיזוג, ולא הוספה בסוף עם ברירות מחדל
@@ -1089,6 +1111,8 @@ export function describeCommand(c: AtlasCommand): string {
       return `יום אימון עודכן: ${wd(c.dayId)}`
     case 'deleteWorkoutDay':
       return `יום אימון הוסר: ${wd(c.dayId)}`
+    case 'setWorkoutFor':
+      return `האימון של ${c.date ?? ''} הוחלף ל: ${wd(c.dayId)}`
     case 'addExercise':
       return `תרגיל נוסף: ${c.exercise?.name ?? ''}`
     case 'patchExercise':

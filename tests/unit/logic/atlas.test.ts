@@ -418,6 +418,36 @@ describe('undoCommand', () => {
     expect(get().workoutPlan[0].exercises[0]).toEqual({ id: 'x1', name: 'מתח', metric: 'bodyweight' })
   })
 
+  it('setWorkoutFor מצמיד את האימון של התאריך ליום אחר בתוכנית, בלי לגעת בתוכנית', async () => {
+    const plan = [
+      { id: 'wd-sun', updatedAt: 1, dow: 0, title: 'דחיפה', kind: 'gym' as const, exercises: [{ id: 'x1', name: 'לחיצת חזה', metric: 'weight' as const }] },
+      { id: 'wd-home', updatedAt: 1, dow: 0, title: 'דחיפה בבית', kind: 'home' as const, exercises: [{ id: 'x2', name: 'שכיבות', metric: 'reps' as const }] },
+    ]
+    await boot(blankState({ workoutPlan: plan }))
+    await thread([atlasMsg('a1', '2026-09-13T09:00:00+03:00', [{ id: 'c-sw', op: 'setWorkoutFor', date: '2026-09-13', dayId: 'wd-home' }])])
+    await At.pollAtlas()
+    const log = get().workouts.find((w) => w.date === '2026-09-13')
+    expect(log?.dayId).toBe('wd-home')
+    expect(log?.kind).toBe('home')
+    // ברירת המחדל של יום ראשון בתוכנית לא זזה
+    expect(S.planForDow(get(), 0)?.id).toBe('wd-sun')
+    // ולא היה רישום קודם — הביטול מסיר את האימון לגמרי
+    At.undoCommand('c-sw')
+    expect(get().workouts.find((w) => w.date === '2026-09-13' && !w.deleted)).toBeUndefined()
+  })
+
+  it('setWorkoutFor על תאריך לא תקין או יום שלא קיים נדחה', async () => {
+    await boot(blankState({ workoutPlan: [{ id: 'wd1', updatedAt: 1, dow: 0, title: 'דחיפה', kind: 'gym', exercises: [] }] }))
+    await thread([atlasMsg('a1', '2026-09-13T09:00:00+03:00', [
+      { id: 'c-bad-date', op: 'setWorkoutFor', date: '13/09/2026', dayId: 'wd1' },
+      { id: 'c-bad-day', op: 'setWorkoutFor', date: '2026-09-13', dayId: 'wd-nope' },
+    ])])
+    await At.pollAtlas()
+    expect(get().workouts.filter((w) => !w.deleted)).toEqual([])
+    const failed = JSON.parse(localStorage.getItem(CACHE_KEY) ?? '{}').failed ?? {}
+    expect(Object.keys(failed).sort()).toEqual(['c-bad-date', 'c-bad-day'])
+  })
+
   it('ביטול מחיקה מחזיר את הרשומה לחיים', async () => {
     await boot(blankState({
       events: [event({ id: 'e1', date: '2026-09-20', title: 'א' })],

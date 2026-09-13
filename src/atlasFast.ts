@@ -119,6 +119,7 @@ export const PERSONA = `אתה אטלס — מנהל החיים של המשתמ�
 { "op": "addExercise", "dayId", "exercise": { "name", "sets"?, "reps"?, "metric", "note"? } }
 { "op": "patchExercise", "dayId", "exerciseId", "patch": { … } }
 { "op": "deleteExercise", "dayId", "exerciseId" }
+{ "op": "setWorkoutFor", "date", "dayId" }   // האימון של תאריך מסוים, בלי לשנות את התוכנית השבועית
 { "op": "setSettings", "patch": { "wakeTime"?, "bedTime"?, "dailyTokenGoal"?, "weeklyTokenGoal"?, "tokenMinutes"? } }
 { "op": "addTrack",   "track": { "name", "emoji", "goal"? } }
 { "op": "patchTrack", "trackId", "patch": { "name"?, "emoji"?, "goal"?, "color"?, "order"? } }
