@@ -809,3 +809,68 @@ describe('טיימר שנשכח דולק בלשונית פתוחה', () => {
     expect(get().timer?.autoPaused).toBeUndefined()
   })
 })
+
+// ---------------------------------------------------------------------------
+describe('מיומנויות — שלבים והתקדמות', () => {
+  it('שלב נסגר רק כשכל הסטים הנדרשים עמדו ביעד באותו אימון', async () => {
+    S = await freshStore(blankState({
+      workouts: [
+        // 10.9: שני סטים ביעד מתוך ארבעה — עוד לא עברת
+        workout({ date: '2026-09-10', sets: { 'ex-hs': [{ sec: 45 }, { sec: 45 }, { sec: 20 }, { sec: 25 }] } }),
+      ],
+    }))
+    const target = { metric: 'time', value: 45, sets: 4 }
+    const p1 = S.stageProgress(get(), ['ex-hs'], target)!
+    expect(p1.ok).toBe(2)
+    expect(p1.need).toBe(4)
+    expect(p1.met).toBe(false)
+    expect(p1.best).toBe(45)
+
+    // 11.9: ארבעה סטים ביעד — עברת
+    S.actions.patchWorkout('2026-09-11', {})
+    for (let i = 0; i < 4; i++) S.actions.setWorkoutSet('2026-09-11', 'ex-hs', i, { sec: 50 })
+    const p2 = S.stageProgress(get(), ['ex-hs'], target)!
+    expect(p2.ok).toBe(4)
+    expect(p2.met).toBe(true)
+    expect(p2.date).toBe('2026-09-11')
+  })
+
+  it('סט במשקל גוף לא נחשב ליעד שדורש תוספת משקל', async () => {
+    S = await freshStore(blankState({
+      workouts: [workout({ date: '2026-09-10', sets: { 'ex-pu': [{ kg: 0, reps: 8 }, { kg: 0, reps: 8 }, { kg: 0, reps: 8 }] } })],
+    }))
+    // 3×8 בלי משקל — עומד ביעד של משקל גוף
+    expect(S.stageProgress(get(), ['ex-pu'], { metric: 'bodyweight', value: 8, sets: 3 })!.met).toBe(true)
+    // ...אבל לא ביעד שדורש +10 ק״ג
+    expect(S.stageProgress(get(), ['ex-pu'], { metric: 'bodyweight', value: 6, sets: 3, kg: 10 })!.ok).toBe(0)
+  })
+
+  it('בלי תרגיל מקושר או בלי יעד אין מדידה', async () => {
+    S = await freshStore(blankState({}))
+    expect(S.stageProgress(get(), undefined, { metric: 'time', value: 30, sets: 1 })).toBeNull()
+    expect(S.stageProgress(get(), ['ex-hs'], undefined)).toBeNull()
+  })
+
+  it('setSkill יוצר רשומה, ו-toggleSkillStage מסמן ומבטל', async () => {
+    S = await freshStore()
+    S.actions.setSkill('sk-lsit', { stageId: 'tuck', exIds: ['ex-lsit'] })
+    expect(S.skillOf(get(), 'sk-lsit')?.stageId).toBe('tuck')
+    S.actions.toggleSkillStage('sk-lsit', 'pseudo')
+    expect(S.skillOf(get(), 'sk-lsit')?.done).toEqual(['pseudo'])
+    S.actions.toggleSkillStage('sk-lsit', 'pseudo')
+    expect(S.skillOf(get(), 'sk-lsit')?.done).toEqual([])
+  })
+
+  it('הריצה הארוכה והנפח השבועי נקראים מהיומן', async () => {
+    S = await freshStore(blankState({
+      workouts: [
+        workout({ date: '2026-09-07', kind: 'run', km: 3, minutes: 20 }),
+        workout({ date: '2026-09-12', kind: 'run', km: 4, minutes: 25 }),
+        workout({ date: '2026-09-09', kind: 'walk', km: 2, minutes: 30 }),
+      ],
+    }))
+    expect(S.longestRun(get())).toEqual({ km: 4, date: '2026-09-12' })
+    // 6.9 הוא ראשון — כל השלושה נופלים לאותו שבוע
+    expect(S.runWeeks(get())).toEqual([['2026-09-06', 9]])
+  })
+})

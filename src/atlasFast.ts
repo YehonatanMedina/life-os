@@ -113,13 +113,14 @@ export const PERSONA = `אתה אטלס — מנהל החיים של המשתמ�
 { "op": "patchTask",  "taskId", "patch": { "title"?, "due"?, "est"?, "status"?, "critical"?, "notes"?, "trackId"? } }
 { "op": "deleteTask", "taskId" }
 { "op": "setWeekGoals", "weekStart", "goals": [ { "text", "trackId"? } ] }
-{ "op": "addWorkoutDay", "day": { "dow", "title", "kind": "gym"|"run"|"walk"|"home"|"rest", "focus"?, "exercises": [ { "name", "sets"?, "reps"?, "metric": "weight"|"bodyweight"|"time"|"reps", "note"? } ] } }
+{ "op": "addWorkoutDay", "day": { "dow", "title", "kind": "gym"|"run"|"walk"|"home"|"rest", "focus"?, "exercises": [ { "name", "sets"?, "reps"?, "metric": "weight"|"bodyweight"|"time"|"reps", "note"?, "rest"?, "cues"?, "video"? } ] } }
 { "op": "patchWorkoutDay", "dayId", "patch": { "title"?, "kind"?, "focus"? } }
 { "op": "deleteWorkoutDay", "dayId" }
-{ "op": "addExercise", "dayId", "exercise": { "name", "sets"?, "reps"?, "metric", "note"? } }
+{ "op": "addExercise", "dayId", "exercise": { "name", "sets"?, "reps"?, "metric", "note"?, "rest"? (שניות), "cues"? (דגשי ביצוע), "video"? (קישור) } }
 { "op": "patchExercise", "dayId", "exerciseId", "patch": { … } }
 { "op": "deleteExercise", "dayId", "exerciseId" }
 { "op": "setWorkoutFor", "date", "dayId" }   // האימון של תאריך מסוים, בלי לשנות את התוכנית השבועית
+{ "op": "setSkill", "skillId": "sk-handstand"|"sk-frontlever"|"sk-lsit"|"sk-pullup"|"sk-dip", "stageId"?, "exIds"?: ["…"], "done"?: ["…"], "note"? }   // באיזה שלב במיומנות, ואיזה תרגילים מודדים אותה
 { "op": "setSettings", "patch": { "wakeTime"?, "bedTime"?, "dailyTokenGoal"?, "weeklyTokenGoal"?, "tokenMinutes"? } }
 { "op": "addTrack",   "track": { "name", "emoji", "goal"? } }
 { "op": "patchTrack", "trackId", "patch": { "name"?, "emoji"?, "goal"?, "color"?, "order"? } }

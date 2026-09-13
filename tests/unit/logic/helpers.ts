@@ -47,6 +47,7 @@ export function blankState(over: Partial<AppState> = {}): AppState {
     news: [],
     workoutPlan: [],
     workouts: [],
+    skills: [],
     timer: null,
     deviceId: 'dtest',
     lastSyncAt: 0,

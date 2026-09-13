@@ -12,14 +12,15 @@ import type { Exercise, ExMetric, ID, SetLog, WorkoutDay, WorkoutKind, WorkoutLo
 import { WORKOUT_KIND_LABEL } from '../types'
 
 // ---------------------------------------------------------------------------
-// אימונים.
+// אימונים — הגיליונות.
 //
-// שלושה מסכים על אותו מודל: מה יש היום (ורישום מה שבוצע), התוכנית השבועית,
-// וההתקדמות לאורך זמן. העריכה לא יושבת במסך נפרד — לוחצים ✎ בדיוק במקום
-// שבו מסתכלים על האימון, והכרטיסים הופכים לניתנים לעריכה במקום.
+// שלושה גיליונות על אותו מודל: רישום האימון של היום, התוכנית השבועית,
+// וההתקדמות לאורך זמן. כולם נפתחים מעמוד האימונים (`Workouts.tsx`), שהוא
+// המקום היחיד שבו אימונים מופיעים. העריכה לא יושבת במסך נפרד — לוחצים
+// "עריכה" בדיוק במקום שבו מסתכלים על האימון.
 // ---------------------------------------------------------------------------
 
-const KIND_EMOJI: Record<WorkoutKind, string> = {
+export const KIND_EMOJI: Record<WorkoutKind, string> = {
   gym: '🏋️',
   run: '🏃',
   walk: '🚶',
@@ -35,7 +36,7 @@ const METRIC_LABEL: Record<ExMetric, string> = {
 }
 
 /** "40×8" · "גוף×8" · "45 שנ׳" — קצר מספיק כדי לשבת בצ׳יפ */
-function setText(v: SetLog | undefined, metric: ExMetric): string {
+export function setText(v: SetLog | undefined, metric: ExMetric): string {
   if (!v || (!v.kg && !v.reps && !v.sec)) return '—'
   if (metric === 'time') return `${v.sec ?? 0} שנ׳`
   if (metric === 'reps') return `${v.reps ?? 0}`
@@ -46,107 +47,6 @@ function setText(v: SetLog | undefined, metric: ExMetric): string {
 function setsText(sets: SetLog[] | undefined, metric: ExMetric): string {
   if (!sets?.length) return ''
   return sets.map((x) => setText(x, metric)).join(' · ')
-}
-
-// ---------------------------------------------------------------------------
-// כרטיס במסך "היום"
-// ---------------------------------------------------------------------------
-export function WorkoutCard() {
-  const s = useApp()
-  const date = todayISO()
-  const [open, setOpen] = useState(false)
-  const [plan, setPlan] = useState(false)
-  const [prog, setProg] = useState(false)
-  // אותו מופע של הגיליונות בשני הענפים — אלמנט (לא רכיב פנימי, שהיה נבנה מחדש בכל ציור)
-  const sheets = (
-    <>
-      {open && <WorkoutSheet key="log" date={date} onClose={() => setOpen(false)} />}
-      {plan && <PlanSheet key="plan" onClose={() => setPlan(false)} />}
-      {prog && <ProgressSheet key="prog" onClose={() => setProg(false)} />}
-    </>
-  )
-
-  const planDay = workoutDayOn(s, date)
-  const log = workoutOn(s, date)
-  const done = !!log?.finishedAt
-  const started = workoutHasData(log)
-  const week = weekDates(weekStart(date))
-
-  // אין תוכנית בכלל — מציעים לבנות אחת, פעם אחת.
-  // הגיליונות מרונדרים פעם אחת בסוף (לא בכל ענף) — אחרת הוספת היום הראשון
-  // מחליפה עץ, PlanSheet נבנה מחדש והיום שנפתח נסגר מיד.
-  if (!alive(s.workoutPlan ?? []).length) {
-    return (
-      <>
-        <div className="card pad">
-          <b>אימונים</b>
-          <div className="tiny faint" style={{ margin: '3px 0 10px' }}>
-            עוד אין תוכנית שבועית. בונים אותה פעם אחת, ומשם רק מסמנים מה עשית.
-          </div>
-          <button className="btn sm" onClick={() => setPlan(true)}>
-            בניית התוכנית
-          </button>
-        </div>
-        {sheets}
-      </>
-    )
-  }
-
-  return (
-    <>
-      <div className="card">
-        <div className="card-h">
-          <div className="grow" style={{ minWidth: 0 }}>
-            <b>
-              {KIND_EMOJI[planDay?.kind ?? 'rest']} {planDay ? planDay.title : 'אין אימון היום'}
-            </b>
-            <div className="tiny faint">
-              יום {HE_DAYS[dow(date)]}
-              {planDay ? ` · ${WORKOUT_KIND_LABEL[planDay.kind]}` : ''}
-              {log?.km ? ` · ${log.km} ק״מ` : ''}
-            </div>
-          </div>
-          {done && <span className="chip on">✓ בוצע</span>}
-        </div>
-
-        {/* פס השבוע — מה תוכנן ומה כבר קרה */}
-        <div className="wk-strip">
-          {week.map((d) => {
-            const p = workoutDayOn(s, d)
-            const w = workoutOn(s, d)
-            const ok = !!w?.finishedAt
-            const partial = !ok && workoutHasData(w)
-            return (
-              <button
-                key={d}
-                className={`wd${d === date ? ' now' : ''}${ok ? ' ok' : ''}${partial ? ' part' : ''}`}
-                title={p ? p.title : 'ללא אימון'}
-                onClick={() => setOpen(true)}
-                disabled={d !== date}
-              >
-                <span className="l">{HE_DAYS_SHORT[dow(d)]}</span>
-                <span className="i">{p ? KIND_EMOJI[p.kind] : '·'}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="row" style={{ padding: '4px 13px 12px', flexWrap: 'wrap' }}>
-          <button className="btn sm primary grow" onClick={() => setOpen(true)}>
-            {done ? 'צפייה באימון' : started ? 'המשך רישום' : planDay ? 'פתיחת האימון' : 'רישום אימון'}
-          </button>
-          <button className="btn sm ghost" onClick={() => setPlan(true)}>
-            התוכנית
-          </button>
-          <button className="btn sm ghost" onClick={() => setProg(true)}>
-            התקדמות
-          </button>
-        </div>
-      </div>
-
-      {sheets}
-    </>
-  )
 }
 
 /** נועל את הגלילה של הדף מאחורי מסך מלא */
@@ -452,6 +352,7 @@ function ExerciseCard({
             {ex.sets ? `${ex.sets} סטים` : ''}
             {ex.reps ? ` · ${ex.reps} חזרות` : ''}
             {ex.metric === 'bodyweight' ? ' · משקל גוף' : ''}
+            {ex.rest ? ` · הפסקה ${ex.rest} שנ׳` : ''}
           </div>
         </div>
         <span className="tiny faint ltr" style={{ flexShrink: 0 }}>
@@ -459,7 +360,25 @@ function ExerciseCard({
         </span>
       </div>
 
+      {/* דגשי ביצוע לפני ההערה — זה מה שקוראים בזמן שנושמים בין סטים */}
+      {ex.cues && (
+        <div className="tiny" style={{ color: 'var(--text-dim)', marginTop: 6 }}>
+          <b>דגשים: </b>
+          {ex.cues}
+        </div>
+      )}
       {ex.note && <div className="tiny" style={{ color: 'var(--text-dim)', marginTop: 6 }}>{ex.note}</div>}
+      {ex.video && (
+        <a
+          className="btn xs ghost"
+          style={{ marginTop: 8 }}
+          href={ex.video}
+          target="_blank"
+          rel="noreferrer"
+        >
+          איך עושים את זה
+        </a>
+      )}
 
       {last && (
         <div className="row" style={{ marginTop: 8, gap: 6, flexWrap: 'wrap' }}>
@@ -737,6 +656,34 @@ export function ExerciseEditor({ day }: { day: WorkoutDay }) {
                     </button>
                   ))}
                 </div>
+                <label className="field" style={{ marginBottom: 8 }}>
+                  <span>הפסקה בין סטים (שניות)</span>
+                  <input
+                    className="input ltr"
+                    inputMode="numeric"
+                    value={ex.rest ?? ''}
+                    placeholder="90"
+                    onChange={(e) =>
+                      actions.patchExercise(day.id, ex.id, {
+                        rest: Math.max(0, Math.min(600, Number(e.target.value.replace(/\D/g, '')) || 0)) || undefined,
+                      })
+                    }
+                  />
+                </label>
+                <input
+                  className="input"
+                  style={{ marginBottom: 8 }}
+                  value={ex.cues ?? ''}
+                  placeholder="דגשים — מה לשים לב אליו"
+                  onChange={(e) => actions.patchExercise(day.id, ex.id, { cues: e.target.value })}
+                />
+                <input
+                  className="input ltr"
+                  style={{ marginBottom: 8 }}
+                  value={ex.video ?? ''}
+                  placeholder="קישור לטוטוריאל"
+                  onChange={(e) => actions.patchExercise(day.id, ex.id, { video: e.target.value })}
+                />
                 <input
                   className="input"
                   value={ex.note ?? ''}

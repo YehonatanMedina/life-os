@@ -156,7 +156,7 @@ function snapshotOf(s: AppState): string {
 
 const LIST_KEYS = [
   'tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits',
-  'weekly', 'phases', 'news', 'workoutPlan', 'workouts',
+  'weekly', 'phases', 'news', 'workoutPlan', 'workouts', 'skills',
 ] as const
 
 /**

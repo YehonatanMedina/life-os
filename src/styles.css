@@ -1381,6 +1381,29 @@ label.field > span, .field > span {
 .wk-strip .wd.part { background: var(--warn-soft); border-color: var(--warn); }
 .wk-strip .wd:disabled { opacity: 1; }
 
+/* המסע — פס המיילסטונים, ואז שלב אחד */
+.mstones { display: flex; gap: 3px; padding: 0 13px 8px; }
+.mstones i {
+  flex: 1 1 0;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-sunk);
+}
+.mstones i.ok { background: var(--good); }
+.mstones i.now { background: var(--accent); }
+
+.mstone {
+  padding: 9px 0 9px 0;
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid var(--line);
+  margin-inline-start: 2px;
+}
+.mstone + .mstone { border-top: 1px solid var(--line-soft); }
+.mstone.done { border-inline-start-color: var(--good); }
+.mstone.done b { color: var(--text-dim); font-weight: 600; }
+.mstone.now { border-inline-start-color: var(--accent); }
+.mstone.next { opacity: .72; }
+
 .sets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .setchip {
   position: relative;

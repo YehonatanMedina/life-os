@@ -181,6 +181,7 @@ export function seedState(): AppState {
     // התוכנית שלך — נבנית באפליקציה, לא בקוד (המאגר ציבורי)
     workoutPlan: [],
     workouts: [],
+    skills: [],
     timer: null,
     deviceId: newDeviceId(),
     lastSyncAt: 0,

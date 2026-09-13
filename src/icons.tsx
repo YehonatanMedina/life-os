@@ -5,7 +5,7 @@
 import React from 'react'
 
 export type IconName =
-  | 'today' | 'atlas' | 'calendar' | 'projects' | 'review' | 'settings'
+  | 'today' | 'atlas' | 'calendar' | 'projects' | 'review' | 'settings' | 'workout'
   | 'pause' | 'play' | 'pencil' | 'bell' | 'moon' | 'shuffle' | 'check' | 'x' | 'clipboard' | 'warn' | 'compass'
 
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -42,6 +42,11 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <circle cx="12" cy="12" r="3" />
       <path d="M19.1 14.6a1.6 1.6 0 0 0 .3 1.8l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5v.2a1.9 1.9 0 1 1-3.8 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a1.9 1.9 0 1 1 0-3.8h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.6 1.6 0 0 0 1.8.3h.1a1.6 1.6 0 0 0 1-1.5V3a1.9 1.9 0 1 1 3.8 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.5 1h.2a1.9 1.9 0 1 1 0 3.8h-.1a1.6 1.6 0 0 0-1.5 1z" />
+    </>
+  ),
+  workout: (
+    <>
+      <path d="M3.2 9.6v4.8M6.6 7.4v9.2M17.4 7.4v9.2M20.8 9.6v4.8M6.6 12h10.8" />
     </>
   ),
   pause: (

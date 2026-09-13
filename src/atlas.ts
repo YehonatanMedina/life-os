@@ -19,13 +19,14 @@
 // ורשימת הפקודות שבוצעו מסונכרנת יחד עם שאר המצב.
 // ---------------------------------------------------------------------------
 import { useSyncExternalStore } from 'react'
-import { actions, alive, store, workoutHasData } from './store'
+import { actions, alive, skillOf, store, workoutHasData } from './store'
 import { decryptEnvelope, encryptText } from './crypto'
 import { aiKey } from './ai'
 import { askFast, fastReady, type ThreadTurn } from './atlasFast'
 import { cloudConfigured, hasPulledOnce, nudgePush } from './cloud'
 import { today } from './dates'
-import type { CalEvent, Exercise, HabitDef, HabitStep, ID, RecurRule, Task, Track, WeeklyDef, WeekGoal, WorkoutDay, WorkoutLog } from './types'
+import type { CalEvent, Exercise, HabitDef, HabitStep, ID, RecurRule, SkillProgress, Task, Track, WeeklyDef, WeekGoal, WorkoutDay, WorkoutLog } from './types'
+import { ladder } from './skills'
 
 const TOKEN_KEY = 'life-os-gh-token'
 const LOGIN_KEY = 'life-os-gh-login'
@@ -81,6 +82,7 @@ type UndoEntry =
   | { kind: 'workoutLog'; date: string; prev: Partial<WorkoutLog> | null }
   | { kind: 'weekGoals'; ws: string; prev: WeekGoal[] | undefined }
   | { kind: 'settings'; prev: Record<string, unknown>; patch?: Record<string, unknown> }
+  | { kind: 'skill'; id: string; prev: SkillProgress | null; patch: Record<string, unknown> }
 
 /**
  * ביטול של עדכון: מחזירים רק שדות שהפקודה שינתה ושעדיין מחזיקים את הערך שהיא
@@ -871,6 +873,26 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
       actions.deleteExercise(c.dayId, c.exerciseId)
       return { kind: 'exercise', dayId: c.dayId, id: c.exerciseId, prev, index: day!.exercises.indexOf(prev) }
     }
+    // המיומנות שאתה עובד עליה — באיזה שלב אתה, ואיזה תרגילים מודדים אותו.
+    // הסולם עצמו הוא ידע אימון ויושב בקוד; כאן נשמר רק המקום שלך בו.
+    case 'setSkill': {
+      const lad = ladder(String(c.skillId ?? ''))
+      if (!lad) throw new Error('skill not found')
+      const patch: Record<string, any> = {}
+      if (c.stageId !== undefined) {
+        if (!lad.stages.some((x) => x.id === c.stageId)) throw new Error('stage not found')
+        patch.stageId = c.stageId
+      }
+      if (Array.isArray(c.exIds)) patch.exIds = c.exIds.filter((x: unknown) => typeof x === 'string')
+      if (Array.isArray(c.done)) {
+        patch.done = c.done.filter((x: unknown) => typeof x === 'string' && lad.stages.some((y) => y.id === x))
+      }
+      if (txt(c.note)) patch.note = String(c.note)
+      if (!Object.keys(patch).length) throw new Error('setSkill: nothing to set')
+      const prev = skillOf(s, lad.id) ?? null
+      actions.setSkill(lad.id, patch)
+      return { kind: 'skill', id: lad.id, prev, patch }
+    }
     case 'setSettings': {
       const patch = strip(c.patch)
       const allowed = ['wakeTime', 'bedTime', 'dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'name', 'reviewDow']
@@ -1029,6 +1051,13 @@ export function undoCommand(cmdId: string): boolean {
         }
       } else actions.deleteExercise(u.dayId, u.id)
       break
+    case 'skill': {
+      const cur = skillOf(store.get(), u.id)
+      if (u.prev && cur) actions.setSkill(u.id, reverted(cur, u.prev, u.patch))
+      else if (u.prev) actions.setSkill(u.id, u.prev)
+      else actions.setSkill(u.id, { stageId: undefined, exIds: undefined, done: undefined, note: undefined, deleted: true })
+      break
+    }
     case 'weekGoals':
       actions.setWeekGoals(u.ws, u.prev ?? [])
       break
@@ -1119,6 +1148,11 @@ export function describeCommand(c: AtlasCommand): string {
       return `תרגיל עודכן: ${ex(c.dayId, c.exerciseId)}`
     case 'deleteExercise':
       return `תרגיל הוסר: ${ex(c.dayId, c.exerciseId)}`
+    case 'setSkill': {
+      const lad = ladder(String(c.skillId ?? ''))
+      const st = lad?.stages.find((x) => x.id === c.stageId)
+      return `מיומנות עודכנה: ${lad?.name ?? c.skillId}${st ? ` · ${st.name}` : ''}`
+    }
     case 'setSettings':
       return `הגדרות עודכנו: ${Object.keys(c.patch ?? {}).join(', ')}`
     case 'addTrack':

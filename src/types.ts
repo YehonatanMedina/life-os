@@ -254,6 +254,12 @@ export interface Exercise {
   reps?: string
   metric: ExMetric
   note?: string
+  /** הפסקה מומלצת בין סטים, בשניות */
+  rest?: number
+  /** דגשי ביצוע — מה לשים לב אליו בזמן התרגיל */
+  cues?: string
+  /** קישור לטוטוריאל, לתרגיל שלא מוכר */
+  video?: string
 }
 
 /** יום בתוכנית השבועית (0 = ראשון) */
@@ -291,6 +297,22 @@ export interface WorkoutLog extends Rec {
   minutes?: number
   note?: string
   finishedAt?: number
+}
+
+/**
+ * ההתקדמות במיומנות אחת. סולם השלבים עצמו הוא ידע אימון גנרי ויושב בקוד
+ * (`src/skills.ts`); כאן נשמר רק מה שאישי — באיזה שלב אתה, ואיזה תרגילים
+ * בתוכנית מודדים אותו.
+ */
+export interface SkillProgress extends Rec {
+  /** מזהה הסולם מתוך הקטלוג */
+  stageId?: string
+  /** תרגילים בתוכנית שמודדים את השלב הנוכחי */
+  exIds?: ID[]
+  /** שלבים שסומנו כהושלמו ידנית */
+  done?: string[]
+  note?: string
+  startedAt?: ISODate
 }
 
 export interface WeeklyDef extends Rec {
@@ -397,6 +419,8 @@ export interface AppState {
   workoutPlan: WorkoutDay[]
   /** מה שבאמת בוצע */
   workouts: WorkoutLog[]
+  /** באיזה שלב אתה בכל מיומנות — הסולמות עצמם בקוד */
+  skills: SkillProgress[]
   timer: Timer | null
   /** מתי הטיימר השתנה לאחרונה — כדי ששתי לשוניות יסכימו מי מהן מחזיקה את הגרסה הטרייה */
   timerStamp?: number

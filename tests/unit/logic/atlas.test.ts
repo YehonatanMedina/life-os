@@ -436,6 +436,31 @@ describe('undoCommand', () => {
     expect(get().workouts.find((w) => w.date === '2026-09-13' && !w.deleted)).toBeUndefined()
   })
 
+  it('setSkill קובע שלב ותרגילים מודדים, והביטול מחזיר את הקודם', async () => {
+    await boot(blankState({ skills: [{ id: 'sk-lsit', updatedAt: 1, stageId: 'pseudo' }] }))
+    await thread([atlasMsg('a1', '2026-09-13T09:00:00+03:00', [
+      { id: 'c-sk', op: 'setSkill', skillId: 'sk-lsit', stageId: 'tuck', exIds: ['ex-lsit'], note: 'עבר' },
+    ])])
+    await At.pollAtlas()
+    const k = () => get().skills.find((x) => x.id === 'sk-lsit')
+    expect(k()?.stageId).toBe('tuck')
+    expect(k()?.exIds).toEqual(['ex-lsit'])
+    At.undoCommand('c-sk')
+    expect(k()?.stageId).toBe('pseudo')
+  })
+
+  it('setSkill עם מיומנות או שלב שלא קיימים נדחה', async () => {
+    await boot(blankState({}))
+    await thread([atlasMsg('a1', '2026-09-13T09:00:00+03:00', [
+      { id: 'c-no-skill', op: 'setSkill', skillId: 'sk-nope', stageId: 'tuck' },
+      { id: 'c-no-stage', op: 'setSkill', skillId: 'sk-lsit', stageId: 'nope' },
+    ])])
+    await At.pollAtlas()
+    expect(get().skills.filter((x) => !x.deleted)).toEqual([])
+    const failed = JSON.parse(localStorage.getItem(CACHE_KEY) ?? '{}').failed ?? {}
+    expect(Object.keys(failed).sort()).toEqual(['c-no-skill', 'c-no-stage'])
+  })
+
   it('setWorkoutFor על תאריך לא תקין או יום שלא קיים נדחה', async () => {
     await boot(blankState({ workoutPlan: [{ id: 'wd1', updatedAt: 1, dow: 0, title: 'דחיפה', kind: 'gym', exercises: [] }] }))
     await thread([atlasMsg('a1', '2026-09-13T09:00:00+03:00', [

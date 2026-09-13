@@ -1,7 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import type {
   AppState, CalEvent, DayLog, Exercise, ID, ISODate, NewsRating, Rec, RecurRule, Session, SetLog,
-  Task, WeekGoal, WeekLog, WorkoutDay, WorkoutLog,
+  SkillProgress, Task, WeekGoal, WeekLog, WorkoutDay, WorkoutLog,
 } from './types'
 import { addDays, iso, logicalDate, parseISO, today, weekStart } from './dates'
 import { HABITS, RULES, SCHEMA_VERSION, TASKS, TRACKS, WEEKLY, EVENTS, DEFAULT_SETTINGS, seedState, newDeviceId, PHASES } from './seed'
@@ -224,6 +224,7 @@ export function mergeStates(local: AppState, remote: AppState): AppState {
     news: mergeList(local.news || [], remote.news || []),
     workoutPlan: mergeList(local.workoutPlan || [], remote.workoutPlan || []),
     workouts: mergeWorkouts(local.workouts || [], remote.workouts || []),
+    skills: mergeList(local.skills || [], remote.skills || []),
     // איחוד — פקודה שבוצעה באחד המכשירים בוצעה
     atlasApplied: { ...(remote.atlasApplied || {}), ...(local.atlasApplied || {}) },
     // הטיימר הוא תמיד מקומי — buildDocument מאפס אותו לפני פרסום
@@ -358,6 +359,7 @@ function fillDefaults(s: AppState): AppState {
     news: s.news ?? [],
     workoutPlan: s.workoutPlan ?? [],
     workouts: s.workouts ?? [],
+    skills: s.skills ?? [],
     atlasApplied: s.atlasApplied ?? {},
   }
 }
@@ -412,6 +414,7 @@ function sanitize(p: any): AppState {
     news: arr(p.news, (n) => isDate(n.date)),
     workoutPlan: arr(p.workoutPlan, (w) => Array.isArray(w.exercises)),
     workouts: arr(p.workouts, (w) => isDate(w.date)),
+    skills: arr(p.skills),
     timer: sane(p.timer),
     timerStamp: typeof p.timerStamp === 'number' ? p.timerStamp : 0,
     days: arr(p.days, (d) => isDate(d.date)),
@@ -453,7 +456,7 @@ const SEED_STAMP = Date.parse('2026-01-01T00:00:00') // T0 של הזרע ב-seed
  * הן ברירות מחדל ולא שוות דריסה של המחסן.
  */
 export function isPristine(s: AppState): boolean {
-  const lists: Rec[][] = [s.tracks, s.tasks, s.events, s.rules, s.habits, s.weekly, s.phases ?? [], s.workoutPlan ?? [], s.news ?? []]
+  const lists: Rec[][] = [s.tracks, s.tasks, s.events, s.rules, s.habits, s.weekly, s.phases ?? [], s.workoutPlan ?? [], s.news ?? [], s.skills ?? []]
   const untouched = lists.every((l) => l.every((x) => (x.updatedAt || 0) <= SEED_STAMP))
   return untouched && !s.sessions.length && !s.days.length && !s.weeks.length && !(s.workouts ?? []).length
 }
@@ -477,7 +480,7 @@ export function loadState(): AppState {
   }
   s = applyMigrations(s)
   // הגנות לפני מיזוג הזרע — מצב ישן או פגום לא יפיל את האפליקציה
-  for (const k of ['tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits', 'weekly', 'phases', 'news', 'workoutPlan', 'workouts'] as const) {
+  for (const k of ['tracks', 'tasks', 'events', 'rules', 'sessions', 'days', 'weeks', 'habits', 'weekly', 'phases', 'news', 'workoutPlan', 'workouts', 'skills'] as const) {
     if (!Array.isArray((s as any)[k])) (s as any)[k] = []
   }
   s = fillDefaults(s)
@@ -1099,6 +1102,25 @@ export const actions = {
     }))
   },
 
+  // ---- מיומנויות ----
+  /** קובע את השלב, התרגילים המודדים או ההערה של מיומנות אחת */
+  setSkill(id: string, patch: Partial<SkillProgress>) {
+    store.set((s) => {
+      const list = s.skills ?? []
+      const cur = list.find((k) => k.id === id)
+      const base: SkillProgress = cur ?? { id, updatedAt: 0, startedAt: today() }
+      return { ...s, skills: upsertList(list, { ...base, ...patch, deleted: false, updatedAt: Date.now() }) }
+    })
+  },
+  /** מסמן שלב כהושלם ידנית, או מבטל את הסימון */
+  toggleSkillStage(id: string, stageId: string) {
+    const cur = (store.get().skills ?? []).find((k) => k.id === id)
+    const done = new Set(cur?.done ?? [])
+    if (done.has(stageId)) done.delete(stageId)
+    else done.add(stageId)
+    actions.setSkill(id, { done: [...done] })
+  },
+
   /** פקודות של אטלס שבוצעו במכשיר הזה — מצטרף למפה המסונכרנת */
   markAtlasApplied(ids: Record<string, number>) {
     store.set((s) => ({ ...s, atlasApplied: { ...(s.atlasApplied ?? {}), ...ids } }))
@@ -1627,4 +1649,75 @@ export function exerciseHistory(
 export function lastSetsOf(s: AppState, exId: ID, before: ISODate): { date: ISODate; sets: SetLog[] } | undefined {
   const h = exerciseHistory(s, exId).filter((x) => x.date < before)
   return h[h.length - 1]
+}
+
+// ---------------------------------------------------------------------------
+// מיומנויות — כמה רחוק אתה בשלב הנוכחי, לפי מה שבאמת נרשם
+// ---------------------------------------------------------------------------
+
+/** ההתקדמות השמורה של מיומנות (או undefined אם עוד לא נגעת בה) */
+export function skillOf(s: AppState, id: string): SkillProgress | undefined {
+  return (s.skills ?? []).find((k) => k.id === id && !k.deleted)
+}
+
+/**
+ * כמה סטים בתרגילים שמודדים את המיומנות עמדו ביעד של השלב, באימון האחרון
+ * שבו התרגיל בוצע. מחזיר גם את הסט הטוב ביותר אי־פעם, כדי להראות פער.
+ *
+ * הכלל: שלב נסגר כשכל הסטים הנדרשים עמדו ביעד **באותו אימון** — לא כשסט
+ * בודד יוצא דופן הצליח פעם אחת.
+ */
+export function stageProgress(
+  s: AppState,
+  exIds: ID[] | undefined,
+  target: { metric: string; value: number; sets: number; kg?: number } | undefined,
+): { ok: number; need: number; best: number; date?: ISODate; met: boolean } | null {
+  if (!target || !exIds?.length) return null
+  const need = Math.max(1, target.sets)
+  let out = { ok: 0, need, best: 0, date: undefined as ISODate | undefined, met: false }
+  for (const exId of exIds) {
+    const hist = exerciseHistory(s, exId)
+    if (!hist.length) continue
+    // הסט "עומד ביעד" רק אם גם התוספת במשקל מספיקה — 8 חזרות בלי משקל
+    // הן לא 8 חזרות עם 10 ק״ג
+    const value = (v: SetLog) =>
+      target.metric === 'time' ? (v.sec ?? 0) : (v.reps ?? 0)
+    const heavy = (v: SetLog) => (v.kg ?? 0) >= (target.kg ?? 0)
+    for (const h of hist) {
+      const ok = h.sets.filter((v) => heavy(v) && value(v) >= target.value).length
+      const best = Math.max(0, ...h.sets.filter(heavy).map(value))
+      // האימון האחרון שבו התרגיל בוצע הוא זה שקובע את המצב הנוכחי
+      if (!out.date || h.date >= out.date) out = { ...out, ok, date: h.date }
+      if (best > out.best) out.best = best
+    }
+  }
+  out.met = out.ok >= need
+  return out
+}
+
+/** השלב שאתה בו כרגע (לפי מה שנשמר), עם נפילה לשלב הראשון */
+export function stageIndex(prog: SkillProgress | undefined, stageIds: string[]): number {
+  const i = prog?.stageId ? stageIds.indexOf(prog.stageId) : -1
+  return i === -1 ? 0 : i
+}
+
+/** הריצה הארוכה ביותר שנרשמה */
+export function longestRun(s: AppState): { km: number; date?: ISODate } {
+  let out = { km: 0, date: undefined as ISODate | undefined }
+  for (const w of s.workouts ?? []) {
+    if (w.deleted || w.kind !== 'run' || !w.km) continue
+    if (w.km > out.km) out = { km: w.km, date: w.date }
+  }
+  return out
+}
+
+/** קילומטרים לפי שבוע, מהישן לחדש */
+export function runWeeks(s: AppState): Array<[ISODate, number]> {
+  const map = new Map<string, number>()
+  for (const w of s.workouts ?? []) {
+    if (w.deleted || (w.kind !== 'run' && w.kind !== 'walk') || !w.km) continue
+    const ws = weekStart(w.date)
+    map.set(ws, (map.get(ws) ?? 0) + w.km)
+  }
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
 }

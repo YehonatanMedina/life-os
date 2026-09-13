@@ -165,12 +165,13 @@ export function buildAtlasContext(s: AppState) {
       .sort((a, b) => a.dow - b.dow)
       .map((d) => ({
         id: d.id, dow: d.dow, title: d.title, kind: d.kind, focus: d.focus,
-        exercises: d.exercises.map((e) => ({ id: e.id, name: e.name, sets: e.sets, reps: e.reps, metric: e.metric, note: e.note })),
+        exercises: d.exercises.map((e) => ({ id: e.id, name: e.name, sets: e.sets, reps: e.reps, metric: e.metric, note: e.note, rest: e.rest, cues: e.cues, video: e.video })),
       })),
     workouts: (s.workouts ?? [])
       .filter((w) => !w.deleted && w.date >= addDays(t, -60))
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((w) => ({ date: w.date, title: w.title, kind: w.kind, sets: w.sets, km: w.km, minutes: w.minutes, note: w.note, finished: !!w.finishedAt })),
+    skills: alive(s.skills ?? []).map((k) => ({ id: k.id, stageId: k.stageId, exIds: k.exIds, done: k.done, note: k.note })),
     news: (s.news ?? [])
       .filter((n) => !n.deleted && n.date >= addDays(t, -14))
       .map((n) => ({ date: n.date, votes: Object.keys(n.votes ?? {}).length, note: n.note })),

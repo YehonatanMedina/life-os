@@ -9,18 +9,20 @@ import Review, { ReviewLock, reviewPending, reviewWeekOf } from './views/Review'
 import SettingsView from './views/Settings'
 import FocusTimer from './views/FocusTimer'
 import AtlasView from './views/Atlas'
+import WorkoutsView from './views/Workouts'
 import { startAtlas } from './atlas'
 import { HE_STATUS, buildId, installFlush, safeToReload, startCloud, useCloudState } from './cloud'
 import { refreshNotifySchedule } from './push'
 import { Icon } from './icons'
 
-type View = 'today' | 'atlas' | 'calendar' | 'projects' | 'review' | 'settings'
+type View = 'today' | 'atlas' | 'calendar' | 'workout' | 'projects' | 'review' | 'settings'
 
-// חמישה יעדים יומיים. ההגדרות לא מתחרות איתם על מקום — הן מאחורי גלגל השיניים.
+// ששה יעדים יומיים. ההגדרות לא מתחרות איתם על מקום — הן מאחורי גלגל השיניים.
 const NAV: Array<{ id: View; label: string }> = [
   { id: 'today', label: 'היום' },
   { id: 'atlas', label: 'אטלס' },
   { id: 'calendar', label: 'יומן' },
+  { id: 'workout', label: 'אימונים' },
   { id: 'projects', label: 'פרויקטים' },
   { id: 'review', label: 'סקירה' },
 ]
@@ -220,7 +222,7 @@ function Shell() {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       // כשגיליון פתוח, המספרים שייכים לו — לא לניווט
       if (document.querySelector('.scrim, .flow, .focus, .lock-overlay')) return
-      const map: Record<string, View> = { '1': 'today', '2': 'atlas', '3': 'calendar', '4': 'projects', '5': 'review', '6': 'settings', ',': 'settings' }
+      const map: Record<string, View> = { '1': 'today', '2': 'atlas', '3': 'calendar', '4': 'workout', '5': 'projects', '6': 'review', '7': 'settings', ',': 'settings' }
       if (map[e.key]) setView(map[e.key])
     }
     window.addEventListener('keydown', onKey)
@@ -317,6 +319,7 @@ function Shell() {
         {view === 'today' && <Today goto={goto} />}
         {view === 'atlas' && <AtlasView />}
         {view === 'calendar' && <CalendarView initialDate={calDate} />}
+        {view === 'workout' && <WorkoutsView />}
         {view === 'projects' && <Projects />}
         {view === 'review' && <Review />}
         {view === 'settings' && <SettingsView />}

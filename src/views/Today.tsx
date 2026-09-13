@@ -16,7 +16,6 @@ import type { CalEvent, ID, Task } from '../types'
 import { TaskSheet } from './Projects'
 import NewsCard from './NewsCard'
 import { GoalsCard, WeeklyFlow, reviewPending } from './Review'
-import { WorkoutCard } from './Workout'
 import { Icon } from '../icons'
 import { awaitingReply, nextSweepAt, todayNote, useAtlas } from '../atlas'
 
@@ -118,7 +117,6 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
           <section className="sec">
             <div className="sec-h"><h2>שגרה</h2></div>
             <DailyHabits date={date} />
-            <WorkoutCard />
           </section>
 
           <section className="sec">
