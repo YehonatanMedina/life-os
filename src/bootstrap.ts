@@ -30,10 +30,10 @@ export function bootstrapDocument() {
   ensureMeta('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
   ensureMeta('theme-color', '#f6f7f9')
   ensureMeta('apple-mobile-web-app-capable', 'yes')
-  ensureMeta('apple-mobile-web-app-title', 'מערכת ההפעלה')
+  ensureMeta('apple-mobile-web-app-title', 'אטלס')
   ensureMeta('apple-mobile-web-app-status-bar-style', 'default')
   ensureMeta('mobile-web-app-capable', 'yes')
-  ensureMeta('application-name', 'מערכת ההפעלה')
+  ensureMeta('application-name', 'אטלס')
 
   if (!document.getElementById('root')) {
     const root = document.createElement('div')

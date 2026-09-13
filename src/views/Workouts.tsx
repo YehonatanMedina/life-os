@@ -1,14 +1,17 @@
 import React, { useMemo, useState } from 'react'
 import {
-  actions, alive, currentStage, exerciseHistory, longestRun, runWeeks, skillExIds, skillOf,
-  stageProgress, useApp, workoutDayOn, workoutHasData, workoutOn,
+  actions, alive, currentStage, exerciseHistory, fitnessProgress, ladderFraction, longestRun,
+  runWeeks, skillExIds, skillOf, stageProgress, useApp, workoutDayOn, workoutHasData, workoutOn,
 } from '../store'
 import {
   HE_DAYS, HE_DAYS_SHORT, dow, minutesToHM, plural, shortDate, today as todayISO,
   weekDates, weekStart,
 } from '../dates'
+import { Ring } from '../ui'
 import { PlanSheet, ProgressSheet, WorkoutSheet, KIND_EMOJI, setText } from './Workout'
-import { RUN_MILESTONES, RUN_WEEKLY_GROWTH, SKILL_LADDERS, tutorial } from '../skills'
+import {
+  FOCUS_TIER, RUN_MILESTONES, RUN_WEEKLY_GROWTH, SKILL_TIERS, laddersInTier, tutorial,
+} from '../skills'
 import type { SkillLadder, SkillStage } from '../skills'
 import type { ID, WorkoutLog } from '../types'
 import { WORKOUT_KIND_LABEL } from '../types'
@@ -53,11 +56,16 @@ export default function Workouts() {
             </section>
 
             <section className="sec">
+              <div className="sec-h"><h2>ההתקדמות הכוללת</h2></div>
+              <OverallCard />
+            </section>
+
+            <section className="sec">
               <div className="sec-h"><h2>המסע</h2></div>
               <p className="small muted" style={{ margin: '0 0 2px' }}>
                 כל שלב נסגר בתנאי מדיד, ונבדק מול מה שנרשם ביומן. אין "בערך".
               </p>
-              {SKILL_LADDERS.map((lad) => (
+              {laddersInTier(FOCUS_TIER).map((lad) => (
                 <SkillCard key={lad.id} lad={lad} />
               ))}
             </section>
@@ -67,6 +75,11 @@ export default function Workouts() {
             <section className="sec">
               <div className="sec-h"><h2>חצי מרתון</h2></div>
               <RunJourney />
+            </section>
+
+            <section className="sec">
+              <div className="sec-h"><h2>המטרות הגדולות</h2></div>
+              <FutureSkills />
             </section>
 
             <section className="sec">
@@ -202,6 +215,121 @@ function TodayCard({ date, onOpen }: { date: string; onOpen: () => void }) {
           {done ? 'צפייה באימון' : started ? 'המשך רישום' : day ? 'פתיחת האימון' : 'רישום אימון'}
         </button>
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ההתקדמות הכוללת — מספר אחד, ומיד אחריו ממה הוא מורכב.
+//
+// הכלל מוסבר במקום אחד בלבד (fitnessProgress ב-store), והמסך רק מצייר אותו:
+// שלב שנסגר הוא היחידה, כל מטרה שוקלת אותו דבר, ורק מה שבתוכנית נספר.
+// ---------------------------------------------------------------------------
+function OverallCard() {
+  const s = useApp()
+  const { pct, parts } = useMemo(() => fitnessProgress(s), [s.workouts, s.workoutPlan, s.skills])
+  const closed = parts.reduce((a, b) => a + b.stage, 0)
+  const total = parts.reduce((a, b) => a + b.total, 0)
+
+  return (
+    <div className="card hero">
+      <div className="hero-top">
+        <div>
+          <div className="eyebrow">כושר — כל המטרות יחד</div>
+          <div className="hero-num">{pct}%</div>
+          <div className="tiny faint">
+            {closed} שלבים מתוך {total} · {parts.length} מטרות
+          </div>
+        </div>
+        <Ring value={pct} max={100} size={88} stroke={9}>
+          <div className="n" style={{ fontSize: 20 }}>{pct}</div>
+        </Ring>
+      </div>
+      <div className="list">
+        {parts.map((p) => (
+          <div className="item" key={p.id} style={{ minHeight: 38 }}>
+            <span style={{ width: 22, flex: '0 0 22px', fontSize: 15 }} aria-hidden="true">{p.emoji}</span>
+            <div className="txt">
+              <div className="ttl">{p.name}</div>
+              <div className="bar sm" style={{ marginTop: 5 }}>
+                <i style={{ width: `${Math.max(2, p.pct)}%` }} />
+              </div>
+            </div>
+            <div className="tiny faint ltr" style={{ flexShrink: 0, minWidth: 44, textAlign: 'end' }}>
+              {p.stage}/{p.total}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="tiny faint" style={{ padding: '0 13px 12px' }}>
+        היחידה היא שלב שנסגר, לא ק״ג. כל מטרה שוקלת אותו דבר, וכל שלב נבדק מול היומן.
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// המטרות הגדולות — מה שלא בתוכנית עכשיו, מקובץ לפי מתי נוגעים בו.
+//
+// זה לא קישוט: בלי לראות את הרשימה, סולם של שבעה שלבים מרגיש כמו עבודה בלי
+// סוף. עם הרשימה, כל שלב הוא צעד לכיוון משהו שרואים.
+// ---------------------------------------------------------------------------
+function FutureSkills() {
+  const [tier, setTier] = useState(2)
+  const list = laddersInTier(tier)
+  return (
+    <>
+      <div className="segs">
+        {[2, 3, 4].map((t) => (
+          <button key={t} className={tier === t ? 'on' : ''} onClick={() => setTier(t)}>
+            {SKILL_TIERS[t].name}
+          </button>
+        ))}
+      </div>
+      <div className="tiny faint" style={{ margin: '2px 2px 0' }}>{SKILL_TIERS[tier].note}</div>
+      {list.map((lad) => (
+        <GoalCard key={lad.id} lad={lad} />
+      ))}
+    </>
+  )
+}
+
+function GoalCard({ lad }: { lad: SkillLadder }) {
+  const s = useApp()
+  const [open, setOpen] = useState(false)
+  const f = ladderFraction(s, lad)
+  return (
+    <div className="card goal">
+      <button
+        className="card-h"
+        style={{ width: '100%', background: 'none', border: 0, textAlign: 'start' }}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="goal-emoji" aria-hidden="true">{lad.emoji}</span>
+        <div className="grow" style={{ minWidth: 0 }}>
+          <b>{lad.name}</b>
+          <div className="tiny faint">{lad.goal}</div>
+        </div>
+        {f.stage > 0 && <span className="chip on">{f.stage}/{f.total}</span>}
+        <span className="faint">{open ? '▾' : '◂'}</span>
+      </button>
+      {open && (
+        <div style={{ padding: '0 13px 12px' }}>
+          <div className="tiny" style={{ color: 'var(--text-dim)' }}>{lad.why}</div>
+          {lad.needs && (
+            <div className="tiny" style={{ marginTop: 6, color: 'var(--warn-text)' }}>
+              דורש קודם: {lad.needs}
+            </div>
+          )}
+          <div className="section-title" style={{ margin: '10px 0 4px' }}>הדרך</div>
+          {lad.stages.map((st, i) => (
+            <div key={st.id} className="tiny" style={{ color: 'var(--text-dim)', padding: '2px 0' }}>
+              {i + 1}. <b style={{ color: 'var(--text)' }}>{st.name}</b> — {st.criteria}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -355,7 +483,7 @@ function StageBlock({
       )}
 
       {state === 'now' && st.tip && (
-        <div className="tiny" style={{ marginTop: 6, color: 'var(--warn)' }}>
+        <div className="tiny" style={{ marginTop: 6, color: 'var(--warn-text)' }}>
           {st.tip}
         </div>
       )}

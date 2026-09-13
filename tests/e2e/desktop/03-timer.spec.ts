@@ -54,7 +54,7 @@ test.describe('טיימר', () => {
     await expect(card.locator('.ring-wrap .n')).toHaveText('0.1')
     await expect(card).toContainText('5 דק׳ מתוך 9 שע׳ היום')
     await expect(card).toContainText('0.1 / 42')
-    await expect(app).toHaveTitle('מערכת ההפעלה')
+    await expect(app).toHaveTitle('אטלס')
     await expect(app.locator('nav.sidebar .foot .chip')).toHaveCount(0)
 
     // הסשנים של היום

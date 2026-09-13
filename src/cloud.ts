@@ -206,7 +206,7 @@ export async function createGist(): Promise<string> {
   }
   const content = await encryptText(JSON.stringify(forCloud(store.get())), key)
   const body = {
-    description: 'מערכת ההפעלה — מצב מסונכרן ומוצפן. לא לערוך ידנית.',
+    description: 'אטלס — מצב מסונכרן ומוצפן. לא לערוך ידנית.',
     public: false,
     files: { [FILE]: { content } },
   }

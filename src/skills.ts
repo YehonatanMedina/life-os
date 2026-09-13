@@ -57,7 +57,30 @@ export interface SkillLadder {
    * `exIds` בהתקדמות השמורה גובר עליהן.
    */
   match: string[]
+  /**
+   * מילות פסילה — שם שמכיל אותן לא מודד את המיומנות הזו גם אם הוא תואם
+   * ל-`match`. "שכיבות סמיכה בעמידת ידיים" מכיל "עמידת ידיים" אבל הוא לא
+   * החזקה של עמידת ידיים, וסולם אחד שגוזל את התרגיל של סולם אחר הופך את
+   * שתי המדידות לשקר.
+   */
+  exclude?: string[]
+  /**
+   * מתי המיומנות הזו על השולחן. 1 = בתוכנית עכשיו · 2 = הבא בתור ·
+   * 3 = מתקדם · 4 = החלום. אף אחד לא מתקדם בחמש־עשרה מיומנויות במקביל,
+   * אבל לראות את כולן זה בדיוק מה שמחזיק אותך בתוכנית.
+   */
+  tier: 1 | 2 | 3 | 4
+  /** מה צריך להחזיק לפני שנוגעים בזה בכלל */
+  needs?: string
   stages: SkillStage[]
+}
+
+/** שמות הקבוצות — הסדר הוא הסדר שבו נוגעים בדברים, לא רק דירוג קושי */
+export const SKILL_TIERS: Record<number, { name: string; note: string }> = {
+  1: { name: 'בתוכנית עכשיו', note: 'אלה נמדדות כל שבוע מהיומן. ההתקדמות הכוללת מחושבת מהן.' },
+  2: { name: 'הבא בתור', note: 'נכנסות לתוכנית כשמיומנות מהקבוצה הראשונה נסגרת.' },
+  3: { name: 'מתקדם', note: 'דורשות בסיס שעוד לא קיים. כאן בשביל לדעת לאן זה הולך.' },
+  4: { name: 'החלום', note: 'שנים, לא חודשים. מעט מאוד אנשים מגיעים לכאן — וזו בדיוק הנקודה.' },
 }
 
 // ---------------------------------------------------------------------------
@@ -69,6 +92,8 @@ export const SKILL_LADDERS: SkillLadder[] = [
     goal: 'עמידת ידיים חופשית, 30 שניות',
     why: 'הכתף החזקה והיציבה ביותר שאפשר לבנות, והבסיס לכל תרגיל דחיפה מתקדם. גם השיווי משקל הוא מיומנות נלמדת — לא כישרון.',
     match: ['עמידת ידיים', 'handstand'],
+    exclude: ['שכיבות סמיכה', 'push-up', 'push up', 'hspu'],
+    tier: 1,
     stages: [
       {
         id: 'base',
@@ -141,6 +166,7 @@ export const SKILL_LADDERS: SkillLadder[] = [
     goal: 'Front Lever מלא, 10 שניות',
     why: 'התרגיל שבונה גב רחב וליבה שאין דרך לזייף. כל שלב בו נראה בגב תוך שבועות.',
     match: ['front lever', 'שכמות', 'scapular'],
+    tier: 1,
     stages: [
       {
         id: 'hang',
@@ -203,6 +229,7 @@ export const SKILL_LADDERS: SkillLadder[] = [
     goal: 'L-Sit על הרצפה, 30 שניות',
     why: 'ליבה, כופפי ירך ודחיפת כתף בתרגיל אחד. גם השער ל-V-Sit ולעמידת ידיים מכוח.',
     match: ['l-sit', 'l sit', 'lsit'],
+    tier: 1,
     stages: [
       {
         id: 'pseudo',
@@ -265,6 +292,7 @@ export const SKILL_LADDERS: SkillLadder[] = [
     goal: 'מתח עם תוספת 20 ק״ג, 3 סטים של 5',
     why: 'המדד הכי ישיר לכוח משיכה. גם מה שהופך את ה-Front Lever מאפשרי לקל.',
     match: ['pull-up', 'pull up', 'pullup'],
+    tier: 1,
     stages: [
       {
         id: 'bw-8',
@@ -319,6 +347,7 @@ export const SKILL_LADDERS: SkillLadder[] = [
     goal: 'מקבילים עם תוספת 20 ק״ג, 3 סטים של 5',
     why: 'הדחיפה החזקה ביותר במשקל גוף, והמקבילה של המתח בצד השני של הגוף.',
     match: ['מקבילים', 'dip'],
+    tier: 1,
     stages: [
       {
         id: 'bw-10',
@@ -366,6 +395,524 @@ export const SKILL_LADDERS: SkillLadder[] = [
       },
     ],
   },
+  // --- קבוצה 2: הבא בתור ------------------------------------------------------
+  {
+    id: 'sk-muscleup',
+    name: 'מאסל־אפ',
+    emoji: '🚀',
+    goal: 'מאסל־אפ נקי במוט, 3 חזרות',
+    why: 'המיומנות שהופכת מתח ומקבילים לתנועה אחת, והראשונה שאנשים בחדר כושר עוצרים להסתכל עליה. גם הבדיקה האמיתית לכוח משיכה מתפרץ.',
+    match: ['muscle-up', 'muscle up', 'מאסל'],
+    tier: 2,
+    needs: 'מתח 3×10 ומקבילים 3×10 במשקל גוף',
+    stages: [
+      {
+        id: 'explosive-pull',
+        name: 'משיכה מתפרצת',
+        what: 'מתח שנמשך בכוח עד שהמוט נוגע בעצם החזה, לא בסנטר.',
+        criteria: '3 סטים של 5 משיכות עד החזה',
+        target: { metric: 'bodyweight', value: 5, sets: 3 },
+        tip: 'אם המוט לא מגיע לחזה אין מאיפה לעשות את המעבר. זה לא עניין של טכניקה אלא של גובה.',
+        search: 'explosive pull ups chest to bar',
+      },
+      {
+        id: 'straight-bar-dip',
+        name: 'דחיפות על מוט ישר',
+        what: 'למעלה מעל המוט, ידיים ישרות, יורדים עד שהחזה נוגע במוט וחוזרים.',
+        criteria: '3 סטים של 8',
+        target: { metric: 'bodyweight', value: 8, sets: 3 },
+        tip: 'זה החצי השני של התרגיל, וכמעט כולם מגלים אותו רק אחרי שהם נתקעים במעבר.',
+        search: 'straight bar dips tutorial',
+      },
+      {
+        id: 'transition',
+        name: 'המעבר',
+        what: 'מעבר מסביב למוט בעזרת גומייה או קפיצה מהרצפה — רק החלק של הסיבוב סביב המוט.',
+        criteria: '3 סטים של 3 מעברים בעזרה',
+        target: { metric: 'bodyweight', value: 3, sets: 3 },
+        tip: 'המרפקים מסתובבים קדימה והראש נכנס מעל המוט. לא מנסים לעלות — מנסים להסתובב.',
+        search: 'muscle up transition drill band',
+      },
+      {
+        id: 'first',
+        name: 'המאסל־אפ הראשון',
+        what: 'אחד, גם אם מכוער.',
+        criteria: 'חזרה אחת ללא עזרה',
+        target: { metric: 'bodyweight', value: 1, sets: 1 },
+      },
+      {
+        id: 'strict-3',
+        name: '3 חזרות נקיות',
+        what: 'המטרה — בלי נדנוד רגליים.',
+        criteria: '3 חזרות רצופות, ללא קיפ',
+        target: { metric: 'bodyweight', value: 3, sets: 1 },
+        search: 'strict muscle up progression',
+      },
+    ],
+  },
+  {
+    id: 'sk-pistol',
+    name: 'סקוואט על רגל אחת',
+    emoji: '🦵',
+    goal: 'Pistol Squat, 3 סטים של 5 לכל רגל',
+    why: 'כוח רגל אחת הוא מה שמונע פציעות בריצה, ופער בין הרגליים מתגלה כאן לפני שהוא מתגלה בכאב. גם לא דורש שום ציוד.',
+    match: ['pistol', 'סקוואט על רגל'],
+    tier: 2,
+    needs: 'סקוואט 90 ק״ג ל-10, וניידות קרסול',
+    stages: [
+      {
+        id: 'assisted',
+        name: 'בעזרת אחיזה',
+        what: 'מחזיקים עמוד או משקוף עם יד אחת ויורדים על רגל אחת עד הסוף.',
+        criteria: '3 סטים של 8 לכל רגל',
+        target: { metric: 'reps', value: 8, sets: 3 },
+        tip: 'היד עוזרת לשיווי משקל, לא מושכת למעלה.',
+        search: 'assisted pistol squat progression',
+      },
+      {
+        id: 'box',
+        name: 'ירידה לספסל',
+        what: 'יורדים על רגל אחת עד שהישבן נוגע בספסל, ומורידים את גובה הספסל בהדרגה.',
+        criteria: '3 סטים של 8 לכל רגל מספסל בגובה 30 ס״מ',
+        target: { metric: 'reps', value: 8, sets: 3 },
+      },
+      {
+        id: 'negative',
+        name: 'ירידה איטית',
+        what: 'ירידה של 5 שניות עד הסוף, ועלייה בשתי רגליים.',
+        criteria: '3 סטים של 5 ירידות לכל רגל',
+        target: { metric: 'reps', value: 5, sets: 3 },
+        tip: 'העקב לא עולה מהרצפה. אם הוא עולה — הקרסול חסום, וזו עבודת ניידות ולא כוח.',
+        search: 'pistol squat negative ankle mobility',
+      },
+      {
+        id: 'full-1',
+        name: 'הראשון המלא',
+        what: 'ירידה ועלייה על רגל אחת, בלי עזרה.',
+        criteria: 'חזרה אחת נקייה בכל רגל',
+        target: { metric: 'reps', value: 1, sets: 2 },
+      },
+      {
+        id: 'full-5',
+        name: '3×5 לכל רגל',
+        what: 'המטרה.',
+        criteria: '5 חזרות בכל אחד מ-3 הסטים, בשתי הרגליים',
+        target: { metric: 'reps', value: 5, sets: 3 },
+      },
+    ],
+  },
+  {
+    id: 'sk-oapushup',
+    name: 'שכיבת סמיכה ביד אחת',
+    emoji: '💪',
+    goal: 'שכיבת סמיכה ביד אחת, 3 בכל צד',
+    why: 'הדחיפה הכי מרשימה שאפשר לעשות בסלון בלי ציוד, וגם מה שמלמד את הליבה להתנגד לסיבוב.',
+    match: ['סמיכה ביד אחת', 'archer push', 'שכיבות קשת'],
+    tier: 2,
+    needs: 'שכיבות יהלום 3×12',
+    stages: [
+      {
+        id: 'archer',
+        name: 'שכיבות קשת',
+        what: 'ידיים רחוק זו מזו, יורדים לכיוון יד אחת והשנייה נשארת ישרה.',
+        criteria: '3 סטים של 8 לכל צד',
+        target: { metric: 'reps', value: 8, sets: 3 },
+        tip: 'היד הישרה לא דוחפת. אם היא עוזרת, זו שכיבה רגילה רחבה.',
+        search: 'archer push up tutorial',
+      },
+      {
+        id: 'uneven',
+        name: 'יד אחת מוגבהת',
+        what: 'יד אחת על ספר או מדרגה, השנייה על הרצפה. מעלים את הגובה בהדרגה.',
+        criteria: '3 סטים של 8 לכל צד מגובה 20 ס״מ',
+        target: { metric: 'reps', value: 8, sets: 3 },
+      },
+      {
+        id: 'elevated-oa',
+        name: 'יד אחת על הגבהה גבוהה',
+        what: 'כבר באמת יד אחת, אבל היד על שולחן או ספסל — כך חלק מהמשקל נופל על הרגליים.',
+        criteria: '3 סטים של 5 לכל צד',
+        target: { metric: 'reps', value: 5, sets: 3 },
+        tip: 'רגליים פתוחות רחב. זה מה שמחזיק את האגן מלהסתובב.',
+        search: 'elevated one arm push up progression',
+      },
+      {
+        id: 'negative',
+        name: 'ירידה ביד אחת',
+        what: 'ירידה של 4-5 שניות על הרצפה ביד אחת, ועלייה בשתיים.',
+        criteria: '3 סטים של 3 לכל צד',
+        target: { metric: 'reps', value: 3, sets: 3 },
+      },
+      {
+        id: 'full-3',
+        name: '3 חזרות בכל צד',
+        what: 'המטרה.',
+        criteria: '3 חזרות מלאות בכל יד',
+        target: { metric: 'reps', value: 3, sets: 2 },
+        search: 'one arm push up form',
+      },
+    ],
+  },
+  {
+    id: 'sk-dragonflag',
+    name: 'דגל הדרקון',
+    emoji: '🐉',
+    goal: 'Dragon Flag, 3 סטים של 5',
+    why: 'תרגיל הליבה שברוס לי עשה, ואין בו שום דרך לרמות: או שהגוף ישר או שהוא לא. גם בונה בדיוק את הליבה שה-Front Lever צריך.',
+    match: ['dragon', 'דגל הדרקון'],
+    tier: 2,
+    needs: 'Hollow Hold 45 שנ׳',
+    stages: [
+      {
+        id: 'tuck',
+        name: 'ברכיים מכופפות',
+        what: 'שוכבים, אוחזים בספסל או ברגל ספה מעל הראש, מרימים את הגוף על השכמות והברכיים מכופפות.',
+        criteria: '3 סטים של 8 חזרות מבוקרות',
+        target: { metric: 'reps', value: 8, sets: 3 },
+        tip: 'רק השכמות על הרצפה. אם חלק מהגב התחתון נשען — זה עוד לא התרגיל.',
+        search: 'dragon flag progression beginner',
+      },
+      {
+        id: 'one-leg',
+        name: 'רגל אחת ישרה',
+        what: 'רגל אחת נפרשת, השנייה מכופפת.',
+        criteria: '3 סטים של 8 לכל צד',
+        target: { metric: 'reps', value: 8, sets: 3 },
+      },
+      {
+        id: 'negative',
+        name: 'ירידה איטית מלאה',
+        what: 'גוף ישר, ירידה של 5 שניות, וחזרה למעלה בברכיים מכופפות.',
+        criteria: '3 סטים של 5 ירידות',
+        target: { metric: 'reps', value: 5, sets: 3 },
+        tip: 'הגב התחתון לא נכנס לקשת. ברגע שהוא מתקמר — עוצרים את הסט.',
+        search: 'dragon flag negatives',
+      },
+      {
+        id: 'full-5',
+        name: '3×5 מלאים',
+        what: 'המטרה.',
+        criteria: '5 חזרות מלאות בכל אחד מ-3 הסטים',
+        target: { metric: 'reps', value: 5, sets: 3 },
+      },
+    ],
+  },
+
+  // --- קבוצה 3: מתקדם --------------------------------------------------------
+  {
+    id: 'sk-hspu',
+    name: 'שכיבות סמיכה בעמידת ידיים',
+    emoji: '🔻',
+    goal: 'HSPU על הקיר, 3 סטים של 5',
+    why: 'הדחיפה האנכית החזקה ביותר במשקל גוף. מי שעושה אותה לא צריך לחיצת כתפיים.',
+    match: ['hspu', 'פייק', 'handstand push'],
+    tier: 3,
+    needs: 'עמידה פנים לקיר 45 שנ׳',
+    stages: [
+      {
+        id: 'pike',
+        name: 'פייק פוש-אפס',
+        what: 'ישבן למעלה, ראש יורד לרצפה בין הידיים.',
+        criteria: '3 סטים של 10',
+        target: { metric: 'reps', value: 10, sets: 3 },
+        tip: 'מרפקים 45 מעלות לאחור, לא לצדדים. מרפק לצדדים זה איך שנפצעת בכתף.',
+        search: 'pike push up form shoulder',
+      },
+      {
+        id: 'deficit-pike',
+        name: 'פייק עם ידיים מוגבהות',
+        what: 'ידיים על שני ספרים, כדי שהראש ירד מתחת לגובה הידיים.',
+        criteria: '3 סטים של 8',
+        target: { metric: 'reps', value: 8, sets: 3 },
+      },
+      {
+        id: 'elevated-pike',
+        name: 'פייק עם רגליים על כיסא',
+        what: 'רגליים על כיסא, הגוף כמעט אנכי — כאן הופך להיות באמת לחיצה מעל הראש.',
+        criteria: '3 סטים של 8',
+        target: { metric: 'reps', value: 8, sets: 3 },
+      },
+      {
+        id: 'wall-half',
+        name: 'חצי טווח על הקיר',
+        what: 'בעמידה על הקיר, ירידה של חצי הדרך וחזרה.',
+        criteria: '3 סטים של 5',
+        target: { metric: 'reps', value: 5, sets: 3 },
+        tip: 'שמים כרית מתחת לראש. לא בשביל להישען עליה — בשביל לא לפחד.',
+        search: 'wall handstand push up progression',
+      },
+      {
+        id: 'wall-full',
+        name: 'טווח מלא על הקיר',
+        what: 'הראש נוגע ברצפה וחוזר עד נעילת מרפקים.',
+        criteria: '5 חזרות בכל אחד מ-3 הסטים',
+        target: { metric: 'reps', value: 5, sets: 3 },
+      },
+      {
+        id: 'free',
+        name: 'חופשי',
+        what: 'המטרה הרחוקה — בלי קיר.',
+        criteria: 'חזרה אחת בעמידה חופשית',
+        target: { metric: 'reps', value: 1, sets: 1 },
+      },
+    ],
+  },
+  {
+    id: 'sk-backlever',
+    name: 'Back Lever',
+    emoji: '🔄',
+    goal: 'Back Lever מלא, 10 שניות',
+    why: 'ההפוך של ה-Front Lever, וקל ממנו — לכן זה ההישג הראשון שנראה בלתי אפשרי ובעצם מגיע מהר. פותח את החזה והכתף בטווחים שאף תרגיל אחר לא נוגע בהם.',
+    match: ['back lever', 'german hang', 'תלייה גרמנית'],
+    tier: 3,
+    needs: 'תלייה 60 שנ׳, וכתף בריאה',
+    stages: [
+      {
+        id: 'german-hang',
+        name: 'תלייה גרמנית',
+        what: 'מהתלייה, מעבירים את הרגליים דרך הידיים ונשארים תלויים עם הגב לכיוון המוט.',
+        criteria: '3 סטים של 20 שניות',
+        target: { metric: 'time', value: 20, sets: 3 },
+        tip: 'נכנסים לזה לאט מאוד. זו התנוחה שהכי הרבה כתפיים נפגעו בה מחיפזון.',
+        search: 'german hang skin the cat progression',
+      },
+      {
+        id: 'tuck',
+        name: 'Tuck Back Lever',
+        what: 'ברכיים לחזה, הגב מקביל לרצפה, פנים למטה.',
+        criteria: '3 סטים של 15 שניות',
+        target: { metric: 'time', value: 15, sets: 3 },
+      },
+      {
+        id: 'adv-tuck',
+        name: 'Advanced Tuck',
+        what: 'פותחים את האגן, הגב שטוח.',
+        criteria: '3 סטים של 15 שניות',
+        target: { metric: 'time', value: 15, sets: 3 },
+      },
+      {
+        id: 'one-leg',
+        name: 'רגל אחת ישרה',
+        what: '',
+        criteria: '3 סטים של 10 שניות לכל צד',
+        target: { metric: 'time', value: 10, sets: 3 },
+      },
+      {
+        id: 'straddle',
+        name: 'Straddle',
+        what: 'שתי רגליים ישרות ופתוחות.',
+        criteria: '3 סטים של 10 שניות',
+        target: { metric: 'time', value: 10, sets: 3 },
+      },
+      {
+        id: 'full',
+        name: 'Back Lever מלא',
+        what: 'המטרה.',
+        criteria: '10 שניות, גוף אחד ישר',
+        target: { metric: 'time', value: 10, sets: 1 },
+        search: 'full back lever tutorial',
+      },
+    ],
+  },
+  {
+    id: 'sk-vsit',
+    name: 'V-Sit',
+    emoji: '✌️',
+    goal: 'V-Sit על הרצפה, 10 שניות',
+    why: 'ה-L-Sit עם הרגליים מעל הראש. דורש כפיפות ירך וגמישות המסטרינגס יחד עם כוח — ולכן מעט מאוד אנשים מגיעים אליו.',
+    match: ['v-sit', 'v sit'],
+    tier: 3,
+    needs: 'L-Sit 30 שנ׳',
+    stages: [
+      {
+        id: 'compression',
+        name: 'כפיפות בישיבה',
+        what: 'ישיבה ברגליים ישרות, מרימים את שתיהן מהרצפה ומחזיקים — Seated Leg Lifts.',
+        criteria: '3 סטים של 10 הרמות',
+        target: { metric: 'reps', value: 10, sets: 3 },
+        tip: 'זו לא עבודת ליבה אלא עבודת כפיפי ירך. הן החוליה החלשה כאן, לא הבטן.',
+        search: 'compression work v sit progression',
+      },
+      {
+        id: 'high-lsit',
+        name: 'החזקה מעל 90 מעלות',
+        what: 'אותה החזקה, אבל הרגליים עולות מעל קו המקביל לרצפה.',
+        criteria: '3 סטים של 10 שניות',
+        target: { metric: 'time', value: 10, sets: 3 },
+      },
+      {
+        id: 'one-leg-v',
+        name: 'רגל אחת גבוהה',
+        what: 'רגל אחת ב-45 מעלות מעל הקו, השנייה ב-90.',
+        criteria: '3 סטים של 10 שניות לכל צד',
+        target: { metric: 'time', value: 10, sets: 3 },
+      },
+      {
+        id: 'v-5',
+        name: 'V-Sit — 5 שניות',
+        what: 'שתי הרגליים גבוה.',
+        criteria: '3 סטים של 5 שניות',
+        target: { metric: 'time', value: 5, sets: 3 },
+      },
+      {
+        id: 'v-10',
+        name: 'V-Sit — 10 שניות',
+        what: 'המטרה.',
+        criteria: '10 שניות רצופות',
+        target: { metric: 'time', value: 10, sets: 1 },
+      },
+    ],
+  },
+  {
+    id: 'sk-flag',
+    name: 'דגל אנושי',
+    emoji: '🚩',
+    goal: 'Human Flag, 5 שניות',
+    why: 'התרגיל שנראה הכי בלתי אפשרי מכולם, והוא בעיקר עניין של אלכסונים ולא של כוח טהור. מי שרואה אותו לא שוכח.',
+    match: ['דגל אנושי', 'human flag'],
+    tier: 3,
+    needs: 'לחיצת כתפיים במשקל גוף, וליבה של דגל הדרקון',
+    stages: [
+      {
+        id: 'support',
+        name: 'אחיזה ותמיכה על עמוד',
+        what: 'עמוד אנכי, יד עליונה מושכת ויד תחתונה דוחפת. פשוט להחזיק את הגוף לחוץ לעמוד ברגליים על הרצפה.',
+        criteria: '3 סטים של 10 שניות לכל צד',
+        target: { metric: 'time', value: 10, sets: 3 },
+        tip: 'היד התחתונה דוחפת את העמוד, לא נשענת עליו. זה כל הסוד של התרגיל.',
+        search: 'human flag support hold progression',
+      },
+      {
+        id: 'vertical',
+        name: 'דגל אנכי',
+        what: 'הרגליים באוויר אבל למעלה — כמו עמידת ידיים על הצד. הקל ביותר, כי המנוף קצר.',
+        criteria: '3 סטים של 10 שניות',
+        target: { metric: 'time', value: 10, sets: 3 },
+      },
+      {
+        id: 'chamber',
+        name: 'רגליים מכופפות',
+        what: 'מורידים מהאנכי לזווית, עם הברכיים אסופות לחזה.',
+        criteria: '3 סטים של 8 שניות',
+        target: { metric: 'time', value: 8, sets: 3 },
+      },
+      {
+        id: 'straddle',
+        name: 'Straddle Flag',
+        what: 'רגליים ישרות ופתוחות, הגוף כמעט מקביל לרצפה.',
+        criteria: '3 סטים של 5 שניות',
+        target: { metric: 'time', value: 5, sets: 3 },
+      },
+      {
+        id: 'full',
+        name: 'דגל מלא',
+        what: 'המטרה.',
+        criteria: '5 שניות, גוף ישר ומקביל לרצפה',
+        target: { metric: 'time', value: 5, sets: 1 },
+      },
+    ],
+  },
+
+  // --- קבוצה 4: החלום -------------------------------------------------------
+  {
+    id: 'sk-planche',
+    name: 'פלאנש',
+    emoji: '🕊️',
+    goal: 'Full Planche, 5 שניות',
+    why: 'הכוח הסטטי הגדול ביותר במשקל גוף — הגוף מקביל לרצפה בלי שום מגע מלבד הידיים. שנים של עבודה, וכתפיים שאין עליהן ויכוח.',
+    match: ['planche', 'פלאנש'],
+    tier: 4,
+    needs: 'עמידת ידיים חופשית 30 שנ׳, ו-Tuck Front Lever',
+    stages: [
+      {
+        id: 'lean',
+        name: 'Planche Lean',
+        what: 'מנח שכיבת סמיכה, מזיזים את הכתפיים קדימה מעבר לידיים ומחזיקים.',
+        criteria: '3 סטים של 20 שניות עם הכתפיים מעבר לאצבעות',
+        target: { metric: 'time', value: 20, sets: 3 },
+        tip: 'הכף יד מסובבת חוצה, והשורשים סופגים את כל העומס. עוברים לעבודת אמות במקביל, אחרת זו דלקת.',
+        search: 'planche lean progression wrist',
+      },
+      {
+        id: 'pseudo',
+        name: 'Pseudo Planche Push-ups',
+        what: 'שכיבות סמיכה מתוך ה-Lean.',
+        criteria: '3 סטים של 8',
+        target: { metric: 'reps', value: 8, sets: 3 },
+      },
+      {
+        id: 'tuck',
+        name: 'Tuck Planche',
+        what: 'ברכיים אסופות, כל הגוף באוויר על הידיים.',
+        criteria: '3 סטים של 15 שניות',
+        target: { metric: 'time', value: 15, sets: 3 },
+      },
+      {
+        id: 'adv-tuck',
+        name: 'Advanced Tuck',
+        what: 'גב שטוח, אגן נפתח.',
+        criteria: '3 סטים של 15 שניות',
+        target: { metric: 'time', value: 15, sets: 3 },
+      },
+      {
+        id: 'straddle',
+        name: 'Straddle Planche',
+        what: 'רגליים ישרות ופתוחות.',
+        criteria: '3 סטים של 8 שניות',
+        target: { metric: 'time', value: 8, sets: 3 },
+      },
+      {
+        id: 'full',
+        name: 'Full Planche',
+        what: 'המטרה הרחוקה ביותר בתוכנית.',
+        criteria: '5 שניות, רגליים צמודות וישרות',
+        target: { metric: 'time', value: 5, sets: 1 },
+      },
+    ],
+  },
+  {
+    id: 'sk-oapullup',
+    name: 'מתח ביד אחת',
+    emoji: '☝️',
+    goal: 'מתח ביד אחת, חזרה אחת נקייה',
+    why: 'מבחן הכוח היחסי הקשה ביותר שיש. מי שמגיע לזה נמצא בקבוצה קטנה מאוד.',
+    match: ['מתח ביד אחת', 'one arm pull', 'archer pull', 'משיכות קשת'],
+    tier: 4,
+    needs: 'מתח עם תוספת 20 ק״ג',
+    stages: [
+      {
+        id: 'archer',
+        name: 'משיכות קשת',
+        what: 'אחיזה רחבה, מושכים לכיוון יד אחת והשנייה נשארת ישרה.',
+        criteria: '3 סטים של 5 לכל צד',
+        target: { metric: 'bodyweight', value: 5, sets: 3 },
+        search: 'archer pull up tutorial',
+      },
+      {
+        id: 'assisted',
+        name: 'יד שנייה על מגבת',
+        what: 'יד אחת על המוט, השנייה אוחזת במגבת שתלויה ממנו — ומחליקים את היד למטה לאורך המגבת כדי להקטין את העזרה.',
+        criteria: '3 סטים של 5 לכל צד',
+        target: { metric: 'bodyweight', value: 5, sets: 3 },
+      },
+      {
+        id: 'negative',
+        name: 'ירידה ביד אחת',
+        what: 'מתחילים למעלה ויורדים ב-5-8 שניות ביד אחת.',
+        criteria: '3 סטים של 3 לכל צד',
+        target: { metric: 'bodyweight', value: 3, sets: 3 },
+        tip: 'המרפק והכתף סופגים כאן עומס שאין לו אח ורע. סט אחד בשבוע יותר מספיק בהתחלה.',
+        search: 'one arm pull up negatives elbow health',
+      },
+      {
+        id: 'full-1',
+        name: 'החזרה הראשונה',
+        what: 'המטרה.',
+        criteria: 'חזרה אחת מלאה ביד אחת',
+        target: { metric: 'bodyweight', value: 1, sets: 1 },
+      },
+    ],
+  },
 ]
 
 export function ladder(id: string): SkillLadder | undefined {
@@ -402,5 +949,17 @@ export const RUN_WEEKLY_GROWTH = 0.1
 /** התאמת שם תרגיל למילות הזיהוי של סולם */
 export function matchesSkill(lad: SkillLadder, exName: string): boolean {
   const n = exName.toLowerCase()
+  if (lad.exclude?.some((m) => n.includes(m.toLowerCase()))) return false
   return lad.match.some((m) => n.includes(m.toLowerCase()))
 }
+
+/** הסולמות של קבוצה אחת, בסדר שבו הם מוגדרים */
+export function laddersInTier(tier: number): SkillLadder[] {
+  return SKILL_LADDERS.filter((x) => x.tier === tier)
+}
+
+/**
+ * הקבוצה שנמדדת מהיומן ומרכיבה את ההתקדמות הכוללת. שאר הקבוצות הן מפה —
+ * הן מראות לאן זה הולך, אבל לא מזיזות את המחוון.
+ */
+export const FOCUS_TIER = 1

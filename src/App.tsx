@@ -14,13 +14,14 @@ import { startAtlas } from './atlas'
 import { HE_STATUS, buildId, installFlush, safeToReload, startCloud, useCloudState } from './cloud'
 import { refreshNotifySchedule } from './push'
 import { Icon } from './icons'
+import { APP_NAME, Mark, Wordmark } from './brand'
 
 type View = 'today' | 'atlas' | 'calendar' | 'workout' | 'projects' | 'review' | 'settings'
 
 // ששה יעדים יומיים. ההגדרות לא מתחרות איתם על מקום — הן מאחורי גלגל השיניים.
 const NAV: Array<{ id: View; label: string }> = [
   { id: 'today', label: 'היום' },
-  { id: 'atlas', label: 'אטלס' },
+  { id: 'atlas', label: 'שיחה' },
   { id: 'calendar', label: 'יומן' },
   { id: 'workout', label: 'אימונים' },
   { id: 'projects', label: 'פרויקטים' },
@@ -130,8 +131,8 @@ function Shell() {
     // שני תגים עם media: במצב "מערכת" כל תג חוזר לצבע שלו והדפדפן בוחר לפי המערכת
     // (וגם עוקב אחרי שינוי שלה בלי JS); בערכה מפורשת שניהם מקבלים את אותו צבע.
     document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((m) => {
-      const own = m.media.includes('dark') ? '#0e1013' : '#f6f7f9'
-      m.setAttribute('content', s.settings.theme === 'system' ? own : dark ? '#0e1013' : '#f6f7f9')
+      const own = m.media.includes('dark') ? '#0a0c16' : '#f5f6fa'
+      m.setAttribute('content', s.settings.theme === 'system' ? own : dark ? '#0a0c16' : '#f5f6fa')
     })
   }, [s.settings.theme])
 
@@ -197,7 +198,7 @@ function Shell() {
 
   // כותרת הלשונית מציגה את הטיימר — אינטרוול משלה, בלי לצייר את כל העץ מחדש
   useEffect(() => {
-    const base = 'מערכת ההפעלה'
+    const base = APP_NAME
     const t = s.timer
     if (!t) {
       document.title = base
@@ -255,8 +256,11 @@ function Shell() {
     <div className="app">
       <nav className="sidebar">
         <div className="brand">
-          <b>מערכת ההפעלה</b>
-          <span>{niceDate(todayISO())}</span>
+          <Mark size={26} solid />
+          <div>
+            <Wordmark size={18} />
+            <span>{niceDate(todayISO())}</span>
+          </div>
         </div>
         {NAV.map((n) => (
           <button key={n.id} aria-current={view === n.id} onClick={() => setView(n.id)}>
@@ -275,6 +279,7 @@ function Shell() {
       </nav>
 
       <header className="topbar">
+        <Mark size={24} solid />
         <div className="grow">
           <h1>{view === 'settings' ? 'הגדרות' : NAV.find((n) => n.id === view)?.label}</h1>
           <div className="sub">
@@ -329,7 +334,7 @@ function Shell() {
         {NAV.map((n) => (
           <button key={n.id} aria-current={view === n.id} onClick={() => setView(n.id)}>
             <Icon name={n.id} />
-            {n.label}
+            <span className="lb">{n.label}</span>
           </button>
         ))}
       </nav>

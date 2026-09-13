@@ -8,7 +8,7 @@ vi.hoisted(() => {
 
 import { blankState, freshStore, task, event, rule, day, week, workout, pin, tick, NOW, KEY, type StoreModule } from './helpers'
 import type { AppState } from '../../../src/types'
-import { SKILL_LADDERS } from '../../../src/skills'
+import { FOCUS_TIER, SKILL_LADDERS, laddersInTier, matchesSkill } from '../../../src/skills'
 
 let S: StoreModule
 const get = () => S.store.get()
@@ -914,5 +914,77 @@ describe('מיומנויות — זיהוי אוטומטי מהתוכנית', ()
     S = await freshStore(blankState({ workoutPlan: plan }))
     const lad = SKILL_LADDERS.find((x) => x.id === 'sk-lsit')!
     expect(S.currentStage(get(), lad)).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+describe('קטלוג המיומנויות', () => {
+  it('מזהה ייחודי לכל סולם, ולכל שלב בתוכו', () => {
+    const ids = SKILL_LADDERS.map((x) => x.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const lad of SKILL_LADDERS) {
+      const st = lad.stages.map((x) => x.id)
+      expect(new Set(st).size, lad.id).toBe(st.length)
+      expect(lad.stages.length, lad.id).toBeGreaterThanOrEqual(4)
+      expect([1, 2, 3, 4], lad.id).toContain(lad.tier)
+      expect(lad.match.length, lad.id).toBeGreaterThan(0)
+    }
+  })
+
+  it('מילות הזיהוי לא מתנגשות בין סולמות', () => {
+    // אם שם של תרגיל תואם לשני סולמות, המסע מודד את אותו סט בשני מקומות.
+    // ('פייק' מכוון בכוונה גם ל-HSPU, ולכן נבדק מול שמות ולא מול מילים.)
+    const names = SKILL_LADDERS.flatMap((l) => l.stages.map((s2) => `${l.name} ${s2.name}`))
+    for (const n of names) {
+      const hit = SKILL_LADDERS.filter((l) => matchesSkill(l, n))
+      expect(hit.length, n).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('laddersInTier מחזיר את הקבוצה, וקבוצה 1 היא זו שנמדדת', () => {
+    expect(laddersInTier(FOCUS_TIER).length).toBeGreaterThan(0)
+    expect(laddersInTier(FOCUS_TIER).every((x) => x.tier === 1)).toBe(true)
+    const sum = [1, 2, 3, 4].reduce((a, t) => a + laddersInTier(t).length, 0)
+    expect(sum).toBe(SKILL_LADDERS.length)
+  })
+})
+
+// ---------------------------------------------------------------------------
+describe('ההתקדמות הכוללת', () => {
+  const plan = [
+    { id: 'wd-fri', updatedAt: 1, dow: 5, title: 'בית', kind: 'home' as const, exercises: [
+      { id: 'ex-handstand', name: 'עמידת ידיים על הקיר', metric: 'time' as const },
+    ] },
+  ]
+
+  it('מצב ריק הוא 0%, וכל מטרה שוקלת אותו דבר', async () => {
+    S = await freshStore(blankState({ workoutPlan: plan }))
+    const f = S.fitnessProgress(get())
+    expect(f.pct).toBe(0)
+    // חמשת הסולמות של קבוצה 1 ועוד הריצה
+    expect(f.parts).toHaveLength(laddersInTier(FOCUS_TIER).length + 1)
+    expect(f.parts.at(-1)!.id).toBe('run')
+  })
+
+  it('שלב שנסגר מזיז את המחוון, ותוספת משקל לא', async () => {
+    S = await freshStore(blankState({ workoutPlan: plan }))
+    const before = S.fitnessProgress(get()).pct
+    // 4×60 שנ׳ בעמידת ידיים סוגרות שלושה שלבים בסולם של שבעה
+    S.actions.patchWorkout('2026-09-10', { sets: { 'ex-handstand': [{ sec: 60 }, { sec: 60 }, { sec: 60 }, { sec: 60 }] } })
+    const after = S.fitnessProgress(get())
+    expect(after.pct).toBeGreaterThan(before)
+    expect(after.parts.find((p) => p.id === 'sk-handstand')).toMatchObject({ stage: 3, total: 7 })
+    // אימון של חתירה כבדה לא נוגע באף סולם — המחוון לא זז
+    S.actions.patchWorkout('2026-09-11', { sets: { 'ex-row': [{ kg: 40, reps: 12 }] } })
+    expect(S.fitnessProgress(get()).pct).toBe(after.pct)
+  })
+
+  it('הריצה נמדדת לפי המיילסטון שנסגר, מתוך חצי המרתון', async () => {
+    S = await freshStore(blankState({ workouts: [
+      workout({ date: '2026-09-05', kind: 'run', km: 4 }),
+      workout({ date: '2026-09-12', kind: 'run', km: 8.2 }),
+    ] }))
+    // 5 ו-8 נסגרו, 10 ומעלה לא
+    expect(S.runFraction(get())).toMatchObject({ stage: 2, total: 7, km: 8.2 })
   })
 })

@@ -1,34 +1,40 @@
 /* =========================================================================
-   מערכת ההפעלה — עיצוב
+   אטלס — עיצוב
    ========================================================================= */
 
 :root {
-  --bg: #f6f7f9;
+  --bg: #f5f6fa;
   --bg-elev: #ffffff;
-  --bg-sunk: #eceef2;
+  --bg-sunk: #e9ebf4;
   --card: #ffffff;
-  --line: #e2e5ea;
-  --line-soft: #eef0f4;
-  --text: #16181d;
-  --text-dim: #5f6470;
-  --text-faint: #626875;
-  --accent: #5b5bd6;
-  --accent-soft: #ececfb;
+  --line: #e0e3ef;
+  --line-soft: #edeff7;
+  --text: #14162b;
+  --text-dim: #565d78;
+  --text-faint: #5d6480;
+  --accent: #4b45e0;
+  --accent-soft: #e9e7fd;
   --accent-text: #ffffff;
   --on-accent: #ffffff;
-  --good: #2b9a66;
-  --good-soft: #e4f4ea;
-  --warn: #d9730d;
-  --warn-soft: #fdf0e3;
-  --bad: #d93d42;
-  --bad-soft: #fdeaea;
+  --good: #13a06f;
+  --good-soft: #e0f4ec;
+  --warn: #d1730a;
+  --warn-soft: #fdf0e0;
+  --bad: #d6303c;
+  --bad-soft: #fdeaec;
   /* טקסט על הרקעים הרכים — כהה יותר מהצבע עצמו, כדי לעבור ניגודיות בערכה הבהירה */
-  --good-text: #1f7a4f;
-  --warn-text: #a8560a;
-  --bad-text: #b8262c;
-  --shadow: 0 1px 2px rgba(16, 18, 24, .05), 0 4px 14px rgba(16, 18, 24, .06);
-  --shadow-lg: 0 10px 40px rgba(16, 18, 24, .16);
-  --ring-track: #e6e8ec;
+  --good-text: #0b7a53;
+  --warn-text: #9c5107;
+  --bad-text: #b01f2a;
+  /* שלושת צבעי המותג — מהם מורכב כל גרדיאנט במערכת, ורק מהם */
+  --brand-1: #4b45e0;
+  --brand-2: #7a3ce0;
+  --brand-3: #ef8a2b;
+  --brand-grad: linear-gradient(118deg, var(--brand-1) 0%, var(--brand-2) 55%, var(--brand-3) 135%);
+  --brand-wash: linear-gradient(140deg, color-mix(in srgb, var(--brand-1) 9%, transparent), color-mix(in srgb, var(--brand-3) 7%, transparent));
+  --shadow: 0 1px 2px rgba(16, 18, 40, .05), 0 6px 18px rgba(16, 18, 40, .07);
+  --shadow-lg: 0 14px 46px rgba(16, 18, 40, .2);
+  --ring-track: #e4e7f2;
   /* משפחה אחת לכל המערכת: IBM Plex Sans Hebrew לממשק, IBM Plex Mono למספרי
      המכשור — הטיימר, הטבעת והספירה לאחור. אותו קו, שני תפקידים. */
   --font-ui: 'IBM Plex Sans Hebrew', 'Assistant', 'Heebo', -apple-system, BlinkMacSystemFont, 'Segoe UI',
@@ -41,9 +47,9 @@
   --s4: 16px;
   --s5: 24px;
   --s6: 32px;
-  --r: 14px;
-  --r-sm: 10px;
-  --r-lg: 20px;
+  --r: 16px;
+  --r-sm: 11px;
+  --r-lg: 22px;
   --nav-h: 62px;
   --header-h: 56px;
 }
@@ -54,61 +60,71 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #0e1013;
-    --bg-elev: #171a1f;
-    --bg-sunk: #0a0c0f;
-    --card: #171a1f;
-    --line: #282c33;
-    --line-soft: #21252b;
-    --text: #edeef0;
-    --text-dim: #a1a5ad;
-    --text-faint: #8b9099;
-    --accent: #8b8bf5;
-    --accent-soft: #23234a;
-    --accent-text: #0e1013;
-    --on-accent: #0e1013;
-    --good: #46c07f;
-    --good-soft: #16301f;
-    --warn: #f0913a;
-    --warn-soft: #35240f;
-    --bad: #ff6369;
-    --bad-soft: #3a1a1c;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .3);
-    --shadow-lg: 0 10px 40px rgba(0, 0, 0, .6);
-    --ring-track: #2b3038;
-    --good-text: #46c07f;
-    --warn-text: #f0913a;
-    --bad-text: #ff6369;
+    --bg: #0a0c16;
+    --bg-elev: #151829;
+    --bg-sunk: #07080f;
+    --card: #151829;
+    --line: #272c48;
+    --line-soft: #1e2238;
+    --text: #eceef6;
+    --text-dim: #a3a9c2;
+    --text-faint: #8d93ad;
+    --accent: #8e88ff;
+    --accent-soft: #241f4d;
+    --accent-text: #0a0c16;
+    --on-accent: #0a0c16;
+    --good: #45c78c;
+    --good-soft: #113023;
+    --warn: #f0a04a;
+    --warn-soft: #33240f;
+    --bad: #ff6b73;
+    --bad-soft: #3a1a20;
+    --brand-1: #8e88ff;
+    --brand-2: #b07bff;
+    --brand-3: #ffb259;
+    --brand-grad: linear-gradient(118deg, var(--brand-1) 0%, var(--brand-2) 55%, var(--brand-3) 135%);
+    --brand-wash: linear-gradient(140deg, color-mix(in srgb, var(--brand-1) 13%, transparent), color-mix(in srgb, var(--brand-3) 8%, transparent));
+    --shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 6px 18px rgba(0, 0, 0, .35);
+    --shadow-lg: 0 14px 46px rgba(0, 0, 0, .65);
+    --ring-track: #2a3050;
+    --good-text: #45c78c;
+    --warn-text: #f0a04a;
+    --bad-text: #ff6b73;
     color-scheme: dark;
   }
 }
 
 :root[data-theme='dark'] {
-  --bg: #0e1013;
-  --bg-elev: #171a1f;
-  --bg-sunk: #0a0c0f;
-  --card: #171a1f;
-  --line: #282c33;
-  --line-soft: #21252b;
-  --text: #edeef0;
-  --text-dim: #a1a5ad;
-  --text-faint: #8b9099;
-  --accent: #8b8bf5;
-  --accent-soft: #23234a;
-  --accent-text: #0e1013;
-  --on-accent: #0e1013;
-  --good: #46c07f;
-  --good-soft: #16301f;
-  --warn: #f0913a;
-  --warn-soft: #35240f;
-  --bad: #ff6369;
-  --bad-soft: #3a1a1c;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .3);
-  --shadow-lg: 0 10px 40px rgba(0, 0, 0, .6);
-  --ring-track: #2b3038;
-  --good-text: #46c07f;
-  --warn-text: #f0913a;
-  --bad-text: #ff6369;
+  --bg: #0a0c16;
+  --bg-elev: #151829;
+  --bg-sunk: #07080f;
+  --card: #151829;
+  --line: #272c48;
+  --line-soft: #1e2238;
+  --text: #eceef6;
+  --text-dim: #a3a9c2;
+  --text-faint: #8d93ad;
+  --accent: #8e88ff;
+  --accent-soft: #241f4d;
+  --accent-text: #0a0c16;
+  --on-accent: #0a0c16;
+  --good: #45c78c;
+  --good-soft: #113023;
+  --warn: #f0a04a;
+  --warn-soft: #33240f;
+  --bad: #ff6b73;
+  --bad-soft: #3a1a20;
+  --brand-1: #8e88ff;
+  --brand-2: #b07bff;
+  --brand-3: #ffb259;
+  --brand-grad: linear-gradient(118deg, var(--brand-1) 0%, var(--brand-2) 55%, var(--brand-3) 135%);
+  --brand-wash: linear-gradient(140deg, color-mix(in srgb, var(--brand-1) 13%, transparent), color-mix(in srgb, var(--brand-3) 8%, transparent));
+  --shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 6px 18px rgba(0, 0, 0, .35);
+  --shadow-lg: 0 14px 46px rgba(0, 0, 0, .65);
+  --ring-track: #2a3050;
+  --good-text: #45c78c;
+  --warn-text: #f0a04a;
+  --bad-text: #ff6b73;
   color-scheme: dark;
 }
 
@@ -174,6 +190,10 @@ b, strong { font-weight: 600; }
   min-height: 100vh;
   min-height: 100dvh;
   flex-direction: column;
+  /* הילה רכה בצבע המותג בראש כל מסך. לא דקורציה בלבד: היא מפרידה את הסרגל
+     העליון מהתוכן בלי עוד קו, ונותנת לכל עמוד מקום להתחיל בו. */
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--brand-1) 8%, transparent), transparent 360px);
+  background-repeat: no-repeat;
 }
 
 .main {
@@ -222,7 +242,10 @@ b, strong { font-weight: 600; }
   bottom: 0;
   z-index: 50;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  /* עמודה לכל יעד, כמה שיהיו — grid-template-columns קבוע דחף את היעד
+     השישי לשורה שנייה והתפריט נעשה כפול גובה */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   height: calc(var(--nav-h) + env(safe-area-inset-bottom));
   padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
@@ -245,22 +268,34 @@ b, strong { font-weight: 600; }
   transition: color .15s;
 }
 
-.bottomnav button .ic { width: 21px; height: 21px; }
+.bottomnav button .ic { width: 21px; height: 21px; position: relative; }
 /* הלשונית הפעילה מסומנת גם בצורה — לא רק בצבע */
-.bottomnav button { position: relative; }
+.bottomnav button { position: relative; min-width: 0; }
+.bottomnav button span.lb {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .bottomnav button[aria-current='true'] { color: var(--accent); font-weight: 800; }
+/* הכתם הרך מאחורי האייקון — סימון שנראה טוב גם כשיש ששה יעדים צרים */
 .bottomnav button[aria-current='true']::before {
   content: '';
   position: absolute;
-  top: 0;
+  top: 6px;
   inset-inline-start: 50%;
   transform: translateX(50%);
-  width: 26px;
-  height: 3px;
-  border-radius: 0 0 3px 3px;
-  background: var(--accent);
+  width: 40px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--accent-soft);
 }
-.bottomnav button[aria-current='true'] .ic { transform: scale(1.06); }
+.bottomnav button[aria-current='true'] .ic { transform: scale(1.04); }
+/* בטלפון צר ששה תוויות לא נכנסות ב-11px — מדרגת המכשור הצפוף */
+@media (max-width: 392px) {
+  .bottomnav button { font-size: 10.5px; }
+  .bottomnav button .ic { width: 20px; height: 20px; }
+}
 
 .sidebar { display: none; }
 
@@ -316,6 +351,20 @@ b, strong { font-weight: 600; }
   color: var(--text-faint);
   letter-spacing: .03em;
   margin: 0;
+}
+/* קו קצר בצבע המותג לפני כל כותרת מקטע — מה שנותן לעמוד קצב נראה לעין */
+.sec-h h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.sec-h h2::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--brand-grad);
+  flex: 0 0 3px;
 }
 .sec-h > .btn.ghost { margin: -6px -8px; }
 /* כותרת בתוך כרטיס — שורה אחת, אותו ריווח בכל המערכת */
@@ -387,8 +436,15 @@ b, strong { font-weight: 600; }
   .btn:hover { background: var(--bg-sunk); }
 }
 .btn:active { transform: scale(.98); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.btn.primary:hover { filter: brightness(1.08); }
+.btn.primary {
+  background: var(--brand-grad);
+  background-size: 180% 100%;
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--brand-1) 32%, transparent);
+  transition: background-position .25s, box-shadow .15s, transform .06s;
+}
+.btn.primary:hover { background-position: 100% 0; }
 .btn.ghost { background: none; border-color: transparent; color: var(--text-dim); }
 .btn.ghost:hover { background: var(--bg-sunk); color: var(--text); }
 .btn.danger { color: var(--bad-text); border-color: var(--line); }
@@ -536,9 +592,11 @@ label.field > span, .field > span {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--brand-grad);
   transition: width .35s cubic-bezier(.4, 0, .2, 1);
 }
+/* מד דק — לשורות ברשימה, שבהן 8px גוזל מהטקסט */
+.bar.sm { height: 5px; }
 
 /* =========================================================================
    מודאל / גיליון
@@ -1331,10 +1389,23 @@ label.field > span, .field > span {
     overflow-y: auto;
   }
   .sidebar .brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
     padding: 6px 10px 18px;
   }
-  .sidebar .brand b { display: block; font-size: 17px; }
-  .sidebar .brand span { font-size: 12px; color: var(--text-faint); }
+  .sidebar .brand span { display: block; font-size: 12px; color: var(--text-faint); }
+  /* היעד הפעיל בסרגל הצד — פס בצבע המותג בקצה הפנימי */
+  .sidebar button[aria-current='true'] { position: relative; }
+  .sidebar button[aria-current='true']::before {
+    content: '';
+    position: absolute;
+    inset-block: 7px;
+    inset-inline-start: 0;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--brand-grad);
+  }
   .sidebar button {
     display: flex;
     align-items: center;
@@ -1534,4 +1605,99 @@ label.field > span, .field > span {
 .atlas-card { cursor: pointer; }
 @media (min-width: 900px) {
   .chat { height: calc(100dvh - 48px); }
+}
+
+/* =========================================================================
+   המותג
+   ========================================================================= */
+/* השם בצבעי המותג. background-clip ולא צבע אחד, כי זה הדבר היחיד במערכת
+   שמותר לו להיות גרדיאנט של טקסט — בכל מקום אחר טקסט הוא --text. */
+.wordmark {
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.15;
+  background: var(--brand-grad);
+  background-size: 150% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* אם background-clip לא נתמך, נשאר טקסט קריא ולא שקוף */
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .wordmark, .hero-num { color: var(--brand-1); background: none; }
+}
+
+/* =========================================================================
+   כרטיס גיבור — המספר האחד של המקטע, עם רקע רחוץ בצבעי המותג
+   ========================================================================= */
+.card.hero {
+  background: var(--brand-wash), var(--card);
+  border-color: color-mix(in srgb, var(--brand-1) 20%, var(--line));
+}
+.hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 14px 10px;
+}
+.hero-num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: -.05em;
+  line-height: 1.05;
+  background: var(--brand-grad);
+  background-size: 150% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* =========================================================================
+   בורר מקטעים — שלוש אפשרויות בשורה, כמו לשוניות
+   ========================================================================= */
+.segs {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bg-sunk);
+  border: 1px solid var(--line-soft);
+}
+.segs button {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background .15s, color .15s;
+}
+.segs button.on {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+/* =========================================================================
+   כרטיס מטרה — מיומנות שעוד לא בתוכנית
+   ========================================================================= */
+.card.goal .card-h { padding-bottom: 12px; }
+.goal-emoji {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  background: var(--bg-sunk);
+  font-size: 17px;
 }

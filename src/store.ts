@@ -4,7 +4,7 @@ import type {
   SkillProgress, Task, WeekGoal, WeekLog, WorkoutDay, WorkoutLog,
 } from './types'
 import { addDays, iso, logicalDate, parseISO, today, weekStart } from './dates'
-import { matchesSkill, type SkillLadder } from './skills'
+import { FOCUS_TIER, RUN_MILESTONES, laddersInTier, matchesSkill, type SkillLadder } from './skills'
 import { HABITS, RULES, SCHEMA_VERSION, TASKS, TRACKS, WEEKLY, EVENTS, DEFAULT_SETTINGS, seedState, newDeviceId, PHASES } from './seed'
 
 const KEY = 'life-os-v1'
@@ -1762,4 +1762,52 @@ export function currentStage(s: AppState, lad: SkillLadder): number {
     i++
   }
   return i
+}
+
+/**
+ * כמה מהסולם מאחוריך — שלבים שנסגרו חלקי סך השלבים.
+ */
+export function ladderFraction(s: AppState, lad: SkillLadder): { stage: number; total: number; pct: number } {
+  const cur = currentStage(s, lad)
+  const done = new Set(skillOf(s, lad.id)?.done ?? [])
+  const passed = lad.stages.filter((st, i) => i < cur || done.has(st.id)).length
+  const total = lad.stages.length
+  return { stage: passed, total, pct: Math.round((passed / total) * 100) }
+}
+
+/** איפה הריצה עומדת מול חצי המרתון — לפי המיילסטון שנסגר, לא לפי הקילומטרים */
+export function runFraction(s: AppState): { stage: number; total: number; pct: number; km: number } {
+  const best = longestRun(s).km
+  const total = RUN_MILESTONES.length
+  const stage = RUN_MILESTONES.filter((m) => best >= m.km).length
+  return { stage, total, pct: Math.round((stage / total) * 100), km: best }
+}
+
+/**
+ * ההתקדמות הכוללת בכושר — המספר האחד שאומר איפה אתה מול המטרות.
+ *
+ * איך התקדמות בכל דבר בנפרד הופכת להתקדמות כוללת, במפורש:
+ * 1. **שלב, לא משקל.** יחידת ההתקדמות היא שלב שנסגר בסולם מיומנות, או
+ *    מיילסטון ריצה. 2.5 ק״ג יותר בחתירה לא מזיזים את המחוון; מעבר שלב כן.
+ *    זה בכוונה — המטרות שהוגדרו הן מיומנויות וחצי מרתון, לא נפח.
+ * 2. **כל מטרה שוקלת אותו דבר.** הסולם מנורמל לאחוז מעצמו לפני הממוצע, אחרת
+ *    עמידת ידיים (7 שלבים) הייתה מכריעה את הריצה (7 מיילסטונים) ואת המקבילים
+ *    (6 שלבים) רק בגלל האורך שלה.
+ * 3. **רק מה שבתוכנית נספר.** הקבוצות המתקדמות הן מפה של לאן זה הולך; הן לא
+ *    מדללות את המחוון ולא מורידות אותו ל-3% ביום שהן נוספות.
+ * 4. **הנתון הוא היומן.** כל שלב נסגר מול סטים שנרשמו בפועל, ולכן המספר הזה
+ *    לא יכול להיות טוב ממה שבאמת נעשה.
+ */
+export function fitnessProgress(s: AppState): {
+  pct: number
+  parts: Array<{ id: string; name: string; emoji: string; pct: number; stage: number; total: number }>
+} {
+  const parts = laddersInTier(FOCUS_TIER).map((lad) => {
+    const f = ladderFraction(s, lad)
+    return { id: lad.id, name: lad.name, emoji: lad.emoji, ...f }
+  })
+  const run = runFraction(s)
+  parts.push({ id: 'run', name: 'חצי מרתון', emoji: '🏃', stage: run.stage, total: run.total, pct: run.pct })
+  const pct = parts.length ? Math.round(parts.reduce((a, b) => a + b.pct, 0) / parts.length) : 0
+  return { pct, parts }
 }

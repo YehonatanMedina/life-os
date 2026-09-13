@@ -98,11 +98,11 @@ test.describe('ניווט במחשב', () => {
     await expect(main).toHaveCount(5)
     for (let i = 0; i < 5; i++) await expect(main.nth(i)).toHaveText(labels[i])
     await expect(side.locator('.foot button', { hasText: 'הגדרות' })).toBeVisible()
-    await expect(side.locator('.brand')).toContainText('מערכת ההפעלה')
+    await expect(side.locator('.brand')).toContainText('אטלס')
 
     // ברירת מחדל: היום
     await expect(main.nth(0)).toHaveAttribute('aria-current', 'true')
-    await expect(app).toHaveTitle('מערכת ההפעלה')
+    await expect(app).toHaveTitle('אטלס')
 
     const heads: Record<string, string> = {
       אטלס: 'אטלס',
@@ -167,16 +167,16 @@ test.describe('ניווט במחשב', () => {
   })
 
   test('כותרת הלשונית משקפת את הטיימר', async ({ app }) => {
-    await expect(app).toHaveTitle('מערכת ההפעלה')
+    await expect(app).toHaveTitle('אטלס')
     await app.locator('.timer-card').getByRole('button', { name: /לימודים/ }).click()
-    await expect(app).toHaveTitle(/^90 דק׳ · מערכת ההפעלה$/)
+    await expect(app).toHaveTitle(/^90 דק׳ · אטלס$/)
     // הכותרת מתעדכנת כל 30 שניות — אחרי דקה וחצי היא כבר ירדה
     await app.clock.runFor(95_000)
-    await expect(app).toHaveTitle(/^(88|89) דק׳ · מערכת ההפעלה$/)
+    await expect(app).toHaveTitle(/^(88|89) דק׳ · אטלס$/)
     await expect(app.locator('.timer-time')).toHaveText(/^(1:28:|88:)/)
     // ביטול — הכותרת חוזרת
     await app.getByRole('button', { name: 'ביטול בלי לשמור' }).click()
-    await expect(app).toHaveTitle('מערכת ההפעלה')
+    await expect(app).toHaveTitle('אטלס')
     const st = await readState(app)
     expect(st.timer).toBeNull()
     expect(st.sessions).toEqual([])

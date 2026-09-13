@@ -5,7 +5,7 @@
 // לנכסים (אייקונים, גופנים): קודם מטמון, ורשת ברקע.
 // לבקשות ל-API של GitHub: אף פעם לא נוגעים — הסנכרון חייב להיות אמיתי.
 // ---------------------------------------------------------------------------
-const VERSION = 'v6'
+const VERSION = 'v7'
 const SHELL = 'life-os-shell-' + VERSION
 const ASSETS = 'life-os-assets-' + VERSION
 
@@ -37,10 +37,10 @@ self.addEventListener('push', (e) => {
   try {
     data = e.data ? e.data.json() : {}
   } catch {
-    data = { title: 'מערכת ההפעלה', body: e.data ? e.data.text() : '' }
+    data = { title: 'אטלס', body: e.data ? e.data.text() : '' }
   }
   e.waitUntil(
-    self.registration.showNotification(data.title || 'מערכת ההפעלה', {
+    self.registration.showNotification(data.title || 'אטלס', {
       body: data.body || '',
       icon: './icon-192.png',
       badge: './icon-192.png',

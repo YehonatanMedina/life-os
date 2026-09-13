@@ -79,10 +79,10 @@ test.describe('clock() — שעון אחד בכרטיס, בסרגל, במיקו�
     const card = app.locator('.timer-card')
     await expect(card.locator('.timer-time')).toHaveText(/^(2:00:00|1:59:5\d)$/)
     await expect(app.locator('nav.sidebar .foot .chip')).toHaveText(/(2:00:00|1:59:5\d)$/)
-    await expect.poll(() => app.title()).toBe('120 דק׳ · מערכת ההפעלה')
+    await expect.poll(() => app.title()).toBe('120 דק׳ · אטלס')
 
     await app.clock.runFor(61_000)
-    await expect.poll(() => app.title(), { timeout: 5_000 }).toBe('119 דק׳ · מערכת ההפעלה')
+    await expect.poll(() => app.title(), { timeout: 5_000 }).toBe('119 דק׳ · אטלס')
     await expect(card.locator('.timer-time')).toHaveText(/^1:58:5\d$/)
     await expect(app.locator('nav.sidebar .foot .chip')).toHaveText(/1:58:5\d$/)
 

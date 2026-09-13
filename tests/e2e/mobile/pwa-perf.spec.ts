@@ -18,7 +18,7 @@ test.describe('PWA', () => {
     const res = await page.request.get('/manifest.webmanifest')
     expect(res.status()).toBe(200)
     const man = await res.json()
-    expect(man).toMatchObject({ name: 'מערכת ההפעלה', dir: 'rtl', lang: 'he', display: 'standalone', start_url: './' })
+    expect(man).toMatchObject({ name: 'אטלס', dir: 'rtl', lang: 'he', display: 'standalone', start_url: './' })
     expect(man.icons.some((i: any) => i.sizes === '512x512' && i.purpose === 'maskable')).toBe(true)
     expect(man.theme_color).toBe('#f6f7f9')
     for (const icon of man.icons) {

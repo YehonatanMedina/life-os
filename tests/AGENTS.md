@@ -1,6 +1,6 @@
 # Test charter — shared context for the QA agents
 
-Project: `C:\Users\user\Desktop\ניהול זמן` — "מערכת ההפעלה", a Hebrew RTL personal time-management PWA.
+Project: `C:\Users\user\Desktop\ניהול זמן` — "אטלס", a Hebrew RTL personal time-management PWA.
 Stack: Vite 6 + React 18 + TypeScript, no UI library, single-file build into `docs/`. Read `README.md` first (it documents every feature, the sync design, Atlas, and the design system).
 
 Key source files: `src/store.ts` (state, actions, merge logic), `src/types.ts`, `src/dates.ts` (logical day starts 03:30), `src/cloud.ts` (encrypted gist sync), `src/crypto.ts`, `src/atlas.ts` (Atlas transport + command application + undo), `src/ai.ts` (context/pulse/digest builders), `src/push.ts` + `scripts/notify-send.mjs` (phone notifications, Atlas reminders and deep-block check-in), `src/insights.ts`, `src/views/*.tsx` (Today, Atlas, CalendarView, Projects, Review, Settings, Workout, NewsCard, FocusTimer), `src/styles.css`, `src/App.tsx` (navigation: 5 tabs היום·אטלס·יומן·פרויקטים·סקירה + settings gear; keys 1–6).
