@@ -1573,6 +1573,18 @@ export function workoutOn(s: AppState, date: ISODate): WorkoutLog | undefined {
   return (s.workouts ?? []).find((w) => w.date === date && !w.deleted)
 }
 
+/**
+ * האימון של תאריך מסוים: מה שהוצמד לתאריך הזה אם הוצמד ("עשיתי אימון אחר",
+ * או setWorkoutFor של אטלס), ואחרת ברירת המחדל של אותו יום בשבוע. זה המקור
+ * היחיד לשאלה "מה האימון של היום" — כל מסך שמסתמך רק על היום בשבוע מציג
+ * את התוכנית הכללית ולא את מה שבאמת קורה בתאריך הזה.
+ */
+export function workoutDayOn(s: AppState, date: ISODate): WorkoutDay | undefined {
+  const dayId = workoutOn(s, date)?.dayId
+  const plan = alive(s.workoutPlan ?? [])
+  return (dayId ? plan.find((d) => d.id === dayId) : undefined) ?? plan.find((d) => d.dow === parseISO(date).getDay())
+}
+
 /** האם נרשם משהו באימון הזה — סט אחד, קילומטר אחד או דקה אחת */
 export function workoutHasData(w?: WorkoutLog): boolean {
   if (!w) return false

@@ -398,6 +398,21 @@ describe('אימונים', () => {
     expect(S.planForDow(get(), 1)).toBeUndefined()
   })
 
+  it('workoutDayOn מעדיף את מה שהוצמד לתאריך על פני ברירת המחדל של היום בשבוע', () => {
+    // 2026-09-13 הוא יום ראשון. בתוכנית שני ימי ראשון: חדר כושר וגיבוי ביתי.
+    S.actions.upsertWorkoutDay({ id: 'wd-sun', updatedAt: 1, dow: 0, title: 'דחיפה', kind: 'gym', exercises: [] })
+    S.actions.upsertWorkoutDay({ id: 'wd-sun-home', updatedAt: 1, dow: 0, title: 'דחיפה בבית', kind: 'home', exercises: [] })
+    // בלי הצמדה — ברירת המחדל של יום ראשון
+    expect(S.workoutDayOn(get(), '2026-09-13')?.id).toBe('wd-sun')
+    S.actions.patchWorkout('2026-09-13', { dayId: 'wd-sun-home', title: 'דחיפה בבית', kind: 'home' })
+    expect(S.workoutDayOn(get(), '2026-09-13')?.id).toBe('wd-sun-home')
+    // רק התאריך הזה — יום ראשון הבא חוזר לחדר כושר
+    expect(S.workoutDayOn(get(), '2026-09-20')?.id).toBe('wd-sun')
+    // יום שהוצמד אליו נמחק מהתוכנית — נופלים חזרה לברירת המחדל ולא למסך ריק
+    S.actions.deleteWorkoutDay('wd-sun-home')
+    expect(S.workoutDayOn(get(), '2026-09-13')?.id).toBe('wd-sun')
+  })
+
   it('bestSet/exerciseHistory/lastSetsOf', async () => {
     S = await freshStore(blankState({ workouts: [
       workout({ date: '2026-09-01', sets: { b: [{ kg: 50, reps: 10 }, { kg: 55, reps: 5 }] } }),

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  actions, alive, bestSet, exerciseHistory, lastSetsOf, planForDow, setScore, uid, useApp,
-  workoutHasData, workoutOn,
+  actions, alive, bestSet, exerciseHistory, lastSetsOf, setScore, uid, useApp,
+  workoutDayOn, workoutHasData, workoutOn,
 } from '../store'
 import {
   HE_DAYS, HE_DAYS_SHORT, dow, minutesToHM, niceDate, plural, shortDate,
@@ -66,7 +66,7 @@ export function WorkoutCard() {
     </>
   )
 
-  const planDay = planForDow(s, dow(date))
+  const planDay = workoutDayOn(s, date)
   const log = workoutOn(s, date)
   const done = !!log?.finishedAt
   const started = workoutHasData(log)
@@ -112,7 +112,7 @@ export function WorkoutCard() {
         {/* פס השבוע — מה תוכנן ומה כבר קרה */}
         <div className="wk-strip">
           {week.map((d) => {
-            const p = planForDow(s, dow(d))
+            const p = workoutDayOn(s, d)
             const w = workoutOn(s, d)
             const ok = !!w?.finishedAt
             const partial = !ok && workoutHasData(w)
@@ -175,7 +175,7 @@ export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => v
   const log = workoutOn(s, date)
   const plan = alive(s.workoutPlan ?? []).sort((a, b) => a.dow - b.dow)
   // האימון של היום, או זה שנבחר ידנית אם עשית משהו אחר
-  const day = plan.find((d) => d.id === log?.dayId) ?? planForDow(s, dow(date))
+  const day = workoutDayOn(s, date)
 
   // ההצמדה בין יומן האימון לתוכנית נעשית כשנוגעים בו לראשונה
   const ensure = (d?: WorkoutDay) => {
