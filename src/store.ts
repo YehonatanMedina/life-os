@@ -4,6 +4,7 @@ import type {
   SkillProgress, Task, WeekGoal, WeekLog, WorkoutDay, WorkoutLog,
 } from './types'
 import { addDays, iso, logicalDate, parseISO, today, weekStart } from './dates'
+import { matchesSkill, type SkillLadder } from './skills'
 import { HABITS, RULES, SCHEMA_VERSION, TASKS, TRACKS, WEEKLY, EVENTS, DEFAULT_SETTINGS, seedState, newDeviceId, PHASES } from './seed'
 
 const KEY = 'life-os-v1'
@@ -1720,4 +1721,45 @@ export function runWeeks(s: AppState): Array<[ISODate, number]> {
     map.set(ws, (map.get(ws) ?? 0) + w.km)
   }
   return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+}
+
+/**
+ * התרגילים שמודדים מיומנות: מה שנקבע ידנית, ואם לא נקבע — התרגילים בתוכנית
+ * ששמם תואם למילות הזיהוי של הסולם. כך המסע מודד את עצמו כבר בפתיחה
+ * הראשונה, בלי חיבור ידני.
+ */
+export function skillExIds(s: AppState, lad: SkillLadder): ID[] {
+  const saved = skillOf(s, lad.id)?.exIds
+  if (saved?.length) return saved
+  const out: ID[] = []
+  for (const day of alive(s.workoutPlan ?? [])) {
+    for (const ex of day.exercises) {
+      if (!out.includes(ex.id) && matchesSkill(lad, ex.name)) out.push(ex.id)
+    }
+  }
+  return out
+}
+
+/**
+ * השלב הנוכחי בסולם. שלב שנקבע ידנית גובר; אחרת מחשבים מהיומן — השלב הראשון
+ * שתנאי המעבר שלו עוד לא נסגר. שלב בלי יעד מדיד עוצר את החישוב, כי אין דרך
+ * לדעת מהנתונים אם עברת אותו.
+ */
+export function currentStage(s: AppState, lad: SkillLadder): number {
+  const prog = skillOf(s, lad.id)
+  if (prog?.stageId) {
+    const i = lad.stages.findIndex((x) => x.id === prog.stageId)
+    if (i !== -1) return i
+  }
+  const exIds = skillExIds(s, lad)
+  const done = new Set(prog?.done ?? [])
+  let i = 0
+  while (i < lad.stages.length - 1) {
+    const st = lad.stages[i]
+    if (done.has(st.id)) { i++; continue }
+    const p = stageProgress(s, exIds, st.target)
+    if (!p?.met) break
+    i++
+  }
+  return i
 }

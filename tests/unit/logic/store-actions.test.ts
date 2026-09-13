@@ -8,6 +8,7 @@ vi.hoisted(() => {
 
 import { blankState, freshStore, task, event, rule, day, week, workout, pin, tick, NOW, KEY, type StoreModule } from './helpers'
 import type { AppState } from '../../../src/types'
+import { SKILL_LADDERS } from '../../../src/skills'
 
 let S: StoreModule
 const get = () => S.store.get()
@@ -872,5 +873,46 @@ describe('מיומנויות — שלבים והתקדמות', () => {
     expect(S.longestRun(get())).toEqual({ km: 4, date: '2026-09-12' })
     // 6.9 הוא ראשון — כל השלושה נופלים לאותו שבוע
     expect(S.runWeeks(get())).toEqual([['2026-09-06', 9]])
+  })
+})
+
+describe('מיומנויות — זיהוי אוטומטי מהתוכנית', () => {
+  const plan = [
+    { id: 'wd-fri', updatedAt: 1, dow: 5, title: 'בית', kind: 'home' as const, exercises: [
+      { id: 'ex-handstand', name: 'תרגול עמידת ידיים על הקיר', metric: 'time' as const },
+      { id: 'ex-widepull', name: 'משיכות שכמות (Scapular Pulls)', metric: 'bodyweight' as const },
+    ] },
+    { id: 'wd-sun', updatedAt: 1, dow: 0, title: 'דחיפה', kind: 'gym' as const, exercises: [
+      { id: 'ex-lsit', name: 'בטן לקליסטניקס (L-Sit)', metric: 'time' as const },
+      { id: 'ex-bench', name: 'לחיצת חזה', metric: 'weight' as const },
+    ] },
+  ]
+
+  it('התרגיל המודד נמצא לפי שם, ותרגיל לא קשור לא נכנס', async () => {
+    S = await freshStore(blankState({ workoutPlan: plan }))
+    const lad = (id: string) => SKILL_LADDERS.find((x) => x.id === id)!
+    expect(S.skillExIds(get(), lad('sk-handstand'))).toEqual(['ex-handstand'])
+    expect(S.skillExIds(get(), lad('sk-lsit'))).toEqual(['ex-lsit'])
+    expect(S.skillExIds(get(), lad('sk-frontlever'))).toEqual(['ex-widepull'])
+    expect(S.skillExIds(get(), lad('sk-dip'))).toEqual([])
+  })
+
+  it('השלב מחושב מהיומן כשלא נקבע ידנית, וקביעה ידנית גוברת', async () => {
+    S = await freshStore(blankState({
+      workoutPlan: plan,
+      // 4 סטים של 60 שנ׳ סוגרים גם את "הבסיס" וגם את "טיפוס" ו"פנים לקיר"
+      workouts: [workout({ date: '2026-09-10', sets: { 'ex-handstand': [{ sec: 60 }, { sec: 60 }, { sec: 60 }, { sec: 60 }] } })],
+    }))
+    const lad = SKILL_LADDERS.find((x) => x.id === 'sk-handstand')!
+    // עבר את שלושת הראשונים, ועומד ב"נגיעות כתף" (אין לו חזרות)
+    expect(lad.stages[S.currentStage(get(), lad)].id).toBe('shoulder-taps')
+    S.actions.setSkill('sk-handstand', { stageId: 'chest-wall' })
+    expect(lad.stages[S.currentStage(get(), lad)].id).toBe('chest-wall')
+  })
+
+  it('בלי שום רישום — השלב הוא הראשון', async () => {
+    S = await freshStore(blankState({ workoutPlan: plan }))
+    const lad = SKILL_LADDERS.find((x) => x.id === 'sk-lsit')!
+    expect(S.currentStage(get(), lad)).toBe(0)
   })
 })

@@ -51,6 +51,12 @@ export interface SkillLadder {
   goal: string
   /** למה זה שווה את הזמן */
   why: string
+  /**
+   * מילות זיהוי לתרגיל שמודד את המיומנות, מול השמות בתוכנית. בזכותן המסע
+   * מודד את עצמו כבר בפתיחה הראשונה, בלי שאף אחד יחבר ידנית תרגיל לשלב.
+   * `exIds` בהתקדמות השמורה גובר עליהן.
+   */
+  match: string[]
   stages: SkillStage[]
 }
 
@@ -62,6 +68,7 @@ export const SKILL_LADDERS: SkillLadder[] = [
     emoji: '🤸',
     goal: 'עמידת ידיים חופשית, 30 שניות',
     why: 'הכתף החזקה והיציבה ביותר שאפשר לבנות, והבסיס לכל תרגיל דחיפה מתקדם. גם השיווי משקל הוא מיומנות נלמדת — לא כישרון.',
+    match: ['עמידת ידיים', 'handstand'],
     stages: [
       {
         id: 'base',
@@ -133,6 +140,7 @@ export const SKILL_LADDERS: SkillLadder[] = [
     emoji: '🪂',
     goal: 'Front Lever מלא, 10 שניות',
     why: 'התרגיל שבונה גב רחב וליבה שאין דרך לזייף. כל שלב בו נראה בגב תוך שבועות.',
+    match: ['front lever', 'שכמות', 'scapular'],
     stages: [
       {
         id: 'hang',
@@ -194,6 +202,7 @@ export const SKILL_LADDERS: SkillLadder[] = [
     emoji: '📐',
     goal: 'L-Sit על הרצפה, 30 שניות',
     why: 'ליבה, כופפי ירך ודחיפת כתף בתרגיל אחד. גם השער ל-V-Sit ולעמידת ידיים מכוח.',
+    match: ['l-sit', 'l sit', 'lsit'],
     stages: [
       {
         id: 'pseudo',
@@ -255,6 +264,7 @@ export const SKILL_LADDERS: SkillLadder[] = [
     emoji: '🧲',
     goal: 'מתח עם תוספת 20 ק״ג, 3 סטים של 5',
     why: 'המדד הכי ישיר לכוח משיכה. גם מה שהופך את ה-Front Lever מאפשרי לקל.',
+    match: ['pull-up', 'pull up', 'pullup'],
     stages: [
       {
         id: 'bw-8',
@@ -308,6 +318,7 @@ export const SKILL_LADDERS: SkillLadder[] = [
     emoji: '⛓️',
     goal: 'מקבילים עם תוספת 20 ק״ג, 3 סטים של 5',
     why: 'הדחיפה החזקה ביותר במשקל גוף, והמקבילה של המתח בצד השני של הגוף.',
+    match: ['מקבילים', 'dip'],
     stages: [
       {
         id: 'bw-10',
@@ -387,3 +398,9 @@ export const RUN_MILESTONES: RunMilestone[] = [
 
 /** הכלל שמונע פציעות: לא יותר מ-10% נפח בשבוע */
 export const RUN_WEEKLY_GROWTH = 0.1
+
+/** התאמת שם תרגיל למילות הזיהוי של סולם */
+export function matchesSkill(lad: SkillLadder, exName: string): boolean {
+  const n = exName.toLowerCase()
+  return lad.match.some((m) => n.includes(m.toLowerCase()))
+}

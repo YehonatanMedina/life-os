@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import {
-  actions, alive, exerciseHistory, longestRun, runWeeks, skillOf, stageIndex, stageProgress,
-  useApp, workoutDayOn, workoutHasData, workoutOn,
+  actions, alive, currentStage, exerciseHistory, longestRun, runWeeks, skillExIds, skillOf,
+  stageProgress, useApp, workoutDayOn, workoutHasData, workoutOn,
 } from '../store'
 import {
   HE_DAYS, HE_DAYS_SHORT, dow, minutesToHM, plural, shortDate, today as todayISO,
@@ -214,7 +214,8 @@ function SkillCard({ lad }: { lad: SkillLadder }) {
   const [open, setOpen] = useState(false)
   const prog = skillOf(s, lad.id)
   const ids = lad.stages.map((x) => x.id)
-  const cur = stageIndex(prog, ids)
+  const cur = currentStage(s, lad)
+  const exIds = skillExIds(s, lad)
   const doneSet = new Set(prog?.done ?? [])
   // שלב נחשב מאחוריך אם הוא לפני השלב הנוכחי או שסומן ידנית
   const passed = (i: number) => i < cur || doneSet.has(ids[i])
@@ -252,7 +253,7 @@ function SkillCard({ lad }: { lad: SkillLadder }) {
       </div>
 
       <div style={{ padding: '2px 13px 12px' }}>
-        <StageBlock lad={lad} st={lad.stages[cur]} state="now" exIds={prog?.exIds} />
+        <StageBlock lad={lad} st={lad.stages[cur]} state="now" exIds={exIds} />
         {!open && cur + 1 < lad.stages.length && (
           <div className="tiny faint" style={{ marginTop: 8 }}>
             הבא בתור: {lad.stages[cur + 1].name}
@@ -271,7 +272,7 @@ function SkillCard({ lad }: { lad: SkillLadder }) {
               lad={lad}
               st={st}
               state={i === cur ? 'now' : passed(i) ? 'done' : 'next'}
-              exIds={prog?.exIds}
+              exIds={exIds}
               n={i + 1}
               onToggle={() => actions.toggleSkillStage(lad.id, st.id)}
               onGoto={() => actions.setSkill(lad.id, { stageId: st.id })}
