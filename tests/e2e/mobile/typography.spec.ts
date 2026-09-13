@@ -33,7 +33,10 @@ test.describe('טיפוגרפיה', () => {
   test('גיליון סגנון חיצוני איטי לא אמור לחסום את הציור הראשון', async ({ page, errors }) => {
     // גוגל פונטס עונה אחרי 3 שניות. הדף אמור לצייר את המעטפת לפני כן.
     const t0 = Date.now()
-    errors.push(...(await openApp(page, { state: richState(), fontsDelayMs: 3000, goto: false, now: null })))
+    // שעון אמיתי — בלי נעילת המעבר השבועי ביום ראשון
+    const st = richState()
+    st.settings.reviewLock = false
+    errors.push(...(await openApp(page, { state: st, fontsDelayMs: 3000, goto: false, now: null })))
     await page.goto('/', { waitUntil: 'commit' })
     await page.waitForTimeout(1500)
     // מה רואים אחרי שנייה וחצי? (צילום לדוח)

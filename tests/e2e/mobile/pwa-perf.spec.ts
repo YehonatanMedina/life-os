@@ -94,6 +94,8 @@ test.describe('PWA', () => {
 function heavyState() {
   const s = makeState()
   s.settings.onboarded = true
+  // רץ על השעון האמיתי — ביום ראשון מסך המעבר השבועי היה נועל את האפליקציה
+  s.settings.reviewLock = false
   const now = Date.now()
   const day = (n: number) => {
     const d = new Date(now + n * 86400000)
