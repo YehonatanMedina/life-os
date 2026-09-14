@@ -88,9 +88,12 @@ export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => v
   const finish = () => {
     ensure()
     actions.patchWorkout(date, { finishedAt: Date.now() })
-    // סימון ההרגל "אימון" של אותו יום — כדי שלא צריך לסמן פעמיים
+    // סימון ההרגל "אימון" של אותו יום — כדי שלא צריך לסמן פעמיים.
+    // אם ההרגל נמחק, היום עדיין מסומן כיום אימון — הרישום ביומן לא תלוי בהרגל.
+    const w = day?.kind === 'run' || day?.kind === 'walk' ? 'run' : 'strength'
     const hb = alive(s.habits).find((h) => h.special === 'workout')
-    if (hb) actions.setHabit(date, hb.id, true, { workout: day?.kind === 'run' || day?.kind === 'walk' ? 'run' : 'strength' })
+    if (hb) actions.setHabit(date, hb.id, true, { workout: w })
+    else actions.patchDay(date, { workout: w })
     vibrate([30, 50, 30])
     toast('האימון נשמר')
     onClose()
