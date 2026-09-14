@@ -10,8 +10,9 @@ function everyText(days: number): string {
 }
 import { Confirm, DateField, Field, NumField, onColor, Sheet, Switch, TimeField, useToast } from '../ui'
 import type { HabitDef, HabitStep, RecurRule, WeeklyDef } from '../types'
-import { saveFile } from '../cloud'
+import { buildId, saveFile } from '../cloud'
 import { promptInstall, useInstallState } from '../install'
+import { APP_NAME, APP_TAGLINE, Mark, Wordmark } from '../brand'
 import CloudCard from './CloudCard'
 import AtlasCard from './AtlasCard'
 import NotifyCard from './NotifyCard'
@@ -31,7 +32,7 @@ export default function SettingsView() {
 
   const exportJson = async () => {
     const data = JSON.stringify(store.get(), null, 2)
-    const ok = await saveFile(`life-os-${todayISO()}.json`, data)
+    const ok = await saveFile(`atlas-${todayISO()}.json`, data)
     toast(ok ? 'קובץ הגיבוי ירד' : 'ההורדה נחסמה — נסה מהמחשב')
   }
 
@@ -45,7 +46,7 @@ export default function SettingsView() {
         if (!parsed) throw new Error('bad')
         setPendingImport({ state: parsed, name: file.name })
       } catch {
-        toast('הקובץ לא נראה כמו גיבוי של המערכת')
+        toast(`הקובץ לא נראה כמו גיבוי של ${APP_NAME}`)
       }
     }
     fr.readAsText(file)
@@ -382,7 +383,7 @@ export default function SettingsView() {
       <div className="card pad">
         <div className="row">
           <button className="btn ghost grow" onClick={() => setAbout(true)}>
-            על המערכת
+            על אטלס
           </button>
           <button className="btn danger grow" onClick={() => setReset(true)}>
             איפוס להתחלה
@@ -399,8 +400,21 @@ export default function SettingsView() {
       <WeeklySheet w={weekly} onClose={() => setWeekly(null)} />
       <RuleSheet rule={rule} onClose={() => setRule(null)} />
 
-      <Sheet open={about} onClose={() => setAbout(false)} title="על המערכת">
+      <Sheet open={about} onClose={() => setAbout(false)} title={`על ${APP_NAME}`}>
         <div className="small stack">
+          {/* השם והסימן — כאן רואים מה הגרסה שרצה באמת, כשהאייקון על מסך הבית עוד ישן */}
+          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+            <Mark size={30} solid />
+            <div className="grow" style={{ minWidth: 0 }}>
+              <Wordmark size={20} />
+              <div className="tiny faint">{APP_TAGLINE}</div>
+            </div>
+            <span className="tiny faint ltr">{buildId()}</span>
+          </div>
+          <p style={{ margin: 0 }}>
+            <b>השם על מסך הבית</b> נצרב כשהוספת את האפליקציה, והוא לא מתעדכן לבד. כדי שיהיה {APP_NAME}:
+            להסיר מהמסך ולהוסיף מחדש. השם כאן הוא מה שבאמת רץ.
+          </p>
           <p style={{ margin: 0 }}>
             <b>הפילוסופיה:</b> לא לו״ז נוקשה של דקות — אלא <b>אסימוני Deep Work</b> ושלבים. מודדים את הקלט
             (זמן ריכוז נטו), לא את הפלט. סביב זה יש ליבת ברזל יומית — קימה, שגרות, אימון — ואסימונים שבועיים
@@ -427,7 +441,7 @@ export default function SettingsView() {
         confirmLabel="ייבוא"
         onCancel={() => setPendingImport(null)}
         onConfirm={async () => {
-          await saveFile(`life-os-pre-import-${todayISO()}.json`, JSON.stringify(store.get(), null, 2))
+          await saveFile(`atlas-pre-import-${todayISO()}.json`, JSON.stringify(store.get(), null, 2))
           actions.replaceAll(pendingImport!.state)
           setPendingImport(null)
           toast('הנתונים יובאו')
