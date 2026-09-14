@@ -262,12 +262,29 @@ export interface Exercise {
   video?: string
 }
 
+/**
+ * היעד של אימון אירובי — מה לכוון אליו בריצה הזו.
+ * בריצה אין סטים וחזרות, ולכן בלי היעד אין לאימון מספר לרוץ אליו.
+ */
+export interface RunTarget {
+  /** מרחק היעד בק״מ */
+  km?: number
+  /** משך היעד בדקות — כשהריצה נמדדת בזמן ולא במרחק */
+  minutes?: number
+  /** טווח הקצב המבוקש, דקות לק״מ: "6:40-7:10" או קצב יחיד "5:50" */
+  pace?: string
+  /** מה עושים בריצה הזו במשפט — האצות בסוף, טמפו, שחרור */
+  how?: string
+}
+
 /** יום בתוכנית השבועית (0 = ראשון) */
 export interface WorkoutDay extends Rec {
   dow: number
   title: string
   kind: WorkoutKind
   focus?: string
+  /** רלוונטי לימי run/walk בלבד */
+  target?: RunTarget
   exercises: Exercise[]
 }
 

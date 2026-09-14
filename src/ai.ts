@@ -164,7 +164,7 @@ export function buildAtlasContext(s: AppState) {
     workoutPlan: alive(s.workoutPlan ?? [])
       .sort((a, b) => a.dow - b.dow)
       .map((d) => ({
-        id: d.id, dow: d.dow, title: d.title, kind: d.kind, focus: d.focus,
+        id: d.id, dow: d.dow, title: d.title, kind: d.kind, focus: d.focus, target: d.target,
         exercises: d.exercises.map((e) => ({ id: e.id, name: e.name, sets: e.sets, reps: e.reps, metric: e.metric, note: e.note, rest: e.rest, cues: e.cues, video: e.video })),
       })),
     workouts: (s.workouts ?? [])

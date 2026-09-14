@@ -8,7 +8,7 @@ import {
   weekDates, weekStart,
 } from '../dates'
 import { Ring } from '../ui'
-import { PlanSheet, ProgressSheet, WorkoutSheet, KIND_EMOJI, setText } from './Workout'
+import { PlanSheet, ProgressSheet, WorkoutSheet, KIND_EMOJI, setText, targetText } from './Workout'
 import {
   FOCUS_TIER, RUN_MILESTONES, RUN_WEEKLY_GROWTH, SKILL_TIERS, laddersInTier, tutorial,
 } from '../skills'
@@ -154,6 +154,18 @@ function TodayCard({ date, onOpen }: { date: string; onOpen: () => void }) {
         </div>
         {done && <span className="chip on">✓ בוצע</span>}
       </div>
+
+      {/* בריצה אין תרגילים להסתכל עליהם — היעד הוא כל מה שיש, ולכן הוא ראשון */}
+      {targetText(day?.target) && (
+        <div style={{ padding: '0 13px 4px' }}>
+          <span className="chip on">היעד: {targetText(day!.target)}</span>
+          {day!.target?.how && (
+            <div className="tiny" style={{ color: 'var(--text-dim)', marginTop: 4 }}>
+              {day!.target.how}
+            </div>
+          )}
+        </div>
+      )}
 
       {day?.focus && (
         <div className="tiny" style={{ color: 'var(--text-dim)', padding: '0 13px 2px' }}>

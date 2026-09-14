@@ -946,6 +946,56 @@ export const RUN_MILESTONES: RunMilestone[] = [
 /** הכלל שמונע פציעות: לא יותר מ-10% נפח בשבוע */
 export const RUN_WEEKLY_GROWTH = 0.1
 
+// -- קצב ---------------------------------------------------------------------
+// הקצב נכתב בתוכנית כטקסט ("6:40-7:10"), כי ככה מדברים עליו. הפענוח כאן הוא
+// מה שמאפשר להשוות אותו למה שבאמת רצת.
+
+/** קצב יחיד לדקות עשרוניות לק״מ. "6:40" → 6.667. null אם זה לא קצב. */
+export function parsePace(text: string): number | null {
+  const m = /^\s*(\d{1,2}):([0-5]\d)\s*$/.exec(text)
+  if (!m) return null
+  return Number(m[1]) + Number(m[2]) / 60
+}
+
+/** טווח הקצב מתוך טקסט: "6:40-7:10" → [6.667, 7.167]. קצב יחיד → טווח באורך אפס. */
+export function parsePaceRange(text?: string): [number, number] | null {
+  if (!text) return null
+  const parts = text.split(/[-–—]/)
+  if (parts.length === 1) {
+    const one = parsePace(parts[0])
+    return one === null ? null : [one, one]
+  }
+  if (parts.length !== 2) return null
+  const lo = parsePace(parts[0])
+  const hi = parsePace(parts[1])
+  if (lo === null || hi === null) return null
+  return lo <= hi ? [lo, hi] : [hi, lo]
+}
+
+/** דקות עשרוניות לק״מ כטקסט קצב: 6.667 → "6:40" */
+export function paceText(minPerKm: number): string {
+  if (!Number.isFinite(minPerKm) || minPerKm <= 0) return ''
+  let min = Math.floor(minPerKm)
+  let sec = Math.round((minPerKm - min) * 60)
+  if (sec === 60) {
+    min += 1
+    sec = 0
+  }
+  return `${min}:${String(sec).padStart(2, '0')}`
+}
+
+/**
+ * איפה הקצב שרצת ביחס לטווח. 'fast' הוא מהר מדי ולא הישג: ריצה קלה שנרצת
+ * מהר היא בדיוק מה שגונב את הרגליים מהריצה הארוכה.
+ */
+export function gradePace(actual: number, range: [number, number]): 'fast' | 'in' | 'slow' {
+  // שוליים של 5 שניות לק״מ — GPS ורמזורים לא מודדים לשנייה
+  const tol = 5 / 60
+  if (actual < range[0] - tol) return 'fast'
+  if (actual > range[1] + tol) return 'slow'
+  return 'in'
+}
+
 /** התאמת שם תרגיל למילות הזיהוי של סולם */
 export function matchesSkill(lad: SkillLadder, exName: string): boolean {
   const n = exName.toLowerCase()

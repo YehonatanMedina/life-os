@@ -8,8 +8,9 @@ import {
   today as todayISO, weekDates, weekStart,
 } from '../dates'
 import { Confirm, useToast, vibrate } from '../ui'
-import type { Exercise, ExMetric, ID, SetLog, WorkoutDay, WorkoutKind, WorkoutLog } from '../types'
+import type { Exercise, ExMetric, ID, RunTarget, SetLog, WorkoutDay, WorkoutKind, WorkoutLog } from '../types'
 import { WORKOUT_KIND_LABEL } from '../types'
+import { gradePace, paceText, parsePaceRange } from '../skills'
 
 // ---------------------------------------------------------------------------
 // אימונים — הגיליונות.
@@ -251,9 +252,14 @@ function CardioCard({
   const km = log?.km ?? 0
   const min = log?.minutes ?? 0
   const pace = km > 0 && min > 0 ? min / km : 0
-  const paceText = pace
-    ? `${Math.floor(pace)}:${String(Math.round((pace % 1) * 60)).padStart(2, '0')} לק״מ`
-    : ''
+  const paceLabel = pace ? `${paceText(pace)} לק״מ` : ''
+
+  // היעד של היום, ומה חסר עד אליו
+  const target = day.target
+  const range = parsePaceRange(target?.pace)
+  const grade = pace && range ? gradePace(pace, range) : null
+  const leftKm = target?.km ? Math.round((target.km - km) * 10) / 10 : 0
+  const leftMin = target?.minutes ? Math.round(target.minutes - min) : 0
 
   // הריצה הקודמת — כדי לדעת מול מה אתה מתמודד
   const prev = (s.workouts ?? [])
@@ -280,6 +286,25 @@ function CardioCard({
         )}
       </div>
 
+      {/* היעד לפני השדות — זה מה שצריך לדעת לפני שיוצאים, לא אחרי */}
+      {targetText(target) && (
+        <div
+          style={{
+            border: '1px solid var(--line)',
+            borderRadius: 12,
+            padding: '9px 11px',
+            marginBottom: 12,
+            background: 'var(--bg-sunk)',
+          }}
+        >
+          <div className="tiny faint" style={{ fontWeight: 700 }}>היעד היום</div>
+          <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>{targetText(target)}</div>
+          {target?.how && (
+            <div className="tiny" style={{ color: 'var(--text-dim)', marginTop: 4 }}>{target.how}</div>
+          )}
+        </div>
+      )}
+
       {day.kind === 'run' && (
         <Stepper
           label="קילומטרים"
@@ -301,11 +326,111 @@ function CardioCard({
         onChange={(v) => set({ minutes: v })}
       />
 
-      {paceText && (
+      {paceLabel && (
         <div className="tiny" style={{ marginTop: 10, color: 'var(--accent)', fontWeight: 700 }}>
-          קצב ממוצע: <span className="ltr">{paceText}</span>
+          קצב ממוצע: <span className="ltr">{paceLabel}</span>
         </div>
       )}
+
+      {/* מול היעד — רק כשכבר יש מה להשוות */}
+      {target && (km > 0 || min > 0) && (
+        <div className="row wrap" style={{ gap: 6, marginTop: 8 }}>
+          {!!target.km && (
+            <span className={`chip${leftKm <= 0 ? ' on' : ''}`}>
+              {leftKm <= 0 ? '✓ המרחק נסגר' : `נשאר ${leftKm} ק״מ`}
+            </span>
+          )}
+          {!target.km && !!target.minutes && (
+            <span className={`chip${leftMin <= 0 ? ' on' : ''}`}>
+              {leftMin <= 0 ? '✓ הזמן נסגר' : `נשארו ${leftMin} דק׳`}
+            </span>
+          )}
+          {grade && (
+            <span className="chip" style={{ color: `var(--${grade === 'in' ? 'good' : 'warn'}-text)` }}>
+              {grade === 'in'
+                ? '✓ בטווח הקצב'
+                : grade === 'fast'
+                  ? `מהר מדי — היעד ${paceText(range![0])} ומעלה`
+                  : `איטי מהיעד — עד ${paceText(range![1])}`}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** היעד בשורה אחת: "6 ק״מ · קצב 6:40-7:10 לק״מ" */
+export function targetText(t?: RunTarget): string {
+  if (!t) return ''
+  const parts: string[] = []
+  if (t.km) parts.push(`${t.km} ק״מ`)
+  if (t.minutes) parts.push(`${t.minutes} דק׳`)
+  if (t.pace) parts.push(`קצב ${t.pace} לק״מ`)
+  return parts.join(' · ')
+}
+
+// ---------------------------------------------------------------------------
+/** עריכת היעד של יום אירובי — המספר שהריצה רצה אליו */
+function TargetEditor({ day }: { day: WorkoutDay }) {
+  const t = day.target ?? {}
+  const set = (p: Partial<RunTarget>) => {
+    const next = { ...t, ...p }
+    // יעד ריק נמחק, כדי שלא יישאר שדה מת בתוכנית
+    const empty = !next.km && !next.minutes && !next.pace && !next.how
+    actions.patchWorkoutDay(day.id, { target: empty ? undefined : next })
+  }
+  const num = (v: string, max: number) => {
+    const n = Number(v.replace(/[^\d.]/g, ''))
+    return Number.isFinite(n) && n > 0 ? Math.min(max, n) : undefined
+  }
+
+  return (
+    <div className="card pad" style={{ marginBottom: 10 }}>
+      <div className="section-title" style={{ marginBottom: 6 }}>היעד של הריצה</div>
+      <div className="tiny faint" style={{ marginBottom: 8 }}>
+        מה שמופיע במסך האימון לפני שיוצאים. אפשר מרחק, זמן, או שניהם.
+      </div>
+      <div className="row" style={{ marginBottom: 8 }}>
+        <label className="field grow">
+          <span>ק״מ</span>
+          <input
+            className="input ltr"
+            inputMode="decimal"
+            value={t.km ?? ''}
+            placeholder="6"
+            onChange={(e) => set({ km: num(e.target.value, 60) })}
+          />
+        </label>
+        <label className="field grow">
+          <span>דקות</span>
+          <input
+            className="input ltr"
+            inputMode="numeric"
+            value={t.minutes ?? ''}
+            placeholder="35"
+            onChange={(e) => set({ minutes: num(e.target.value, 400) })}
+          />
+        </label>
+      </div>
+      <label className="field" style={{ marginBottom: 8 }}>
+        <span>קצב לק״מ</span>
+        <input
+          className="input ltr"
+          value={t.pace ?? ''}
+          placeholder="6:40-7:10"
+          onChange={(e) => set({ pace: e.target.value.trim() || undefined })}
+        />
+      </label>
+      <label className="field">
+        <span>מה עושים בריצה הזו</span>
+        <input
+          className="input"
+          value={t.how ?? ''}
+          placeholder="קל לאורך כולה, ובסוף 6 האצות של 20 שניות"
+          onChange={(e) => set({ how: e.target.value || undefined })}
+        />
+      </label>
     </div>
   )
 }
@@ -838,6 +963,8 @@ export function PlanSheet({ onClose }: { onClose: () => void }) {
                         onChange={(e) => actions.patchWorkoutDay(day.id, { focus: e.target.value })}
                       />
                     </label>
+
+                    {(day.kind === 'run' || day.kind === 'walk') && <TargetEditor day={day} />}
 
                     <ExerciseEditor day={day} />
 
