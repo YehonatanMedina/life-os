@@ -113,6 +113,20 @@ describe('buildAtlasContext', () => {
     expect(ctx.settings.name).toBe('יהונתן')
   })
 
+  it('recent: רק מה שנכנס ביומיים האחרונים, מהחדש לישן, עם מה השתנה', () => {
+    const s = rich()
+    s.tasks.push(task({ id: 'fresh', title: 'משימה טרייה', status: 'doing', updatedAt: NOW - 3600_000 }))
+    s.workouts!.push(workout({ date: '2026-09-10', title: 'ריצה', kind: 'run', km: 4.5, minutes: 31, note: 'הרגיש קל', updatedAt: NOW - 600_000 }))
+    const r = A.buildAtlasContext(s).recent
+    expect(r.items[0].kind).toBe('workout')
+    expect(r.items[0].what).toContain('4.5 ק״מ')
+    expect(r.items[0].what).toContain('הרגיש קל')
+    expect(r.items[1].id).toBe('fresh')
+    expect(r.items[1].what).toBe('בתהליך')
+    // כל השאר במצב הבדיקה נגעו לאחרונה ב-updatedAt: 1 — ולכן לא נכנסים
+    expect(r.items).toHaveLength(2)
+  })
+
   it('על מצב ריק לחלוטין לא זורק', () => {
     const s = blankState() as any
     delete s.workouts

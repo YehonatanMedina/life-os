@@ -14,7 +14,8 @@ import { alive, dayCapacity, dayLog, eventsOn, plannedOn, sessionsOn, store, tra
 import { addDays, logicalDate, today, weekStart } from './dates'
 import { buildWeekStats } from './insights'
 import { decryptText } from './crypto'
-import type { AppState } from './types'
+import { STATUS_LABEL } from './types'
+import type { AppState, ID } from './types'
 
 const INSIGHT_URL = './insights/latest.json'
 
@@ -170,15 +171,57 @@ export function buildAtlasContext(s: AppState) {
     workouts: (s.workouts ?? [])
       .filter((w) => !w.deleted && w.date >= addDays(t, -60))
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map((w) => ({ date: w.date, title: w.title, kind: w.kind, sets: w.sets, km: w.km, minutes: w.minutes, note: w.note, finished: !!w.finishedAt })),
+      .map((w) => ({ date: w.date, dayId: w.dayId, title: w.title, kind: w.kind, sets: w.sets, km: w.km, minutes: w.minutes, note: w.note, finished: !!w.finishedAt, at: w.updatedAt })),
     skills: alive(s.skills ?? []).map((k) => ({ id: k.id, stageId: k.stageId, exIds: k.exIds, done: k.done, note: k.note })),
     news: (s.news ?? [])
       .filter((n) => !n.deleted && n.date >= addDays(t, -14))
-      .map((n) => ({ date: n.date, votes: Object.keys(n.votes ?? {}).length, note: n.note })),
+      .map((n) => ({
+        date: n.date,
+        votes: Object.keys(n.votes ?? {}).length,
+        liked: Object.values(n.votes ?? {}).filter((v) => v.v === 1).length,
+        disliked: Object.values(n.votes ?? {}).filter((v) => v.v === -1).length,
+        note: n.note,
+        at: n.updatedAt,
+      })),
+    recent: recentChanges(s),
     stats: {
       thisWeek: compactStats(s, weekStart(t)),
       lastWeek: compactStats(s, addDays(weekStart(t), -7)),
     },
+  }
+}
+
+/**
+ * מה נכנס למערכת ביומיים האחרונים — הזנה אחת ממוינת מהחדש לישן.
+ * בלי זה אין לאטלס דרך להבדיל בין מה שהוא רשם אתמול לבין מה ששוכב שם
+ * כבר שבוע, ולכן אין לו על מה להגיב בבוקר.
+ */
+function recentChanges(s: AppState, hours = 48) {
+  const since = Date.now() - hours * 3600_000
+  const items: Array<{ kind: string; id?: ID; title: string; at: number; what?: string }> = []
+  const add = (kind: string, rec: { id?: ID; updatedAt?: number }, title: string, what?: string) => {
+    const at = rec.updatedAt ?? 0
+    if (at < since) return
+    items.push({ kind, id: rec.id, title, at, ...(what ? { what } : {}) })
+  }
+
+  for (const x of alive(s.tasks)) add('task', x, x.title, STATUS_LABEL[x.status])
+  for (const e of alive(s.events)) add('event', e, e.title, e.date)
+  for (const r of alive(s.rules)) add('rule', r, r.title, 'בלוק קבוע')
+  for (const d of alive(s.workoutPlan ?? [])) add('workoutPlan', d, d.title, `יום ${d.dow} בתוכנית`)
+  for (const w of (s.workouts ?? []).filter((x) => !x.deleted)) {
+    const done = Object.values(w.sets ?? {}).reduce((a, b) => a + b.length, 0)
+    const parts = [w.km ? `${w.km} ק״מ` : '', w.minutes ? `${w.minutes} דק׳` : '', done ? `${done} סטים` : '', w.note ?? '']
+    add('workout', w, `${w.date} · ${w.title}`, parts.filter(Boolean).join(' · '))
+  }
+  for (const d of alive(s.days)) add('day', d, d.date, [d.wake, d.sleep, d.workout].filter(Boolean).join(' · '))
+  for (const w of alive(s.weeks)) add('week', w, w.weekStart, w.review ? 'סקירה הוגשה' : 'שבוע')
+  for (const k of alive(s.skills ?? [])) add('skill', k, k.id, k.stageId)
+  for (const n of (s.news ?? []).filter((x) => !x.deleted)) add('news', n, n.date, n.note ? 'הערה על המהדורה' : 'דירוגים')
+
+  return {
+    since: new Date(since).toISOString(),
+    items: items.sort((a, b) => b.at - a.at).slice(0, 80),
   }
 }
 
