@@ -52,7 +52,7 @@ test.describe('טיפוגרפיה', () => {
       const css = performance.getEntriesByType('resource').find((r) => r.name.includes('fonts.googleapis.com')) as PerformanceResourceTiming | undefined
       return { fcp: fcp ? Math.round(fcp.startTime) : null, cssEnd: css ? Math.round(css.responseEnd) : null }
     })
-    await expect(page.locator('.bottomnav button')).toHaveCount(5)
+    await expect(page.locator('.bottomnav button')).toHaveCount(6)
     expect(errors).toEqual([])
     const blocked = !at1500.painted || (paint.fcp !== null && paint.fcp >= 2500)
     fixme(blocked, `render-blocking <link rel=stylesheet> to fonts.googleapis.com: nothing painted at 1500ms (React mounted: ${at1500.mounted}); FCP at ${paint.fcp}ms, CSS answered at ${paint.cssEnd}ms — see report`)

@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import {
-  HE_STATUS, b64u, buildId, createGist, getPairing, getToken, setCredentials, syncNow, useCloudState,
+  HE_STATUS, b64u, buildId, createGist, describeSyncError, getPairing, getToken, setCredentials, syncNow, useCloudState,
 } from '../cloud'
+import { hhmmOf, readSyncLog } from '../ghLimit'
 import { useApp } from '../store'
 import { getNotifyKey } from '../push'
 import { Field, useToast } from '../ui'
@@ -13,7 +14,7 @@ const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new'
  * בקוד של האתר, אז מי שפותח את הכתובת בלי אסימון לא רואה שום נתון.
  */
 export default function CloudCard() {
-  const { status, lastError, lastSyncAt, lastPullAt, lastPushAt } = useCloudState()
+  const { status, lastError, lastSyncAt, lastPullAt, lastPushAt, retryAt } = useCloudState()
   const s = useApp()
   const toast = useToast()
   const [syncing, setSyncing] = useState(false)
@@ -24,6 +25,8 @@ export default function CloudCard() {
   const [busy, setBusy] = useState(false)
 
   const connected = !!getToken() && !!getPairing()
+  // תקלות סנכרון מהיממה האחרונה — כדי לראות מה קרה, לא לנחש
+  const recent = connected ? readSyncLog().filter((x) => Date.now() - x.at < 24 * 3600_000) : []
 
   const save = () => {
     setCredentials(token, gist)
@@ -94,6 +97,12 @@ export default function CloudCard() {
               <span className="v ltr" style={{ color: 'var(--bad)' }}>{lastError}</span>
             </div>
           )}
+          {recent.length > 0 && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <span className="k">תקלות ב-24 שעות</span>
+              <span className="v ltr">{`${recent.length} · ${hhmmOf(recent[recent.length - 1].at)} ${recent[recent.length - 1].err}`}</span>
+            </div>
+          )}
           <button
             className="btn sm"
             style={{ gridColumn: '1 / -1' }}
@@ -104,7 +113,7 @@ export default function CloudCard() {
                 await syncNow()
                 toast('סונכרן — נמשך, מוזג ונכתב')
               } catch (e: any) {
-                toast(`הסנכרון נכשל: ${e?.message ?? e}`)
+                toast(`הסנכרון נכשל: ${describeSyncError(String(e?.message ?? e), e?.until ?? 0)}`)
               } finally {
                 setSyncing(false)
               }
@@ -150,20 +159,12 @@ export default function CloudCard() {
         <>
           <p className="small muted" style={{ marginTop: 0 }}>
             המחשב והטלפון קוראים וכותבים לאותו מחסן אצלך ב-GitHub. כל שינוי נשלח לבד אחרי
-            כמה שניות, וכל מכשיר בודק כל 10 שניות אם משהו התחדש. אין צורך שהמכשיר השני יהיה
+            כמה שניות, וכל מכשיר פתוח בודק כל 10 שניות אם משהו התחדש. אין צורך שהמכשיר השני יהיה
             דלוק.
           </p>
-          {status === 'error' && (
-            <p className="tiny" style={{ color: 'var(--bad)', marginTop: 0 }}>
-              {lastError === 'auth'
-                ? 'האסימון נדחה או פג. צור אחד חדש והדבק אותו כאן.'
-                : lastError === 'not-found'
-                  ? 'המחסן לא נמצא. בדוק את מזהה החיבור.'
-                  : lastError === 'no-key' || lastError === 'bad-key'
-                    ? 'המחסן מוצפן וחסר המפתח — הדבק את מזהה החיבור המלא (עם החלק שאחרי #).'
-                    : lastError === 'unreadable'
-                      ? 'המחסן קיים אבל לא קריא בגרסה הזו — לא נכתב עליו. עדכן את האפליקציה או בדוק את המפתח.'
-                      : `שגיאה: ${lastError}`}
+          {(status === 'error' || status === 'limited') && (
+            <p className="tiny" style={{ color: status === 'limited' ? 'var(--warn)' : 'var(--bad)', marginTop: 0 }}>
+              {describeSyncError(lastError, retryAt)}
             </p>
           )}
           <button className="btn ghost sm" style={{ marginTop: 10 }} onClick={() => setOpen((v) => !v)}>

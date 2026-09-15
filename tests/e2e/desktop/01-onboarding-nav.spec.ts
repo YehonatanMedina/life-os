@@ -35,7 +35,9 @@ test.describe('התקנה חדשה', () => {
     await expect(weekly).toContainText('כביסה')
 
     // אימונים: עוד אין תוכנית
-    await expect(app.locator('.card', { hasText: 'אימונים' })).toContainText('עוד אין תוכנית שבועית')
+    await app.locator('nav.sidebar').getByRole('button', { name: 'אימונים', exact: true }).click()
+    await expect(app.locator('.card', { hasText: 'עוד אין תוכנית אימונים' })).toBeVisible()
+    await app.locator('nav.sidebar').getByRole('button', { name: 'היום', exact: true }).click()
 
     // המשימות: ריק, עם הזמנה לכתוב מטרות (לפני 17:00)
     const tasks = app.locator('.card', { hasText: 'המשימות של היום' })
@@ -87,16 +89,16 @@ test.describe('התקנה חדשה', () => {
 
 // ---------------------------------------------------------------------------
 test.describe('ניווט במחשב', () => {
-  test('סרגל צד: חמישה יעדים + הגדרות בתחתית, סימון פעיל, כותרת מסך', async ({ app }) => {
+  test('סרגל צד: שישה יעדים + הגדרות בתחתית, סימון פעיל, כותרת מסך', async ({ app }) => {
     const side = app.locator('nav.sidebar')
     await expect(side).toBeVisible()
     // הסרגל התחתון של הטלפון לא מוצג במחשב
     await expect(app.locator('nav.bottomnav')).toBeHidden()
 
-    const labels = ['היום', 'אטלס', 'יומן', 'פרויקטים', 'סקירה']
+    const labels = ['היום', 'שיחה', 'יומן', 'אימונים', 'פרויקטים', 'סקירה']
     const main = side.locator('> button')
-    await expect(main).toHaveCount(5)
-    for (let i = 0; i < 5; i++) await expect(main.nth(i)).toHaveText(labels[i])
+    await expect(main).toHaveCount(6)
+    for (let i = 0; i < 6; i++) await expect(main.nth(i)).toHaveText(labels[i])
     await expect(side.locator('.foot button', { hasText: 'הגדרות' })).toBeVisible()
     await expect(side.locator('.brand')).toContainText('אטלס')
 
@@ -105,8 +107,9 @@ test.describe('ניווט במחשב', () => {
     await expect(app).toHaveTitle('אטלס')
 
     const heads: Record<string, string> = {
-      אטלס: 'אטלס',
+      שיחה: 'שיחה',
       יומן: 'יומן',
+      אימונים: 'אימונים',
       פרויקטים: 'פרויקטים',
       סקירה: 'סקירה',
     }
@@ -114,7 +117,7 @@ test.describe('ניווט במחשב', () => {
       await side.getByRole('button', { name: label, exact: true }).click()
       await expect(side.locator('button[aria-current="true"]')).toHaveCount(1)
       await expect(side.locator('button[aria-current="true"]')).toHaveText(label)
-      if (label !== 'אטלס') await expect(app.locator('.desk-head h1')).toHaveText(h1)
+      if (label !== 'שיחה' && label !== 'אימונים') await expect(app.locator('.desk-head h1')).toHaveText(h1)
     }
 
     // הגדרות — הכפתור בתחתית מסומן, ואף כפתור ראשי לא
@@ -124,15 +127,16 @@ test.describe('ניווט במחשב', () => {
     await expect(app.locator('.desk-head h1')).toHaveText('הגדרות')
   })
 
-  test('מקשי קיצור 1–6 ו-, מחליפים מסך, אבל לא מתוך שדה קלט או גיליון', async ({ app }) => {
+  test('מקשי קיצור 1–7 ו-, מחליפים מסך, אבל לא מתוך שדה קלט או גיליון', async ({ app }) => {
     const side = app.locator('nav.sidebar')
     const active = side.locator('button[aria-current="true"]')
     const map: Array<[string, string]> = [
-      ['2', 'אטלס'],
+      ['2', 'שיחה'],
       ['3', 'יומן'],
-      ['4', 'פרויקטים'],
-      ['5', 'סקירה'],
-      ['6', 'הגדרות'],
+      ['4', 'אימונים'],
+      ['5', 'פרויקטים'],
+      ['6', 'סקירה'],
+      ['7', 'הגדרות'],
       ['1', 'היום'],
       [',', 'הגדרות'],
     ]
@@ -163,7 +167,7 @@ test.describe('ניווט במחשב', () => {
     await app.keyboard.press('Escape')
     await expect(app.getByRole('dialog', { name: 'רישום ידני של עבודה' })).toBeHidden()
     await app.keyboard.press('4')
-    await expect(active).toHaveText('פרויקטים')
+    await expect(active).toHaveText('אימונים')
   })
 
   test('כותרת הלשונית משקפת את הטיימר', async ({ app }) => {

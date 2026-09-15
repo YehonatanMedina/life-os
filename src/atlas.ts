@@ -18,6 +18,7 @@
 // נגזרים ממזהה הפקודה (ולכן שני מכשירים שביצעו במקביל יוצרים אותה רשומה),
 // ורשימת הפקודות שבוצעו מסונכרנת יחד עם שאר המצב.
 // ---------------------------------------------------------------------------
+import { GhLimited, ghCooldownUntil, hhmmOf, noteGhResponse } from './ghLimit'
 import { useSyncExternalStore } from 'react'
 import { actions, alive, skillOf, store, workoutHasData } from './store'
 import { decryptEnvelope, encryptText } from './crypto'
@@ -155,8 +156,11 @@ function token(): string {
 }
 
 // -- GitHub -----------------------------------------------------------------------
-const gh = (path: string, init: RequestInit = {}, accept = 'application/vnd.github+json') =>
-  fetch('https://api.github.com' + path, {
+// חסימת קצב של GitHub משותפת לכל האפליקציה (ghLimit): בזמן חסימה לא יוצאת אף בקשה
+const gh = async (path: string, init: RequestInit = {}, accept = 'application/vnd.github+json'): Promise<Response> => {
+  const blocked = ghCooldownUntil()
+  if (blocked) throw new GhLimited(blocked)
+  const r = await fetch('https://api.github.com' + path, {
     ...init,
     headers: {
       Accept: accept,
@@ -165,6 +169,10 @@ const gh = (path: string, init: RequestInit = {}, accept = 'application/vnd.gith
       ...(init.headers ?? {}),
     },
   })
+  const until = await noteGhResponse(r)
+  if (until) throw new GhLimited(until)
+  return r
+}
 
 /** המאגר הפרטי שייך למי שהטוקן שייך לו — לא כתוב בקוד */
 async function repo(): Promise<string> {
@@ -287,7 +295,7 @@ async function sendDeep(id: string): Promise<boolean> {
   } catch (e) {
     save({
       messages: cache.messages.map((m) => (m.id === id ? { ...m, pending: false, failed: true } : m)),
-      error: 'השליחה נכשלה. בדוק רשת ונסה שוב.',
+      error: e instanceof GhLimited ? `GitHub מגביל כרגע את קצב הבקשות — נסה שוב ב-${hhmmOf(e.until)}.` : 'השליחה נכשלה. בדוק רשת ונסה שוב.',
     })
     return false
   }
@@ -343,7 +351,7 @@ async function runFast(id: string): Promise<boolean> {
         ),
       })
       void pushThread()
-      if (reply.memory) void appendMemory(reply.memory)
+      if (reply.memory) void appendMemory(reply.memory).catch(() => undefined)
       nudgePush()
       return sendDeep(id)
     }
@@ -358,7 +366,7 @@ async function runFast(id: string): Promise<boolean> {
     })
     applyWhenSafe(cache.messages)
     void pushThread()
-    if (reply.memory) void appendMemory(reply.memory)
+    if (reply.memory) void appendMemory(reply.memory).catch(() => undefined)
     return true
   } catch (e) {
     save({
@@ -535,7 +543,11 @@ export async function pollAtlas(): Promise<boolean> {
       } else if (mem.status === 404) memoryMissingUntil = Date.now() + 10 * 60_000
     }
   } catch (e) {
-    save({ error: 'לא הצלחתי לקרוא את אטלס: ' + String((e as Error)?.message ?? e) })
+    const error =
+      e instanceof GhLimited
+        ? `GitHub מגביל כרגע את קצב הבקשות — אטלס ימשיך לבד ב-${hhmmOf(e.until)}.`
+        : 'לא הצלחתי לקרוא את אטלס: ' + String((e as Error)?.message ?? e)
+    if (cache.error !== error) save({ error })
   } finally {
     polling = false
   }

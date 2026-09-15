@@ -33,7 +33,7 @@ test.describe('פריסה — מסכים', () => {
     await checkScreen(page, 'today')
 
     const labels = await navLabelsReport(page)
-    expect(labels.map((l) => l.text)).toEqual(['היום', 'אטלס', 'יומן', 'פרויקטים', 'סקירה'])
+    expect(labels.map((l) => l.text)).toEqual(['היום', 'שיחה', 'יומן', 'אימונים', 'פרויקטים', 'סקירה'])
     for (const l of labels) {
       expect.soft(l.inside, `nav label «${l.text}» outside its button ${fmt(l)}`).toBe(true)
       expect.soft(l.clipped, `nav label «${l.text}» clipped ${fmt(l)}`).toBe(false)
@@ -51,7 +51,7 @@ test.describe('פריסה — מסכים', () => {
 
   test('אטלס: שיחה ארוכה, המלחין לא נבלע מתחת לסרגל', async ({ page, errors }) => {
     errors.push(...(await openApp(page, { state: richState(), atlas: atlasCache(14) })))
-    await nav(page, 'אטלס')
+    await nav(page, 'שיחה')
     await expect(page.locator('.bubble').first()).toBeVisible()
     await checkScreen(page, 'atlas')
     // המלחין (composer) חייב להיות נגיש: בתוך המסך ומעל סרגל הניווט
@@ -226,6 +226,7 @@ test.describe('פריסה — מסכים', () => {
 
   test('אימונים: רישום, התוכנית, התקדמות — מסכים מלאים', async ({ page, errors }) => {
     errors.push(...(await openApp(page, { state: richState() })))
+    await nav(page, 'אימונים')
     await page.getByRole('button', { name: 'פתיחת האימון' }).click()
     await expect(page.getByRole('dialog', { name: 'אימון' })).toBeVisible()
     await page.locator('.setchip').first().click()
@@ -235,19 +236,19 @@ test.describe('פריסה — מסכים', () => {
     await checkScreen(page, 'workout-edit', '.flow')
     await page.locator('.flow-foot').getByRole('button', { name: 'סגירה' }).click()
 
-    await page.getByRole('button', { name: 'התוכנית' }).click()
+    await page.locator('.sec', { has: page.locator('h2', { hasText: 'השבוע' }) }).getByRole('button', { name: 'עריכה' }).click()
     await expect(page.getByRole('dialog', { name: 'תוכנית האימונים' })).toBeVisible()
     await page.locator('.flow').getByText('חזה וכתפיים').click()
     await expect(page.getByText('התרגילים של יום רביעי')).toBeVisible()
     await checkScreen(page, 'workout-plan', '.flow')
     await page.getByRole('button', { name: 'סיום' }).click()
 
-    await page.getByRole('button', { name: 'התקדמות' }).click()
+    await page.locator('.sec', { has: page.locator('h2', { hasText: 'הרמה שלי' }) }).getByRole('button', { name: 'הכל' }).click()
     await expect(page.getByRole('dialog', { name: 'התקדמות' })).toBeVisible()
     await page.locator('.flow').getByText('לחיצת חזה').click()
     await checkScreen(page, 'progress-strength', '.flow')
     await page.locator('.flow-head').getByRole('button', { name: 'ריצה', exact: true }).click()
-    await expect(page.getByText('קילומטרים בשבוע')).toBeVisible()
+    await expect(page.getByRole('dialog', { name: 'התקדמות' }).getByText('קילומטרים בשבוע')).toBeVisible()
     await checkScreen(page, 'progress-run', '.flow')
     expect(errors).toEqual([])
   })

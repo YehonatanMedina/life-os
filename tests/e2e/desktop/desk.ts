@@ -113,7 +113,7 @@ export async function reload(page: Page) {
 }
 
 /** ניווט דרך סרגל הצד */
-export async function go(page: Page, label: 'היום' | 'אטלס' | 'יומן' | 'פרויקטים' | 'סקירה' | 'הגדרות') {
+export async function go(page: Page, label: 'היום' | 'שיחה' | 'יומן' | 'אימונים' | 'פרויקטים' | 'סקירה' | 'הגדרות') {
   await page.locator('nav.sidebar').getByRole('button', { name: label, exact: true }).click()
   await expect(page.locator('nav.sidebar button[aria-current="true"]')).toHaveText(new RegExp(label))
 }

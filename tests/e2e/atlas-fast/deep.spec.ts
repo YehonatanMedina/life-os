@@ -112,6 +112,6 @@ test('הגדרות → אטלס: הדבקת מפתח נשמרת ומסונכרנ
   expect(fake.files['life-os.json']).not.toContain('sk-ant-pasted-key')
 
   // מסך אטלס עכשיו במסלול המהיר
-  await gotoTab(A.page, 'אטלס')
+  await gotoTab(A.page, 'שיחה')
   await expect(A.page.getByRole('button', { name: 'משימה גדולה' })).toBeVisible()
 })

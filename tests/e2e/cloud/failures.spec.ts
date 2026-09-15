@@ -21,7 +21,7 @@ test('401: אטלס מציג שגיאת גישה, הסנכרון במצב שגי
 
   await waitStatus(A.page, 'הסנכרון נכשל')
   await expect(A.page.getByText(SEED_TASK_TITLE, { exact: true }).first()).toBeVisible()
-  await gotoTab(A.page, 'אטלס')
+  await gotoTab(A.page, 'שיחה')
   await expect(A.page.getByText('אין גישה למאגר של אטלס — הטוקן פג או חסר הרשאה.')).toBeVisible({ timeout: 15_000 })
   await gotoSettings(A.page)
   await expect(A.page.getByText('האסימון נדחה או פג. צור אחד חדש והדבק אותו כאן.')).toBeVisible()

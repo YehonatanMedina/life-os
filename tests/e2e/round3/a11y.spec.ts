@@ -46,7 +46,7 @@ test('כל מסך וכל גיליון: שמות נגישים, דיאלוגים �
   await closeSheet(app)
 
   // -- אטלס
-  await go(app, 'אטלס')
+  await go(app, 'שיחה')
   collect('atlas', await scan(app, 'atlas'))
 
   // -- יומן: שלוש התצוגות + גיליון אירוע

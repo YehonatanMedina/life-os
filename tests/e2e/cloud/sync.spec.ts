@@ -87,6 +87,8 @@ test('שני מכשירים רושמים תרגילים שונים באותו י
   await waitSynced(B.page)
 
   const openWorkout = async (page: typeof A.page) => {
+    // הרישום עבר לעמוד האימונים הנפרד
+    await gotoTab(page, 'אימונים')
     await page.getByRole('button', { name: /פתיחת האימון|המשך רישום|רישום אימון/ }).first().click()
     const dlg = page.getByRole('dialog', { name: 'אימון' })
     await expect(dlg).toBeVisible()

@@ -11,7 +11,7 @@ import FocusTimer from './views/FocusTimer'
 import AtlasView from './views/Atlas'
 import WorkoutsView from './views/Workouts'
 import { startAtlas } from './atlas'
-import { HE_STATUS, buildId, installFlush, safeToReload, startCloud, useCloudState } from './cloud'
+import { HE_STATUS, buildId, describeSyncError, installFlush, safeToReload, startCloud, useCloudState } from './cloud'
 import { refreshNotifySchedule } from './push'
 import { Icon } from './icons'
 import { APP_NAME, Mark, Wordmark } from './brand'
@@ -373,20 +373,21 @@ function TimerBadge({ onClick, compact }: { onClick: () => void; compact?: boole
 // מחוון סנכרון — קטן, ורק כשיש מה לומר
 // ---------------------------------------------------------------------------
 function SyncDot({ compact }: { compact?: boolean }) {
-  const { status, lastError } = useCloudState()
+  const { status, lastError, retryAt } = useCloudState()
   if (status === 'off') return null
   const color: Record<string, string> = {
     synced: 'var(--good)',
     pending: 'var(--warn)',
     sending: 'var(--accent)',
     error: 'var(--bad)',
+    limited: 'var(--warn)',
     offline: 'var(--text-faint)',
   }
   const label = HE_STATUS[status]
   return (
     <div
       className="row"
-      title={lastError ? `${label} · ${lastError}` : label}
+      title={lastError ? `${label} · ${describeSyncError(lastError, retryAt)}` : label}
       style={{
         gap: 6,
         fontSize: 11.5,

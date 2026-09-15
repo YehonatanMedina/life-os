@@ -9,13 +9,17 @@
 // וממזגים (לכל רשומה מנצחת החותמת החדשה יותר), ורק אז כותבים את התוצאה.
 // כך שני מכשירים שכתבו במקביל לא דורסים אחד את השני.
 //
-// שלושה כללים שנלמדו בכאב:
+// ארבעה כללים שנלמדו בכאב:
 //   1. אחרי כל משיכה משווים את *תוכן* התוצאה למה שבמחסן. אם יש אצלנו משהו
 //      שאין שם — כותבים מיד. זה מה שמציל שינויים שנעשו לפני שהטלפון הרג את
 //      האפליקציה, ומה שמחזיר נתונים שגרסה ישנה במכשיר אחר השמיטה.
 //   2. ברגע שהאפליקציה יוצאת מהמסך — דוחפים מיד, בלי לחכות ל"שקט".
 //   3. קבצי הצד (משוב חדשות, חבילת הניתוח, הדופק) נכתבים באותה דחיפה של
 //      המצב, לא בטיימרים נפרדים שנהרגים יחד עם הלשונית.
+//   4. GitHub מגביל קצב. דופק הטיימר הוא לא שינוי (הוא גרם לכתיבה כל 20 שניות
+//      — 693 כתיבות ביום), כשל לא מנוסה שוב כל שנייה (הניסיונות מתרחקים), וחסימת
+//      קצב מכובדת עד הרגע ש-GitHub נתן (ghLimit). הבדיקה התקופתית מותנית
+//      ב-ETag: כשלא השתנה כלום התשובה 304 — בלי הורדה ובלי ספירה במכסה.
 // ---------------------------------------------------------------------------
 
 import { useSyncExternalStore } from 'react'
@@ -23,6 +27,9 @@ import { actions, consumeFreshInstall, isPristine, store, mergeStates } from './
 import { refreshNotifySchedule } from './push'
 import { decryptText, encryptText, newCryptKey, stableStringify } from './crypto'
 import { aiKey, buildAtlasContext, buildPulse, buildWeekDigest } from './ai'
+import {
+  GhLimited, PERSISTENT_ERRORS, clearGhCooldown, ghCooldownUntil, hhmmOf, logSyncFailure, noteGhResponse, retryDelay,
+} from './ghLimit'
 import type { AppState } from './types'
 
 export { b64u, unb64u, encryptText, decryptText, newCryptKey } from './crypto'
@@ -42,7 +49,8 @@ export function buildId(): string {
   }
 }
 
-export type CloudStatus = 'off' | 'synced' | 'pending' | 'sending' | 'error' | 'offline'
+/** limited = GitHub הגביל את קצב הבקשות; ממתינים לזמן שהוא נתן */
+export type CloudStatus = 'off' | 'synced' | 'pending' | 'sending' | 'error' | 'limited' | 'offline'
 
 // -- הגדרות מקומיות (לא מסונכרנות, לא בקוד) --------------------------------
 export function getToken(): string {
@@ -73,6 +81,7 @@ export function getPairing(): string {
   return id ? (k ? `${id}#${k}` : id) : ''
 }
 export function setCredentials(token: string, pairing: string) {
+  const prevToken = getToken()
   // המזהה שמועבר בין מכשירים הוא "מזהה#מפתח" — המפתח מפענח את התוכן
   const [gistId, key] = pairing.trim().split('#')
   try {
@@ -86,6 +95,11 @@ export function setCredentials(token: string, pairing: string) {
     /* ignore */
   }
   baseline = null
+  remoteEtag = ''
+  failures = 0
+  retryAt = 0
+  // חסימת קצב שייכת לאסימון — אסימון חדש מתחיל נקי
+  if (token.trim() !== prevToken) clearGhCooldown()
   setStatus(token && gistId ? 'pending' : 'off')
   void tick()
 }
@@ -96,6 +110,8 @@ let lastError = ''
 let lastSyncAt = 0
 let lastPullAt = 0
 let lastPushAt = 0
+/** אחרי כשל: לא לפני הרגע הזה */
+let retryAt = 0
 const listeners = new Set<() => void>()
 type CloudSnapshot = {
   status: CloudStatus
@@ -103,11 +119,12 @@ type CloudSnapshot = {
   lastSyncAt: number
   lastPullAt: number
   lastPushAt: number
+  retryAt: number
 }
-let snapshotCache: CloudSnapshot = { status, lastError, lastSyncAt, lastPullAt, lastPushAt }
+let snapshotCache: CloudSnapshot = { status, lastError, lastSyncAt, lastPullAt, lastPushAt, retryAt }
 
 function emit() {
-  snapshotCache = { status, lastError, lastSyncAt, lastPullAt, lastPushAt }
+  snapshotCache = { status, lastError, lastSyncAt, lastPullAt, lastPushAt, retryAt }
   listeners.forEach((l) => l())
 }
 function setStatus(v: CloudStatus, err = '') {
@@ -133,9 +150,13 @@ export function useCloudState() {
 }
 
 // -- מה נשלח לענן -----------------------------------------------------------
-/** הטיימר והאסימון אף פעם לא עוזבים את המכשיר */
+/**
+ * הטיימר וחותמת הטיימר אף פעם לא עוזבים את המכשיר. החותמת מתעדכנת בכל דופק
+ * (כל 20 שניות); כשהיא נכנסה לחתימה, טיימר רץ = כתיבה למחסן כל 20 שניות.
+ */
 function forCloud(s: AppState): AppState {
-  return { ...s, timer: null }
+  const { timerStamp: _deviceOnly, ...rest } = s
+  return { ...rest, timer: null }
 }
 
 /**
@@ -174,23 +195,39 @@ function contentOf(s: Partial<AppState>): string {
   return stableStringify({ settings: s.settings, settingsUpdatedAt: s.settingsUpdatedAt ?? 0, lists, atlasApplied: s.atlasApplied ?? {} })
 }
 
-async function api(path: string, init?: RequestInit): Promise<any> {
+/**
+ * בקשה ל-GitHub. בזמן חסימת קצב לא יוצאת בכלל; חסימה חדשה נרשמת למכשיר כולו.
+ * 304 (בקשה מותנית שלא השתנה בה כלום) חוזרת כמו שהיא.
+ */
+async function api(path: string, init?: RequestInit): Promise<Response> {
   const token = getToken()
   if (!token) throw new Error('no-token')
-  const res = await fetch(API + path, {
-    ...init,
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${token}`,
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(init?.headers ?? {}),
-    },
-  })
+  const blocked = ghCooldownUntil()
+  if (blocked) throw new GhLimited(blocked)
+  let res: Response
+  try {
+    res = await fetch(API + path, {
+      ...init,
+      // המטמון של הדפדפן הגיש גרסה בת עד דקה — וזה ייצר כתיבות מיותרות "כי המחסן מפגר"
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(init?.headers ?? {}),
+      },
+    })
+  } catch {
+    throw new Error('network')
+  }
+  const limited = await noteGhResponse(res)
+  if (limited) throw new GhLimited(limited)
+  if (res.status === 304) return res
   if (res.status === 401 || res.status === 403) throw new Error('auth')
   if (res.status === 404) throw new Error('not-found')
   if (!res.ok) throw new Error(`http-${res.status}`)
-  return res.json()
+  return res
 }
 
 /** יוצר Gist פרטי חדש ומחזיר את המזהה */
@@ -211,17 +248,29 @@ export async function createGist(): Promise<string> {
     files: { [FILE]: { content } },
   }
   const r = await api('/gists', { method: 'POST', body: JSON.stringify(body) })
-  return r.id as string
+  return (await r.json()).id as string
 }
 
-async function readRemote(): Promise<AppState | null> {
+/** ה-ETag של הגרסה האחרונה שנקראה, פוענחה ומוזגה — לבדיקה המותנית הבאה */
+let remoteEtag = ''
+
+async function readRemote(): Promise<AppState | null | 'unchanged'> {
   const id = getGistId()
   if (!id) return null
-  const g = await api(`/gists/${id}`)
+  const res = await api(`/gists/${id}`, remoteEtag ? { headers: { 'If-None-Match': remoteEtag } } : undefined)
+  if (res.status === 304) return 'unchanged'
+  const etag = res.headers?.get?.('etag') ?? ''
+  const g = await res.json()
   const f = g?.files?.[FILE]
   if (!f) return null
   // גיסט גדול מגיע קטוע, ואז יש raw_url להורדה מלאה
-  const raw: string = f.truncated ? await (await fetch(f.raw_url)).text() : f.content
+  let raw: string = f.content
+  if (f.truncated) {
+    const rr = await fetch(f.raw_url, { cache: 'no-store' }).catch(() => null)
+    if (!rr) throw new Error('network')
+    if (!rr.ok) throw new Error(`http-${rr.status}`)
+    raw = await rr.text()
+  }
   let parsed: any
   try {
     parsed = JSON.parse(raw)
@@ -241,12 +290,18 @@ async function readRemote(): Promise<AppState | null> {
     parsed = JSON.parse(plain)
   }
   if (!parsed || !Array.isArray(parsed.tasks)) throw new Error('unreadable')
+  // רק גרסה שבאמת נקראה עד הסוף מקבלת "ראיתי" — אחרת 304 היה מסתיר אותה לתמיד
+  remoteEtag = etag
   return parsed as AppState
 }
 
 // -- קבצי הצד: נגזרים מהמצב ונכתבים באותה דחיפה ------------------------------
-/** חתימת תוכן בלי חותמות זמן — גם ב-JSON מיושר עם רווח אחרי הנקודתיים */
-const sideStamp = (json: string) => json.replace(/"(generatedAt|updatedAt)":\s*"[^"]*"/g, '')
+/**
+ * חתימת תוכן בלי חותמות זמן — גם ב-JSON מיושר עם רווח אחרי הנקודתיים.
+ * since (תחילת חלון "מה נכנס ביומיים האחרונים" בהקשר של אטלס) זז בכל מילישנייה;
+ * בלעדיו בחתימה, קובץ ההקשר (~100KB) נשלח מחדש בכל כתיבה.
+ */
+const sideStamp = (json: string) => json.replace(/"(generatedAt|updatedAt|since)":\s*"[^"]*"/g, '')
 // מה שכבר נכתב (בגרסתו הגלויה) — כדי לא לשלוח שוב קובץ שלא השתנה
 const sideWritten = new Map<string, string>()
 
@@ -336,6 +391,12 @@ let remoteBehind = false
 /** משיכה + מיזוג. מחזיר true אם משהו השתנה מקומית. */
 export async function pullOnce(): Promise<boolean> {
   const remote = await readRemote()
+  if (remote === 'unchanged') {
+    // המחסן לא זז מאז המיזוג האחרון — אין מה למזג, ו-remoteBehind נשאר כמו שחושב אז
+    lastPullAt = Date.now()
+    emit()
+    return false
+  }
   if (!remote) return false
   const local = store.get()
   const before = snapshotOf(local)
@@ -384,7 +445,8 @@ export async function pushNow(): Promise<void> {
 
 // -- הלולאה ------------------------------------------------------------------
 const QUIET_MS = 2000 // כמה שקט צריך אחרי שינוי לפני שליחה
-const POLL_MS = 10000 // כל כמה זמן בודקים אם מישהו אחר שינה
+const POLL_MS = 10_000 // כל כמה זמן בודקים אם מישהו אחר שינה (כשהמסך פתוח)
+const POLL_HIDDEN_MS = 2 * 60_000 // לשונית ברקע: אין מי שיראה — בודקים לעתים רחוקות
 const TICK_MS = 1000
 
 let baseline: string | null = null
@@ -393,6 +455,52 @@ let lastPoll = 0
 let busy = false
 let loop: number | undefined
 let urgent = false
+/** כשלים ברצף — קובעים כמה לחכות לפני הניסיון הבא */
+let failures = 0
+/** מתי יצאה הבקשה האחרונה — כדי שחזרה למסך לא תעקוף את ההמתנה בלי סוף */
+let lastTryAt = 0
+
+const pollGap = () => (typeof document !== 'undefined' && document.visibilityState === 'hidden' ? POLL_HIDDEN_MS : POLL_MS)
+
+function onFail(e: unknown) {
+  const err = String((e as Error)?.message ?? e)
+  const now = Date.now()
+  failures++
+  const until = e instanceof GhLimited ? e.until : 0
+  retryAt = now + Math.max(retryDelay(failures, err), until ? until - now : 0)
+  logSyncFailure({ at: now, err, ...(until ? { until } : {}) })
+  setStatus(until ? 'limited' : 'error', err)
+  emit()
+}
+function onOk() {
+  failures = 0
+  retryAt = 0
+}
+
+/**
+ * אירוע שמצדיק לנסות לפני הזמן (חזרה למסך, חזרת רשת, יציאה מהמסך) — רק בכשל
+ * חולף, לא בחסימת קצב ולא בשגיאת אסימון/מפתח, ולא יותר מפעם ב-minGapMs.
+ */
+function pokeRetry(minGapMs: number) {
+  if (!retryAt || ghCooldownUntil() || PERSISTENT_ERRORS.has(lastError)) return
+  if (Date.now() - lastTryAt >= minGapMs) retryAt = 0
+}
+
+/** הסבר בעברית לשגיאת סנכרון — להגדרות, לטוסט ולסרגל */
+export function describeSyncError(err: string, retry = 0): string {
+  const later = retry > Date.now() ? ` ננסה שוב לבד ב-${hhmmOf(retry)}.` : ' ננסה שוב לבד.'
+  if (err === 'auth') return 'האסימון נדחה או פג. צור אחד חדש והדבק אותו כאן.'
+  if (err === 'not-found') return 'המחסן לא נמצא. בדוק את מזהה החיבור.'
+  if (err === 'no-key' || err === 'bad-key') return 'המחסן מוצפן וחסר המפתח — הדבק את מזהה החיבור המלא (עם החלק שאחרי #).'
+  if (err === 'unreadable') return 'המחסן קיים אבל לא קריא בגרסה הזו — לא נכתב עליו. עדכן את האפליקציה או בדוק את המפתח.'
+  if (err === 'rate-limit') {
+    return `GitHub הגביל זמנית את קצב הבקשות. השינויים שמורים במכשיר ויישלחו לבד${retry > Date.now() ? ` ב-${hhmmOf(retry)}` : ''}.`
+  }
+  if (err === 'network') return 'אין חיבור ל-GitHub כרגע. השינויים שמורים במכשיר.' + later
+  if (/^http-5\d\d$/.test(err)) return 'GitHub לא זמין כרגע (שגיאת שרת). השינויים שמורים במכשיר.' + later
+  if (err === 'http-409') return 'התנגשות בכתיבה מול מכשיר אחר.' + later
+  return `שגיאה: ${err}.` + later
+}
 
 /** האם בטוח לרענן את הדף עכשיו — הכל נשלח ואין טיימר רץ */
 export function safeToReload(): boolean {
@@ -408,13 +516,22 @@ export function safeToReload(): boolean {
 /** בקשה לדחוף בהזדמנות הראשונה, בלי לחכות לשקט */
 export function nudgePush() {
   urgent = true
+  pokeRetry(10_000)
   void tick()
 }
 
-/** לשימוש מכפתור "סנכרן עכשיו": משיכה, מיזוג וכתיבה — בלי קשר למצב */
+/** לשימוש מכפתור "סנכרן עכשיו": משיכה, מיזוג וכתיבה — בלי קשר למצב (אבל לא בזמן חסימת קצב) */
 export async function syncNow(): Promise<void> {
   if (busy) return
+  const blocked = ghCooldownUntil()
+  if (blocked) {
+    retryAt = Math.max(retryAt, blocked)
+    setStatus('limited', 'rate-limit')
+    emit()
+    throw new GhLimited(blocked)
+  }
   busy = true
+  lastTryAt = Date.now()
   try {
     setStatus('sending')
     await pullOnce()
@@ -424,11 +541,12 @@ export async function syncNow(): Promise<void> {
     dirtySince = 0
     urgent = false
     lastPoll = Date.now()
+    onOk()
     markSyncedAt(Date.now())
     setStatus('synced')
     refreshNotifySchedule()
-  } catch (e: any) {
-    setStatus('error', String(e?.message ?? e))
+  } catch (e) {
+    onFail(e)
     throw e
   } finally {
     busy = false
@@ -447,6 +565,8 @@ async function tick() {
     setStatus('offline')
     return
   }
+  // אחרי כשל מחכים לתור שלנו. בלי זה כשל אחד הפך לניסיון כל שנייה — ו-GitHub חסם.
+  if (Date.now() < retryAt) return
 
   const s = store.get()
   const snap = snapshotOf(s)
@@ -455,6 +575,7 @@ async function tick() {
     // בלי זה, שינויים שנעשו לפני שהאפליקציה נהרגה לא היו נשלחים לעולם.
     baseline = snap
     busy = true
+    lastTryAt = Date.now()
     try {
       await pullOnce()
       if (remoteBehind) {
@@ -464,10 +585,11 @@ async function tick() {
       }
       baseline = snapshotOf(store.get())
       lastPoll = Date.now()
+      onOk()
       markSyncedAt(Date.now())
       setStatus('synced')
-    } catch (e: any) {
-      setStatus('error', String(e?.message ?? e))
+    } catch (e) {
+      onFail(e)
     } finally {
       busy = false
     }
@@ -482,10 +604,11 @@ async function tick() {
   if (!dirty) dirtySince = 0
 
   const shouldPush = (dirty && (urgent || Date.now() - dirtySince >= QUIET_MS)) || remoteBehind
-  const shouldPoll = !dirty && Date.now() - lastPoll >= POLL_MS
+  const shouldPoll = !dirty && Date.now() - lastPoll >= pollGap()
   if (!shouldPush && !shouldPoll) return
 
   busy = true
+  lastTryAt = Date.now()
   try {
     if (shouldPush) {
       setStatus('sending')
@@ -494,6 +617,7 @@ async function tick() {
       dirtySince = 0
       urgent = false
       lastPoll = Date.now()
+      onOk()
       markSyncedAt(Date.now())
       setStatus('synced')
       refreshNotifySchedule()
@@ -507,10 +631,11 @@ async function tick() {
       baseline = snapshotOf(store.get())
       lastPoll = Date.now()
       if (changed) markSyncedAt(Date.now())
+      onOk()
       setStatus('synced')
     }
-  } catch (e: any) {
-    setStatus('error', String(e?.message ?? e))
+  } catch (e) {
+    onFail(e)
   } finally {
     busy = false
   }
@@ -566,12 +691,14 @@ export function startCloud() {
   window.addEventListener('hashchange', () => {
     consumeSetupLink()
     baseline = null
+    remoteEtag = ''
     void tick()
   })
   loop = window.setInterval(() => void tick(), TICK_MS)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-      lastPoll = 0 // בחזרה למסך — בודקים מיד
+      lastPoll = 0 // בחזרה למסך — בודקים מיד (אבל לא עוקפים חסימת קצב)
+      pokeRetry(15_000)
       void tick()
     } else {
       // יוצאים מהמסך: אם יש מה לדחוף — עכשיו, לפני שהמערכת מקפיאה אותנו
@@ -579,7 +706,10 @@ export function startCloud() {
     }
   })
   window.addEventListener('pagehide', () => nudgePush())
-  window.addEventListener('online', () => void tick())
+  window.addEventListener('online', () => {
+    pokeRetry(0)
+    void tick()
+  })
   void tick()
 }
 
@@ -630,5 +760,6 @@ export const HE_STATUS: Record<CloudStatus, string> = {
   pending: 'ממתין לשליחה',
   sending: 'שולח…',
   error: 'הסנכרון נכשל',
+  limited: 'ממתין ל-GitHub',
   offline: 'אין אינטרנט',
 }

@@ -3,7 +3,7 @@
 // המדים → משימה מהירה → תכנון מחר → חדשות (הצבעה והערה).
 // בכל צעד בודקים שהמצב השמור באמת השתנה, לא רק שהמסך הגיב.
 // ---------------------------------------------------------------------------
-import { EVENING, NOW, TODAY, TOMORROW, YESTERDAY, edition, expect, makeState, openApp, readState, test } from './helpers'
+import { EVENING, NOW, TODAY, TOMORROW, YESTERDAY, edition, expect, makeState, openApp, readState, test, nav } from './helpers'
 
 function morningState() {
   const s = makeState()
@@ -91,7 +91,8 @@ test.describe('שימוש אמיתי — בוקר', () => {
     // פחות מדקה — לא נשמר סשן
     expect(s.sessions).toHaveLength(0)
 
-    // --- אימון: סט עם המדים -------------------------------------------------
+    // --- אימון: סט עם המדים (בעמוד האימונים) ---------------------------------
+    await nav(page, 'אימונים')
     await page.getByRole('button', { name: 'פתיחת האימון' }).click()
     const flow = page.getByRole('dialog', { name: 'אימון' })
     await expect(flow).toBeVisible()
@@ -127,8 +128,9 @@ test.describe('שימוש אמיתי — בוקר', () => {
     expect(s.workouts.find((w) => w.date === TODAY)?.finishedAt).toBeTruthy()
     expect(s.days.find((d) => d.date === TODAY)?.habits['hb-workout']).toBe(true)
     expect(s.days.find((d) => d.date === TODAY)?.workout).toBe('strength')
-    await expect(habits.locator('.tiny.faint.ltr')).toHaveText('2/3')
     await expect(page.locator('.card', { hasText: 'חזה וכתפיים' }).getByText('✓ בוצע')).toBeVisible()
+    await nav(page, 'היום')
+    await expect(habits.locator('.tiny.faint.ltr')).toHaveText('2/3')
 
     // --- משימה מהירה ---------------------------------------------------------
     const tasks = page.locator('.card', { hasText: 'המשימות של היום' })
@@ -207,7 +209,7 @@ test.describe('שימוש אמיתי — בוקר', () => {
     await news.getByRole('button', { name: 'סמן כנקרא וסגור להיום' }).click()
     await expect(news).toHaveCount(0)
     await page.reload()
-    await expect(page.locator('.bottomnav button')).toHaveCount(5)
+    await expect(page.locator('.bottomnav button')).toHaveCount(6)
     await expect(page.locator('.card', { hasText: 'חדשות הבוקר ·' })).toHaveCount(0)
     // המצב שרד את הרענון
     s = await readState(page)

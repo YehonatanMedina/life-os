@@ -84,7 +84,7 @@ const count = (s: AppState) => ({
 })
 
 async function openAtlas(page: Page) {
-  await gotoTab(page, 'אטלס')
+  await gotoTab(page, 'שיחה')
   await expect(page.getByPlaceholder('כתוב לאטלס…')).toBeVisible()
 }
 
@@ -180,7 +180,7 @@ test('סבב מלא: הודעה → Issue מוצפן → תשובה עם פקו�
   await expect(ruleRow).toBeVisible()
   await expect(ruleRow).toContainText('כל חודש ב־1 בו')
 
-  await gotoTab(A.page, 'היום')
+  await gotoTab(A.page, 'אימונים')
   await A.page.getByRole('button', { name: /פתיחת האימון|המשך רישום|רישום אימון/ }).first().click()
   const dlg = A.page.getByRole('dialog', { name: 'אימון' })
   await expect(dlg.locator('b', { hasText: EX_NAME })).toBeVisible()
@@ -260,8 +260,10 @@ test('מכשיר שני: מקבל atlasApplied בסנכרון ולא מבצע ש
   await expect.poll(async () => Object.keys((await readState(B2.page)).atlasApplied ?? {}).length, { timeout: 25_000 }).toBe(7)
   expect(Object.keys((await readAtlasCache(B2.page)).undo)).toEqual([])
   await waitSynced(B2.page, 30_000)
-  await waitPatch(fake, n, (p) => p.tag === 'B2' && 'life-os.json' in p.files, 30_000)
-  await quiet(fake, 3_000)
+  // ל-B2 אין שום תוכן שהמחסן לא מכיר, ולכן הוא לא כותב. עד 14.9 הוא כתב פעמיים תוכן זהה
+  // (רעש שמנפח את היסטוריית המחסן) — הבדיקה נועלת שזה לא חוזר.
+  await quiet(fake, 12_000)
+  expect(fake.patches.slice(n).filter((p) => p.tag === 'B2' && 'life-os.json' in p.files)).toEqual([])
 
   const s2 = await readState(B2.page)
   expect(count(s2)).toEqual({ events: 1, liveEvents: 1, tasks: 1, rules: 1, exercises: 1, goals: 1 })

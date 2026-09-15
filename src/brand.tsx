@@ -5,7 +5,7 @@
 // מה שהתוכנה עושה: מחזיקה את העומס, ומראה איפה אתה על המסלול. הסימן הוא
 // בדיוק זה — כוכב עם קו אורך, על קו אופק שמחזיק אותו.
 // ---------------------------------------------------------------------------
-import React from 'react'
+import React, { useId } from 'react'
 
 export const APP_NAME = 'אטלס'
 /** תיאור קצר — לכל מקום שצריך שורה אחת מתחת לשם */
@@ -16,7 +16,10 @@ export const APP_TAGLINE = 'ניהול זמן אישי'
  * קו נקי שמתנהג כמו כל אייקון אחר במערכת ולוקח את צבע הטקסט שסביבו.
  */
 export function Mark({ size = 24, solid }: { size?: number; solid?: boolean }) {
-  const id = solid ? 'brandgrad' : undefined
+  // מזהה ייחודי לכל מופע: הסימן מופיע כמה פעמים באותו מסך (סרגל, כותרת, הגדרות), ומזהה
+  // כפול ב-SVG גורם לכל המופעים להפנות לגרדיאנט של הראשון — ונתפס בבדיקת הנגישות
+  const uid = useId().replace(/:/g, '')
+  const id = solid ? 'brandgrad-' + uid : undefined
   return (
     <svg
       width={size}

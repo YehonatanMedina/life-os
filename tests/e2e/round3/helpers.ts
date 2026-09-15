@@ -56,7 +56,7 @@ export function navBtn(page: Page, label: string): Locator {
   }
   return page.locator('nav.sidebar').getByRole('button', { name: label, exact: true })
 }
-export async function go(page: Page, label: 'היום' | 'אטלס' | 'יומן' | 'פרויקטים' | 'סקירה' | 'הגדרות') {
+export async function go(page: Page, label: 'היום' | 'שיחה' | 'יומן' | 'אימונים' | 'פרויקטים' | 'סקירה' | 'הגדרות') {
   // מגן הקליקים (ui.tsx): טאפ אחד בתוך 350 מ״ש מסגירת גיליון נבלע בכוונה — מחכים לו
   if (isMobile(page)) await page.waitForTimeout(400)
   await navBtn(page, label).click()

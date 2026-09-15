@@ -52,7 +52,7 @@ desk.describe('בלי ענן (desk)', () => {
     await app.reload()
     const card = app.locator('.card', { hasText: BUILD_CARD })
     await expect(card).toBeVisible()
-    for (const v of ['אטלס', 'יומן', 'פרויקטים', 'סקירה', 'הגדרות'] as const) {
+    for (const v of ['שיחה', 'יומן', 'אימונים', 'פרויקטים', 'סקירה', 'הגדרות'] as const) {
       await go(app, v)
       await expect(card, `build card on ${v}`).toBeVisible()
     }

@@ -21,7 +21,7 @@ test.describe('אחרי חצות — עדיין אתמול', () => {
     await expect(app.locator('.desk-head h1').first()).toHaveText('לילה טוב')
     await expect(app.locator('.desk-head .sub').first()).toContainText('יום שישי, 11 בספטמבר · היום מתחלף ב־03:30')
     // סרגל הצד מציג את אותו תאריך
-    await expect(app.locator('nav.sidebar .brand span')).toHaveText('יום שישי, 11 בספטמבר')
+    await expect(app.locator('nav.sidebar .brand span:not(.wordmark)')).toHaveText('יום שישי, 11 בספטמבר')
     // המשימה של שישי עדיין "היום", לא באיחור
     const row = app.locator('.card', { hasText: 'המשימות של היום' }).locator('.item', { hasText: 'משימה של שישי' })
     await expect(row).toBeVisible()

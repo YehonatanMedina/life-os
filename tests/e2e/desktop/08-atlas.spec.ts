@@ -56,7 +56,7 @@ const composer = (page: any) => page.getByPlaceholder('כתוב לאטלס…')
 
 test.describe('אטלס — בלי חיבור', () => {
   test('מציג שאין חיבור, הקלט מושבת, והדוגמאות מוצגות', async ({ app }) => {
-    await go(app, 'אטלס')
+    await go(app, 'שיחה')
     await expect(app.getByText('אטלס עוד לא מחובר במכשיר הזה.')).toBeVisible()
     await expect(composer(app)).toBeDisabled()
     await expect(app.getByRole('button', { name: 'שלח' })).toBeDisabled()
@@ -76,7 +76,7 @@ test.describe('אטלס — מחובר (GitHub מדומה)', () => {
 
   test('שליחה: בועה ממתינה, "אטלס חושב…", והגוף שנשלח הוא מעטפה מוצפנת', async ({ app }) => {
     const gh = await mockGitHub(app)
-    await go(app, 'אטלס')
+    await go(app, 'שיחה')
     await expect(app.getByText('אטלס עוד לא מחובר')).toHaveCount(0)
     await expect(composer(app)).toBeEnabled()
     // דוגמה ממלאת את השדה
@@ -117,7 +117,7 @@ test.describe('אטלס — מחובר (GitHub מדומה)', () => {
     // ההודעה הממתינה שורדת רענון (מטמון מקומי)
     await reload(app)
     await mockGitHub(app)
-    await go(app, 'אטלס')
+    await go(app, 'שיחה')
     await expect(app.locator('.bubble.me')).toContainText('לקנות חלב')
     await expect(app.locator('.bubble.atlas.thinking')).toBeVisible()
     const cache = await app.evaluate(() => JSON.parse(localStorage.getItem('life-os-atlas-cache') || 'null'))
@@ -131,7 +131,7 @@ test.describe('אטלס — מחובר (GitHub מדומה)', () => {
   test('כישלון שליחה: "לא נשלח" + "שלח שוב"; מחיקה מסירה את ההודעה', async ({ app }) => {
     const gh = await mockGitHub(app)
     gh.issueStatus = 500
-    await go(app, 'אטלס')
+    await go(app, 'שיחה')
     await composer(app).fill('הודעה שתיכשל')
     await app.getByRole('button', { name: 'שלח' }).click()
     const me = app.locator('.bubble.me')
@@ -167,7 +167,7 @@ test.describe('אטלס — מחובר (GitHub מדומה)', () => {
 
   test('תשובה מהמאגר: הפקודה מבוצעת פעם אחת, מוצגת, ואפשר לבטל', async ({ app }) => {
     const gh = await mockGitHub(app)
-    await go(app, 'אטלס')
+    await go(app, 'שיחה')
     await composer(app).fill('תוסיף משימה לקנות חלב')
     await composer(app).press('Enter')
     await expect.poll(() => gh.posted.length).toBe(1)
@@ -213,7 +213,7 @@ test.describe('אטלס — מחובר (GitHub מדומה)', () => {
     expect(live<Task>(st.tasks).filter((x) => x.title === 'לקנות חלב')).toHaveLength(1)
 
     // ביטול
-    await go(app, 'אטלס')
+    await go(app, 'שיחה')
     await cmd.getByRole('button', { name: 'ביטול' }).click()
     await expect(app.locator('.toast')).toContainText('בוטל')
     await expect(cmd.getByRole('button', { name: 'ביטול' })).toHaveCount(0)
@@ -234,7 +234,7 @@ test.describe('אטלס — מחובר (GitHub מדומה)', () => {
     await app.route('https://api.github.com/**', (route) =>
       route.fulfill({ status: 401, contentType: 'application/json', body: '{"message":"Bad credentials"}' }),
     )
-    await go(app, 'אטלס')
+    await go(app, 'שיחה')
     await expect(app.locator('.card', { hasText: 'אין גישה למאגר של אטלס — הטוקן פג או חסר הרשאה.' })).toBeVisible()
   })
 })

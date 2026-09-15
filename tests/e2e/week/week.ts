@@ -15,7 +15,7 @@ import type { AppState, CalEvent, Task, WorkoutDay } from '../../../src/types'
 export { expect, reload }
 export const test = base
 
-export type NavLabel = 'היום' | 'אטלס' | 'יומן' | 'פרויקטים' | 'סקירה'
+export type NavLabel = 'היום' | 'שיחה' | 'יומן' | 'אימונים' | 'פרויקטים' | 'סקירה'
 
 export const isMobile = (page: Page) => (page.viewportSize()?.width ?? 1440) < 900
 

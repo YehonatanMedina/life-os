@@ -39,7 +39,7 @@ const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-headers': '*',
   'access-control-allow-methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
-  'access-control-expose-headers': 'etag, x-ratelimit-remaining',
+  'access-control-expose-headers': 'etag, retry-after, x-ratelimit-remaining, x-ratelimit-reset, x-ratelimit-used',
 }
 
 const sha = (s: string) => createHash('sha1').update(s).digest('hex')
@@ -131,7 +131,12 @@ export class FakeGithub {
     const gist = path.match(/^\/gists\/([^/]+)$/)
     if (gist) {
       if (gist[1] !== this.gistId) return done(404, JSON.stringify({ message: 'Not Found' }))
-      if (method === 'GET') return done(200, JSON.stringify(this.gistJSON()))
+      if (method === 'GET') {
+        // כמו GitHub: ETag על התוכן, ו-304 לבקשה מותנית כשלא השתנה כלום
+        const etag = `W/"${sha(JSON.stringify(this.files))}"`
+        if (headers['if-none-match'] === etag) return done(304, undefined, { etag })
+        return done(200, JSON.stringify(this.gistJSON()), { etag })
+      }
       if (method === 'PATCH') {
         let parsed: any = {}
         try {

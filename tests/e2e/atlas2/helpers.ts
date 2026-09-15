@@ -28,7 +28,7 @@ export async function seedCloud(fake: FakeGithub, key: string, extra: Partial<Ap
 export const composer = (page: Page) => page.getByPlaceholder('כתוב לאטלס…')
 
 export async function openAtlas(page: Page) {
-  await gotoTab(page, 'אטלס')
+  await gotoTab(page, 'שיחה')
   await expect(composer(page)).toBeVisible()
 }
 

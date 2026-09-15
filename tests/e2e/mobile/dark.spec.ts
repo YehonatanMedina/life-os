@@ -17,7 +17,7 @@ const SEL = [
 type Screen = { name: string; prep: (p: Page) => Promise<void> }
 const SCREENS: Screen[] = [
   { name: 'today', prep: async () => {} },
-  { name: 'atlas', prep: (p) => nav(p, 'אטלס') },
+  { name: 'atlas', prep: (p) => nav(p, 'שיחה') },
   { name: 'calendar-day', prep: (p) => nav(p, 'יומן') },
   {
     name: 'calendar-week',
@@ -39,6 +39,7 @@ const SCREENS: Screen[] = [
   {
     name: 'workout',
     prep: async (p) => {
+      await nav(p, 'אימונים')
       await p.getByRole('button', { name: 'פתיחת האימון' }).click()
       await p.locator('.setchip').first().click()
     },
@@ -84,7 +85,7 @@ async function runContrast(page: Page, tag: string, screens: Screen[], testInfo:
 test.describe('ניגודיות', () => {
   test('כהה לפי המערכת (prefers-color-scheme)', async ({ page, errors }, testInfo) => {
     errors.push(...(await openApp(page, { state: richState(), news: edition(), atlas: atlasCache(4), colorScheme: 'dark' })))
-    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(14, 16, 19)')
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(10, 12, 22)')
     const { fails } = await runContrast(page, 'dark-system', SCREENS, testInfo)
     expect(errors).toEqual([])
     fixme(fails.length > 0, `${fails.length} low-contrast text styles in dark mode: ${fails.slice(0, 8).map((f) => `${f.screen} ${f.el} ${f.fg}/${f.bg}=${f.ratio}`).join(' | ')}`)
@@ -96,7 +97,7 @@ test.describe('ניגודיות', () => {
     s.settings.theme = 'dark'
     errors.push(...(await openApp(page, { state: s, news: edition(), atlas: atlasCache(4), colorScheme: 'light' })))
     expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark')
-    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(14, 16, 19)')
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(10, 12, 22)')
     const { fails } = await runContrast(page, 'dark-explicit', SCREENS.slice(0, 3), testInfo)
     expect(errors).toEqual([])
     fixme(fails.length > 0, `${fails.length} low-contrast text styles with explicit dark theme`)
@@ -131,11 +132,11 @@ test.describe('ניגודיות', () => {
     const frames = await page.evaluate(() => (window as any).__frames as Array<{ t: number; app: boolean; theme: string; bg: string }>)
     const painted = frames.filter((f) => f.app)
     expect(painted.length).toBeGreaterThan(0)
-    const lightFrames = painted.filter((f) => f.bg !== 'rgb(14, 16, 19)')
+    const lightFrames = painted.filter((f) => f.bg !== 'rgb(10, 12, 22)')
     expect(errors).toEqual([])
     fixme(
       lightFrames.length > 0,
-      `explicit dark theme flashes light on startup: first ${lightFrames.length} painted frame(s) had bg ${lightFrames[0]?.bg} / data-theme="${lightFrames[0]?.theme}" (t=${lightFrames[0]?.t}ms) before turning dark at t=${painted.find((f) => f.bg === 'rgb(14, 16, 19)')?.t}ms — data-theme is applied in a React effect, after first paint`,
+      `explicit dark theme flashes light on startup: first ${lightFrames.length} painted frame(s) had bg ${lightFrames[0]?.bg} / data-theme="${lightFrames[0]?.theme}" (t=${lightFrames[0]?.t}ms) before turning dark at t=${painted.find((f) => f.bg === 'rgb(10, 12, 22)')?.t}ms — data-theme is applied in a React effect, after first paint`,
     )
     expect(lightFrames).toEqual([])
   })

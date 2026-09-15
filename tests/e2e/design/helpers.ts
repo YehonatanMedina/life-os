@@ -283,8 +283,8 @@ export async function openApp(page: Page, opts: OpenOpts) {
   await page.waitForTimeout(150)
 }
 
-export type Screen = 'today' | 'atlas' | 'calendar' | 'projects' | 'review' | 'settings'
-const NAV_LABEL: Record<Screen, string> = { today: 'היום', atlas: 'אטלס', calendar: 'יומן', projects: 'פרויקטים', review: 'סקירה', settings: 'הגדרות' }
+export type Screen = 'today' | 'atlas' | 'calendar' | 'projects' | 'review' | 'settings' | 'workout'
+const NAV_LABEL: Record<Screen, string> = { workout: 'אימונים', today: 'היום', atlas: 'שיחה', calendar: 'יומן', projects: 'פרויקטים', review: 'סקירה', settings: 'הגדרות' }
 
 export async function nav(page: Page, screen: Screen) {
   if (screen === 'settings') {

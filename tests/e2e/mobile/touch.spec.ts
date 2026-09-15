@@ -13,7 +13,7 @@ type Screen = { name: string; prep: (page: Page) => Promise<void>; root?: string
 
 const SCREENS: Screen[] = [
   { name: 'today', prep: async () => {} },
-  { name: 'atlas', prep: async (p) => nav(p, 'אטלס') },
+  { name: 'atlas', prep: async (p) => nav(p, 'שיחה') },
   { name: 'calendar-day', prep: async (p) => nav(p, 'יומן') },
   {
     name: 'calendar-week',
@@ -53,6 +53,7 @@ const SCREENS: Screen[] = [
     name: 'workout',
     root: '.flow',
     prep: async (p) => {
+      await nav(p, 'אימונים')
       await p.getByRole('button', { name: 'פתיחת האימון' }).click()
       await p.locator('.setchip').first().click()
       await expect(p.locator('.set-edit')).toBeVisible()

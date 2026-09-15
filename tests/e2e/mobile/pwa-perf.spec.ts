@@ -20,7 +20,7 @@ test.describe('PWA', () => {
     const man = await res.json()
     expect(man).toMatchObject({ name: 'אטלס', dir: 'rtl', lang: 'he', display: 'standalone', start_url: './' })
     expect(man.icons.some((i: any) => i.sizes === '512x512' && i.purpose === 'maskable')).toBe(true)
-    expect(man.theme_color).toBe('#f6f7f9')
+    expect(man.theme_color).toBe('#f5f6fa')
     for (const icon of man.icons) {
       const r = await page.request.get('/' + icon.src.replace('./', ''))
       expect(r.status(), icon.src).toBe(200)
@@ -58,13 +58,13 @@ test.describe('PWA', () => {
           theme: document.documentElement.dataset.theme ?? '',
         }
       })
-    const DARK = 'rgb(14, 16, 19)'
-    const LIGHT = 'rgb(246, 247, 249)'
+    const DARK = 'rgb(10, 12, 22)'
+    const LIGHT = 'rgb(245, 246, 250)'
     const mismatches: string[] = []
     const check = async (label: string) => {
       await page.waitForTimeout(150)
       const e = await effective()
-      const want = e.bg === DARK ? '#0e1013' : '#f6f7f9'
+      const want = e.bg === DARK ? '#0a0c16' : '#f5f6fa'
       if (e.meta !== want) mismatches.push(`${label}: page bg ${e.bg} but theme-color ${e.meta} (metas: ${e.all.join(' | ')})`)
       return e
     }

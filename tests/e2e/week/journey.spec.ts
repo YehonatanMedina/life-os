@@ -51,9 +51,11 @@ test.describe('שבוע שלם', () => {
       await expect(whatNow(app)).toContainText('שגרת בוקר')
       await expect(whatNow(app).getByRole('button', { name: 'התחל' })).toHaveCount(0)
       // האימון של היום — ריצה קלה, בלי סימון עדיין
+      await nav(app, 'אימונים')
       await expect(workoutCard(app)).toContainText('ריצה קלה')
       await expect(workoutCard(app).locator('.wk-strip .wd.now')).toContainText('א׳')
       await expect(workoutCard(app).locator('.wk-strip .wd.ok')).toHaveCount(0)
+      await nav(app, 'היום')
       // פגם #2 (ראו defects.spec): תשובת השינה נכתבת על אתמול (12.9, השבוע שעבר) ומעירה
       // את תזכורת המעבר על שבוע ריק. לא מכשילים כאן — רק מתעדים.
       observe('nudge on first Sunday', await app.locator('.card.rail', { hasText: 'המעבר השבועי מחכה' }).isVisible())
@@ -109,7 +111,8 @@ test.describe('שבוע שלם', () => {
       await habitsCard(app).locator('.item', { hasText: 'שגרת בוקר' }).getByRole('button', { name: 'סמן כבוצע' }).click()
       await expect(habitsCounter(app)).toHaveText('1/3')
 
-      // ריצה: 5 ק״מ ב-30 דק׳
+      // ריצה: 5 ק״מ ב-30 דק׳ — בעמוד האימונים
+      await nav(app, 'אימונים')
       await workoutCard(app).getByRole('button', { name: 'פתיחת האימון' }).click()
       const ws = app.getByRole('dialog', { name: 'אימון' })
       await expect(ws.locator('.flow-head')).toContainText('ריצה קלה')
@@ -121,6 +124,7 @@ test.describe('שבוע שלם', () => {
       await expect(ws).toBeHidden()
       await expect(workoutCard(app)).toContainText('5 ק״מ')
       await expect(workoutCard(app).locator('.wk-strip .wd.ok')).toContainText('א׳')
+      await nav(app, 'היום')
       const hRow = habitsCard(app).locator('.item', { hasText: 'אימון' })
       await expect(hRow.getByRole('button', { name: 'סמן כבוצע' })).toHaveAttribute('aria-pressed', 'true')
       await expect(hRow.getByRole('button', { name: 'ריצה' })).toHaveClass(/primary/)
@@ -172,7 +176,9 @@ test.describe('שבוע שלם', () => {
       await unlockIfLocked(app)
       await expect(timerCard(app).locator('.ring-wrap .n')).toHaveText('1.0')
       await expect(habitsCounter(app)).toHaveText('3/3')
+      await nav(app, 'אימונים')
       await expect(workoutCard(app).locator('.wk-strip .wd.ok')).toContainText('א׳')
+      await nav(app, 'היום')
       const st = await readState(app)
       expect(st.days.find((d: any) => d.date === SUN)).toMatchObject({ wake: 'ontime', habits: { 'hb-morning': true, 'hb-workout': true, 'hb-night': true }, workout: 'run' })
       expect(st.days.find((d: any) => d.date === '2026-09-12').sleep).toBe('good')
@@ -199,7 +205,9 @@ test.describe('שבוע שלם', () => {
       await expect(app.locator('.countdowns .cd', { hasText: 'מבחן' }).locator('.d')).toHaveText(/^3\s*ימים$/)
       // ההרגלים התאפסו
       await expect(habitsCounter(app)).toHaveText('0/3')
+      await nav(app, 'אימונים')
       await expect(workoutCard(app)).toContainText('אין אימון היום')
+      await nav(app, 'היום')
 
       // 45 דק׳ מחקר על אתמול
       await timerCard(app).getByRole('button', { name: '+ רישום ידני' }).click()
@@ -410,7 +418,8 @@ test.describe('שבוע שלם', () => {
       await expect(tasks.locator('.item', { hasText: 'לכתוב טיוטה למבוא' }).locator('.sub2')).toHaveText('מחקר · אסימון אחד')
       await expect(tasks).toContainText('3 אסימונים מתוכננים · קיבולת 6')
 
-      // חזה וכתפיים
+      // חזה וכתפיים — בעמוד האימונים
+      await nav(app, 'אימונים')
       await expect(workoutCard(app)).toContainText('חזה וכתפיים')
       await workoutCard(app).getByRole('button', { name: 'פתיחת האימון' }).click()
       const ws = app.getByRole('dialog', { name: 'אימון' })
@@ -428,11 +437,12 @@ test.describe('שבוע שלם', () => {
       await ws.getByRole('button', { name: /סיימתי/ }).click()
       await expect(ws).toBeHidden()
       await expect(workoutCard(app).locator('.wk-strip .wd.ok')).toHaveCount(2)
-      await expect(habitsCard(app).locator('.item', { hasText: 'אימון' }).getByRole('button', { name: 'כוח' })).toHaveClass(/primary/)
-      await workoutCard(app).getByRole('button', { name: 'התקדמות' }).click()
+      await app.locator('.sec', { has: app.locator('h2', { hasText: 'הרמה שלי' }) }).getByRole('button', { name: 'הכל' }).click()
       const prog = app.getByRole('dialog', { name: 'התקדמות' })
       await expect(prog.locator('.card', { hasText: 'לחיצת חזה' })).toContainText('שיא: 40×8')
       await prog.getByRole('button', { name: 'סגירה', exact: true }).last().click()
+      await nav(app, 'היום')
+      await expect(habitsCard(app).locator('.item', { hasText: 'אימון' }).getByRole('button', { name: 'כוח' })).toHaveClass(/primary/)
 
       await jumpTo(app, '2026-09-16T08:31:00+03:00')
       await whatNow(app).getByRole('button', { name: 'התחל' }).click()

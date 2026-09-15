@@ -134,7 +134,7 @@ export async function readAtlasCache(page: Page): Promise<any> {
 
 /** תווית מצב הסנכרון (הטקסט לקוראי מסך של הנקודה בסרגל) */
 export function syncLabel(page: Page): Locator {
-  return page.locator('.sr').filter({ hasText: /מסונכרן|ממתין לשליחה|שולח|הסנכרון נכשל|אין אינטרנט|לא מחובר/ }).first()
+  return page.locator('.sr').filter({ hasText: /מסונכרן|ממתין לשליחה|ממתין ל-GitHub|שולח|הסנכרון נכשל|אין אינטרנט|לא מחובר/ }).first()
 }
 export async function waitStatus(page: Page, text: string | RegExp, timeout = 20_000) {
   await expect(syncLabel(page)).toHaveText(text, { timeout })
@@ -187,7 +187,7 @@ export async function quiet(fake: FakeGithub, ms = 3_000, max = 30_000) {
 export function nav(page: Page, label: string): Locator {
   return page.getByRole('button', { name: label, exact: true }).filter({ visible: true }).first()
 }
-export async function gotoTab(page: Page, label: 'היום' | 'אטלס' | 'יומן' | 'פרויקטים' | 'סקירה') {
+export async function gotoTab(page: Page, label: 'היום' | 'שיחה' | 'יומן' | 'אימונים' | 'פרויקטים' | 'סקירה') {
   await nav(page, label).click()
 }
 export async function gotoSettings(page: Page) {

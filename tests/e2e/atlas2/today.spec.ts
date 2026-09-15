@@ -29,7 +29,7 @@ test('פתק של אתמול — נמשך לזיכרון אבל לא מוצג; �
 
 /** כניסה למסך אטלס מפעילה משיכה מיידית */
 async function composerPoll(page: import('@playwright/test').Page) {
-  await page.getByRole('button', { name: 'אטלס', exact: true }).filter({ visible: true }).first().click()
+  await page.getByRole('button', { name: 'שיחה', exact: true }).filter({ visible: true }).first().click()
   await expect(composer(page)).toBeVisible()
   await sleep(800)
 }
@@ -96,6 +96,6 @@ test('today.json עם text שאינו מחרוזת — לא מפיל את "הי�
   const A = await openDevice({ tag: 'A', state: baseState({ deviceId: 'dA', aiKey: ai }), login: true, allowConsole: ALLOW })
   await waitSynced(A.page)
   await expect.poll(async () => JSON.stringify((await readAtlasCache(A.page))?.today?.text ?? null), { timeout: 15_000 }).toContain('html')
-  await expect(A.page.getByRole('button', { name: 'אטלס', exact: true }).filter({ visible: true }).first()).toBeVisible()
+  await expect(A.page.getByRole('button', { name: 'שיחה', exact: true }).filter({ visible: true }).first()).toBeVisible()
   await expect(A.page.getByText('משהו נשבר בטעינה')).toHaveCount(0)
 })

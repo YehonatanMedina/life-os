@@ -7,6 +7,7 @@
 // ההתראות מגיעות רק למכשיר שנרשם — הטלפון.
 // ---------------------------------------------------------------------------
 
+import { ghCooldownUntil, noteGhResponse } from './ghLimit'
 import { store, alive, dayCapacity, eventsOn, nextOccurrence, workoutDayOn } from './store'
 import type { AppState } from './types'
 import { addDays, parseISO, today, weekStart } from './dates'
@@ -182,6 +183,8 @@ export async function writeNotifySchedule(force = false): Promise<boolean> {
     updatedAt: Date.now(),
   }
   const content = await encrypt(JSON.stringify(payload), nk)
+  // GitHub חוסם כרגע את המכשיר — לא מאריכים את החסימה בשביל לוח ההתראות
+  if (ghCooldownUntil()) return false
   const res = await fetch(`https://api.github.com/gists/${gist}`, {
     method: 'PATCH',
     headers: {
@@ -191,6 +194,7 @@ export async function writeNotifySchedule(force = false): Promise<boolean> {
     },
     body: JSON.stringify({ files: { [FILE]: { content } } }),
   })
+  await noteGhResponse(res)
   if (res.ok) lastWrite = Date.now()
   return res.ok
 }

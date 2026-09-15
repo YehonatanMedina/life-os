@@ -41,6 +41,7 @@ for (const theme of THEMES) {
       await app.keyboard.press('Escape')
 
       // האימון של היום
+      await nav(app, 'workout')
       await app.locator('.wk-strip .wd.now').click()
       const wo = app.getByRole('dialog', { name: 'אימון' })
       await expect(wo).toBeVisible()
@@ -51,6 +52,7 @@ for (const theme of THEMES) {
       await shot(app, info, 'sheet-workout-set', theme, { viewport: true })
       await wo.locator('.flow-head button').last().click()
       await expect(wo).toHaveCount(0)
+      await nav(app, 'today')
 
       // מצב מיקוד
       await app.getByRole('button', { name: 'פתיחת הטיימר על כל המסך' }).click()

@@ -44,14 +44,14 @@ test.describe('הגדרות', () => {
     await row.getByRole('button', { name: 'כהה' }).click()
     await expect(html).toHaveAttribute('data-theme', 'dark')
     await expect(row.getByRole('button', { name: 'כהה' })).toHaveClass(/primary/)
-    await expect(app.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', '#0e1013')
+    await expect(app.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', '#0a0c16')
     // הרקע באמת כהה
     const bg = await app.evaluate(() => getComputedStyle(document.body).backgroundColor)
     const [r, g, b] = bg.match(/\d+/g)!.map(Number)
     expect(r + g + b).toBeLessThan(150)
     await row.getByRole('button', { name: 'בהיר' }).click()
     await expect(html).toHaveAttribute('data-theme', 'light')
-    await expect(app.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', '#f6f7f9')
+    await expect(app.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', '#f5f6fa')
     await row.getByRole('button', { name: 'מערכת' }).click()
     await expect(html).not.toHaveAttribute('data-theme', /./)
     await row.getByRole('button', { name: 'כהה' }).click()
@@ -199,7 +199,7 @@ test.describe('גיבוי ואיפוס', () => {
       app.waitForEvent('download'),
       app.getByRole('button', { name: 'ייצוא גיבוי' }).click(),
     ])
-    expect(dl.suggestedFilename()).toBe('life-os-2026-09-11.json')
+    expect(dl.suggestedFilename()).toBe('atlas-2026-09-11.json')
     await expect(app.locator('.toast')).toContainText('קובץ הגיבוי ירד')
     const exported = JSON.parse(fs.readFileSync((await dl.path())!, 'utf8'))
     expect(exported.version).toBe(1)
@@ -215,7 +215,7 @@ test.describe('גיבוי ואיפוס', () => {
     const bad = path.join(testInfo.outputDir, 'bad.json')
     fs.writeFileSync(bad, '{"hello": 1}')
     await app.locator('input[type="file"]').setInputFiles(bad)
-    await expect(app.locator('.toast')).toContainText('הקובץ לא נראה כמו גיבוי של המערכת')
+    await expect(app.locator('.toast')).toContainText('הקובץ לא נראה כמו גיבוי של אטלס')
     await expect(app.getByRole('dialog', { name: 'לייבא את הגיבוי?' })).toHaveCount(0)
 
     // --- ייבוא: גיבוי עם מסלול אחד, שתי משימות וסשן ---
@@ -247,7 +247,7 @@ test.describe('גיבוי ואיפוס', () => {
       app.waitForEvent('download'),
       confirm.getByRole('button', { name: 'ייבוא' }).click(),
     ])
-    expect(pre.suggestedFilename()).toBe('life-os-pre-import-2026-09-11.json')
+    expect(pre.suggestedFilename()).toBe('atlas-pre-import-2026-09-11.json')
     await expect(app.locator('.toast')).toContainText('הנתונים יובאו')
     await expect(app.getByText('מזהה מכשיר:')).toBeVisible()
 

@@ -137,8 +137,9 @@ test.describe('אימונים', () => {
   test.use({ seed: onboarded })
 
   test('בניית תוכנית, רישום סטים, סיום → "בוצע" וההרגל מסומן; התקדמות', async ({ app }) => {
-    // בניית התוכנית: יום שישי, סקוואט 3×8-10
-    const empty = app.locator('.card', { hasText: 'עוד אין תוכנית שבועית' })
+    // בניית התוכנית: יום שישי, סקוואט 3×8-10 — הכל בעמוד האימונים
+    await go(app, 'אימונים')
+    const empty = app.locator('.card', { hasText: 'עוד אין תוכנית אימונים' })
     await empty.getByRole('button', { name: 'בניית התוכנית' }).click()
     const plan = app.getByRole('dialog', { name: 'תוכנית האימונים' })
     await expect(plan).toBeVisible()
@@ -162,7 +163,7 @@ test.describe('אימונים', () => {
     await plan.getByRole('button', { name: 'סיום' }).click()
     await expect(plan).toBeHidden()
 
-    // הכרטיס במסך היום
+    // כרטיס היום בעמוד האימונים
     const card = app.locator('.card', { has: app.locator('.wk-strip') })
     await expect(card).toContainText('🏋️ רגליים')
     await expect(card).toContainText('יום שישי · חדר כושר')
@@ -203,7 +204,9 @@ test.describe('אימונים', () => {
     await ws.locator('.flow-foot').getByRole('button', { name: 'סגירה' }).click()
     await expect(card.getByRole('button', { name: 'המשך רישום' })).toBeVisible()
     await expect(card.locator('.wk-strip .wd.part')).toHaveCount(1)
+    await go(app, 'היום')
     await expect(habitsCard(app).locator('.card-h .tiny.faint.ltr, .spread .tiny.faint.ltr').first()).toHaveText('0/3')
+    await go(app, 'אימונים')
 
     // סיום
     await card.getByRole('button', { name: 'המשך רישום' }).click()
@@ -213,11 +216,13 @@ test.describe('אימונים', () => {
     await expect(card.locator('.chip', { hasText: /בוצע/ })).toBeVisible()
     await expect(card.getByRole('button', { name: 'צפייה באימון' })).toBeVisible()
     await expect(card.locator('.wk-strip .wd.ok')).toContainText('ו׳')
-    // ההרגל "אימון" סומן אוטומטית, כ"כוח"
+    // ההרגל "אימון" סומן אוטומטית, כ"כוח" — במסך היום
+    await go(app, 'היום')
     const hRow = habitsCard(app).locator('.item', { hasText: 'אימון' })
     await expect(hRow.getByRole('button', { name: 'סמן כבוצע' })).toHaveAttribute('aria-pressed', 'true')
     await expect(hRow.getByRole('button', { name: 'כוח' })).toHaveClass(/primary/)
     await expect(habitsCard(app).locator('.card-h .tiny.faint.ltr, .spread .tiny.faint.ltr').first()).toHaveText('1/3')
+    await go(app, 'אימונים')
 
     let st = await readState(app)
     const w = live<WorkoutLog>(st.workouts).find((x) => x.date === TODAY)!
@@ -231,7 +236,7 @@ test.describe('אימונים', () => {
     expect(st.days.find((d: any) => d.date === TODAY).habits['hb-workout']).toBe(true)
 
     // התקדמות
-    await card.getByRole('button', { name: 'התקדמות' }).click()
+    await app.locator('.sec', { has: app.locator('h2', { hasText: 'הרמה שלי' }) }).getByRole('button', { name: 'הכל' }).click()
     const prog = app.getByRole('dialog', { name: 'התקדמות' })
     await expect(prog.locator('.card', { hasText: 'סקוואט' })).toContainText('שיא: 10×10 · אחרון: 10×10 · אימון אחד')
     await expect(prog.locator('.card', { hasText: 'לחיצת רגליים' })).toHaveCount(0)
@@ -242,6 +247,7 @@ test.describe('אימונים', () => {
 
     // שרידות
     await reload(app)
+    await go(app, 'אימונים')
     const c2 = app.locator('.card', { has: app.locator('.wk-strip') })
     await expect(c2.locator('.chip', { hasText: /בוצע/ })).toBeVisible()
     await c2.getByRole('button', { name: 'צפייה באימון' }).click()
@@ -250,7 +256,8 @@ test.describe('אימונים', () => {
   })
 
   test('יום בלי אימון בתוכנית: הכרטיס מציע רישום ובחירת אימון אחר', async ({ app }) => {
-    await app.locator('.card', { hasText: 'עוד אין תוכנית שבועית' }).getByRole('button', { name: 'בניית התוכנית' }).click()
+    await go(app, 'אימונים')
+    await app.locator('.card', { hasText: 'עוד אין תוכנית אימונים' }).getByRole('button', { name: 'בניית התוכנית' }).click()
     const plan = app.getByRole('dialog', { name: 'תוכנית האימונים' })
     await plan.getByRole('button', { name: /^יום ראשון/ }).click()
     const dayCard = plan.locator('.stack > .card', { hasText: 'יום ראשון' })
@@ -272,9 +279,11 @@ test.describe('אימונים', () => {
     await expect(cardio).toContainText('6:00 לק״מ')
     await ws.getByRole('button', { name: /סיימתי/ }).click()
     await expect(card).toContainText('5 ק״מ')
+    await go(app, 'היום')
     const hRow = habitsCard(app).locator('.item', { hasText: 'אימון' })
     await expect(hRow.getByRole('button', { name: 'ריצה' })).toHaveClass(/primary/)
-    await card.getByRole('button', { name: 'התקדמות' }).click()
+    await go(app, 'אימונים')
+    await app.locator('.sec', { has: app.locator('h2', { hasText: 'הרמה שלי' }) }).getByRole('button', { name: 'הכל' }).click()
     const prog = app.getByRole('dialog', { name: 'התקדמות' })
     await prog.getByRole('button', { name: 'ריצה' }).click()
     await expect(prog).toContainText('5 ק״מ')
@@ -305,7 +314,8 @@ test.describe('באגים ידועים', () => {
   })
 
   test('היום הראשון שנוסף לתוכנית האימונים נשאר פתוח לעריכה', async ({ app }) => {
-    await app.locator('.card', { hasText: 'עוד אין תוכנית שבועית' }).getByRole('button', { name: 'בניית התוכנית' }).click()
+    await go(app, 'אימונים')
+    await app.locator('.card', { hasText: 'עוד אין תוכנית אימונים' }).getByRole('button', { name: 'בניית התוכנית' }).click()
     const plan = app.getByRole('dialog', { name: 'תוכנית האימונים' })
     await plan.getByRole('button', { name: /^יום שישי/ }).click()
     // Workout.tsx WorkoutCard: PlanSheet מרונדר בשני ענפים שונים (אין תוכנית / יש תוכנית),

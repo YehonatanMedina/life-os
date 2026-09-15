@@ -225,7 +225,7 @@ export async function openApp(page: Page, opts: OpenOpts = {}): Promise<string[]
   )
   if (opts.goto !== false) {
     await page.goto('/')
-    await expect(page.locator('.bottomnav button')).toHaveCount(5)
+    await expect(page.locator('.bottomnav button')).toHaveCount(6)
   }
   return errors
 }
@@ -236,7 +236,7 @@ export async function readState(page: Page): Promise<AppState> {
   return page.evaluate((k) => JSON.parse(localStorage.getItem(k) || 'null'), STORE_KEY)
 }
 
-export async function nav(page: Page, label: 'היום' | 'אטלס' | 'יומן' | 'פרויקטים' | 'סקירה') {
+export async function nav(page: Page, label: 'היום' | 'שיחה' | 'יומן' | 'אימונים' | 'פרויקטים' | 'סקירה') {
   await page.locator('.bottomnav button', { hasText: label }).click()
 }
 export async function openSettings(page: Page) {
@@ -351,10 +351,17 @@ export async function navLabelsReport(page: Page) {
     const out: any[] = []
     for (const b of Array.from(document.querySelectorAll<HTMLElement>('.bottomnav button'))) {
       const r = b.getBoundingClientRect()
+      // התווית יושבת ב-span.lb (מאז המיתוג מחדש); לפני כן — צומת טקסט ישיר בכפתור
+      const lb = b.querySelector<HTMLElement>('.lb')
       const tn = Array.from(b.childNodes).find((n) => n.nodeType === 3 && (n.textContent || '').trim())
       let text = ''
       let tr: DOMRect | null = null
-      if (tn) {
+      if (lb && (lb.textContent || '').trim()) {
+        const rg = document.createRange()
+        rg.selectNodeContents(lb)
+        tr = rg.getBoundingClientRect()
+        text = (lb.textContent || '').trim()
+      } else if (tn) {
         const rg = document.createRange()
         rg.selectNodeContents(tn)
         tr = rg.getBoundingClientRect()

@@ -93,10 +93,12 @@ for (const theme of THEMES) {
 
     await openApp(app, { state: richState(theme), atlas: atlasCache() })
     await scan('today')
+    await nav(app, 'workout')
     await app.locator('.wk-strip .wd.now').click()
     await app.getByRole('dialog', { name: 'אימון' }).locator('.setchip').first().click()
     await scan('sheet-workout')
     await app.getByRole('dialog', { name: 'אימון' }).locator('.flow-head button').last().click()
+    await nav(app, 'today')
     await app.getByRole('button', { name: 'פתיחת הטיימר על כל המסך' }).click()
     await scan('focus')
     await app.keyboard.press('Escape')
