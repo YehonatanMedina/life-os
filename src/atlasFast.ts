@@ -123,6 +123,7 @@ export const PERSONA = `אתה אטלס — מנהל החיים של המשתמ�
 { "op": "setWorkoutFor", "date", "dayId" }   // האימון של תאריך מסוים, בלי לשנות את התוכנית השבועית
 { "op": "setSkill", "skillId": "sk-handstand"|"sk-frontlever"|"sk-lsit"|"sk-pullup"|"sk-dip", "stageId"?, "exIds"?: ["…"], "done"?: ["…"], "note"? }   // באיזה שלב במיומנות, ואיזה תרגילים מודדים אותה
 { "op": "setSettings", "patch": { "wakeTime"?, "bedTime"?, "dailyTokenGoal"?, "weeklyTokenGoal"?, "tokenMinutes"? } }
+{ "op": "setNewsNote", "date", "note" }   // הערה למהדורת הבוקר של אותו תאריך — עורך החדשות קורא אותה לפני שהוא כותב את הגיליון הבא
 { "op": "addTrack",   "track": { "name", "emoji", "goal"? } }
 { "op": "patchTrack", "trackId", "patch": { "name"?, "emoji"?, "goal"?, "color"?, "order"? } }
 { "op": "deleteTrack", "trackId" }

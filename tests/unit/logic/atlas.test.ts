@@ -449,6 +449,30 @@ describe('undoCommand', () => {
     expect(k()?.stageId).toBe('pseudo')
   })
 
+  it('setNewsNote כותב הערה למהדורה, והביטול מחזיר את הקודמת', async () => {
+    await boot(blankState({ news: [{ id: 'news-2026-09-16', updatedAt: 1, date: '2026-09-16', votes: {}, note: 'ישן' }] }))
+    await thread([atlasMsg('a1', '2026-09-13T09:00:00+03:00', [
+      { id: 'c-nn', op: 'setNewsNote', date: '2026-09-16', note: 'מבוא לכלכלה' },
+    ])])
+    await At.pollAtlas()
+    const n = () => get().news?.find((x) => x.date === '2026-09-16' && !x.deleted)
+    expect(n()?.note).toBe('מבוא לכלכלה')
+    At.undoCommand('c-nn')
+    expect(n()?.note).toBe('ישן')
+  })
+
+  it('setNewsNote עם תאריך לא תקין או בלי הערה נדחה', async () => {
+    await boot(blankState({}))
+    await thread([atlasMsg('a1', '2026-09-13T09:00:00+03:00', [
+      { id: 'c-nn-date', op: 'setNewsNote', date: '16/09/2026', note: 'כן' },
+      { id: 'c-nn-note', op: 'setNewsNote', date: '2026-09-16' },
+    ])])
+    await At.pollAtlas()
+    expect((get().news ?? []).filter((x) => !x.deleted)).toEqual([])
+    const failed = JSON.parse(localStorage.getItem(CACHE_KEY) ?? '{}').failed ?? {}
+    expect(Object.keys(failed).sort()).toEqual(['c-nn-date', 'c-nn-note'])
+  })
+
   it('setSkill עם מיומנות או שלב שלא קיימים נדחה', async () => {
     await boot(blankState({}))
     await thread([atlasMsg('a1', '2026-09-13T09:00:00+03:00', [

@@ -83,6 +83,7 @@ type UndoEntry =
   | { kind: 'weekGoals'; ws: string; prev: WeekGoal[] | undefined }
   | { kind: 'settings'; prev: Record<string, unknown>; patch?: Record<string, unknown> }
   | { kind: 'skill'; id: string; prev: SkillProgress | null; patch: Record<string, unknown> }
+  | { kind: 'newsNote'; date: string; prev: string | undefined }
 
 /**
  * ביטול של עדכון: מחזירים רק שדות שהפקודה שינתה ושעדיין מחזיקים את הערך שהיא
@@ -911,6 +912,14 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
       actions.setSettings(safe)
       return { kind: 'settings', prev, patch: safe }
     }
+    // ההערה למהדורת הבוקר — הערוץ היחיד שעורך החדשות בענן קורא לפני שהוא כותב
+    case 'setNewsNote': {
+      if (!isDate(c.date)) throw new Error('setNewsNote: bad date')
+      if (typeof c.note !== 'string') throw new Error('setNewsNote: no note')
+      const prev = (s.news ?? []).find((n) => n.date === c.date && !n.deleted)?.note
+      actions.setNewsNote(c.date, c.note)
+      return { kind: 'newsNote', date: c.date, prev }
+    }
     case 'addTrack': {
       const id = c.track?.id || derived('tr', c)
       if (s.tracks.some((t) => t.id === id)) return null
@@ -1064,6 +1073,9 @@ export function undoCommand(cmdId: string): boolean {
     case 'settings':
       actions.setSettings((u.patch ? revertPatch(store.get().settings as any, u.prev, u.patch) : u.prev) as any)
       break
+    case 'newsNote':
+      actions.setNewsNote(u.date, u.prev ?? '')
+      break
     case 'track': {
       const cur = store.get().tracks.find((t) => t.id === u.id)
       if (u.prev && u.patch && cur) actions.upsertTrack(reverted(cur, u.prev, u.patch))
@@ -1155,6 +1167,8 @@ export function describeCommand(c: AtlasCommand): string {
     }
     case 'setSettings':
       return `הגדרות עודכנו: ${Object.keys(c.patch ?? {}).join(', ')}`
+    case 'setNewsNote':
+      return `הערה למהדורת ${c.date}`
     case 'addTrack':
       return `מסלול חדש: ${c.track?.name ?? ''}`
     case 'patchTrack':
