@@ -212,6 +212,8 @@ function FakeStream(text: string, stopReason = 'end_turn') {
     ['message_start', { message: { usage: { input_tokens: 500, cache_creation_input_tokens: 0, cache_read_input_tokens: 2000, output_tokens: 1 } } }],
     ...[...text].map((ch) => ['content_block_delta', { index: 0, delta: { type: 'text_delta', text: ch } }] as [string, unknown]),
     ['message_delta', { delta: { stop_reason: stopReason }, usage: { output_tokens: 40 } }],
+    // כמו ה-API האמיתי: הזרם נגמר ב-message_stop. בלעדיו זה זרם שנקטע.
+    ['message_stop', {}],
   ])
   const bytes = enc(full)
   let i = 0

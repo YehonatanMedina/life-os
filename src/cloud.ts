@@ -23,7 +23,7 @@
 // ---------------------------------------------------------------------------
 
 import { useSyncExternalStore } from 'react'
-import { actions, consumeFreshInstall, isPristine, store, mergeStates } from './store'
+import { actions, consumeFreshInstall, getPersistError, isPristine, store, mergeStates, subscribePersistError } from './store'
 import { refreshNotifySchedule } from './push'
 import { decryptText, encryptText, newCryptKey, stableStringify } from './crypto'
 import { aiKey, buildAtlasContext, buildPulse, buildWeekDigest } from './ai'
@@ -686,6 +686,10 @@ function consumeSetupLink() {
 
 export function startCloud() {
   if (loop) return
+  // שמירה מקומית שנכשלה (אחסון מלא) — דוחפים מיד למחסן, כדי שהיום לא ייעלם ברענון
+  subscribePersistError(() => {
+    if (getPersistError()) nudgePush()
+  })
   consumeSetupLink()
   // קישור התקנה שהודבק בלשונית פתוחה — ניווט hash בלבד, בלי טעינה מחדש
   window.addEventListener('hashchange', () => {

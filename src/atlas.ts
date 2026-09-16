@@ -347,9 +347,15 @@ async function runFast(id: string): Promise<boolean> {
       const note = reply.text || 'על זה אני צריך זמן — מעביר לאטלס העמוק.'
       save({
         messages: cache.messages.map((m) =>
-          m.id === holderId ? { ...m, text: note, streaming: false, replyTo: undefined } : m.id === id ? { ...m, lane: 'deep' as const } : m,
+          m.id === holderId
+            ? { ...m, text: note, commands: reply.commands.length ? reply.commands : undefined, streaming: false, replyTo: undefined }
+            : m.id === id
+              ? { ...m, lane: 'deep' as const }
+              : m,
         ),
       })
+      // פעולות שהמודל ביצע לפני ההעברה מתבצעות — אחרת הוא אומר "רשמתי" ושום דבר לא נרשם
+      applyWhenSafe(cache.messages)
       void pushThread()
       if (reply.memory) void appendMemory(reply.memory).catch(() => undefined)
       nudgePush()

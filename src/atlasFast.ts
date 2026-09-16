@@ -551,6 +551,8 @@ export async function readStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   onText: (delta: string) => void,
   onStop?: (reason: string) => void,
+  /** נקרא כשהגיע message_stop — כלומר הזרם נגמר כמו שצריך ולא נקטע */
+  onComplete?: () => void,
 ): Promise<UsageDelta> {
   const dec = new TextDecoder()
   let buf = ''
@@ -573,6 +575,8 @@ export async function readStream(
     } else if (ev.type === 'message_delta') {
       if (ev.usage) usage.output = ev.usage.output_tokens ?? usage.output
       if (typeof ev.delta?.stop_reason === 'string') onStop?.(ev.delta.stop_reason)
+    } else if (ev.type === 'message_stop') {
+      onComplete?.()
     } else if (ev.type === 'error') {
       throw new Error(ev.error?.message ?? 'stream error')
     }
@@ -627,6 +631,7 @@ export async function askFast(
       if (!r.body) throw new FastError('Claude החזיר תשובה ריקה', 0, false)
       let raw = ''
       let stop = ''
+      let complete = false
       const usage = await readStream(
         r.body.getReader(),
         (d) => {
@@ -636,8 +641,15 @@ export async function askFast(
         (reason) => {
           stop = reason
         },
+        () => {
+          complete = true
+        },
       )
       addUsage(usage)
+      // זרם שנגמר בלי message_stop = הרשת נפלה באמצע. חצי תשובה שנראית שלמה היא
+      // הדבר הגרוע: הטקסט נקטע, ובלוק הפקודות יכול להיחתך באמצע. מסמנים ככשל
+      // חולף — ההודעה מקבלת "שלח שוב", ושום פקודה חלקית לא מתבצעת.
+      if (!complete) throw new FastError('החיבור ל-Claude נקטע באמצע התשובה. נסה שוב.', 0, false)
       // הבקשה המלאה עברה — אין תקלה פתוחה. עברה גרסה רזה? הרישום נשאר, כי
       // הוא מספר בדיוק מה נדחה ומה כן עבד.
       if (variant === 'full') {
