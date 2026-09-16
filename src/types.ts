@@ -398,6 +398,12 @@ export interface Settings {
    * בהגדרות המסונכרנות — מוצפן במחסן, לעולם לא בקוד.
    */
   apiKey?: string
+  /**
+   * מזהה ה-workspace ב-Claude (wrkspc_…). נדרש **רק** כשמפתח ה-API נוצר ברמת
+   * הארגון ולא שויך ל-workspace — במקרה כזה ה-API דוחה כל בקשה בלי הכותרת
+   * anthropic-workspace-id. מפתח שמשויך ל-workspace לא צריך את זה.
+   */
+  workspaceId?: string
 }
 
 export interface Timer {

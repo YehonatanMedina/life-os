@@ -7,7 +7,7 @@ import { useToast } from '../ui'
 import { aiKey } from '../ai'
 import { useAtlas } from '../atlas'
 import { nudgePush } from '../cloud'
-import { FAST_MODEL, USD_TO_ILS, readApiFailure, readUsage, testFast, usageCostUSD } from '../atlasFast'
+import { FAST_MODEL, NEEDS_WORKSPACE, USD_TO_ILS, readApiFailure, readUsage, testFast, usageCostUSD } from '../atlasFast'
 
 const fmt = (n: number) => n.toLocaleString('he-IL')
 
@@ -16,6 +16,7 @@ export default function AtlasCard() {
   const cache = useAtlas()
   const toast = useToast()
   const [draft, setDraft] = useState(s.settings.apiKey ?? '')
+  const [ws, setWs] = useState(s.settings.workspaceId ?? '')
   const [show, setShow] = useState(false)
   const [testing, setTesting] = useState(false)
   const [tick, setTick] = useState(0)
@@ -23,6 +24,8 @@ export default function AtlasCard() {
   const cost = usageCostUSD(usage)
   // התקלה האחרונה כפי שה-API ניסח אותה. "שגיאה 400" בלי סיבה עלתה חצי יום.
   const fail = readApiFailure()
+  // מפתח שנוצר ברמת הארגון נדחה בלי כותרת anthropic-workspace-id
+  const needsWs = !!fail && NEEDS_WORKSPACE.test(fail.message || '')
   const deepReady = !!aiKey(s)
   const fast = !!(s.settings.apiKey ?? '').trim()
   void tick
@@ -32,6 +35,12 @@ export default function AtlasCard() {
     if (v === (s.settings.apiKey ?? '')) return
     actions.setSettings({ apiKey: v })
     toast(v ? 'המפתח נשמר — מסונכרן מוצפן לכל המכשירים' : 'המסלול המהיר כבוי')
+  }
+  const commitWs = () => {
+    const v = ws.trim()
+    if (v === (s.settings.workspaceId ?? '')) return
+    actions.setSettings({ workspaceId: v })
+    toast(v ? 'מזהה ה-workspace נשמר' : 'מזהה ה-workspace הוסר')
   }
 
   return (
@@ -73,6 +82,29 @@ export default function AtlasCard() {
         הקריאות יוצאות ישירות מהדפדפן ל-Claude, בלי שרת ביניים.
       </div>
 
+      <label className="field" style={{ marginBottom: 8 }}>
+        <span>
+          מזהה workspace {needsWs ? '— נדרש למפתח הזה' : '(לא חובה)'}
+        </span>
+        <input
+          className="input ltr"
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="wrkspc_…"
+          value={ws}
+          onChange={(e) => setWs(e.target.value)}
+          onBlur={commitWs}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          aria-label="מזהה workspace"
+          style={needsWs ? { borderColor: 'var(--bad)' } : undefined}
+        />
+      </label>
+      <div className="tiny faint" style={{ marginBottom: 10 }}>
+        נדרש רק כשמפתח ה-API נוצר ברמת הארגון ולא שויך ל-workspace. מעדיפים בלעדיו: ב-platform.claude.com
+        ← API keys ← Create key, לבחור workspace. המזהה עצמו נמצא ב-platform.claude.com ← Workspaces.
+      </div>
+
       {fail && (
         <div className="card rail alert" style={{ ['--rail' as any]: 'var(--bad)', marginBottom: 10 }}>
           <div className="txt">
@@ -105,7 +137,7 @@ export default function AtlasCard() {
             commit()
             setTesting(true)
             // הבדיקה שולחת את הבקשה האמיתית — עם הזיכרון וההקשר, לא "שלום" קצר
-            const r = await testFast(draft, { memory: cache.memory ?? '' })
+            const r = await testFast(draft, { memory: cache.memory ?? '', workspaceId: ws.trim() })
             setTesting(false)
             setTick((x) => x + 1)
             // תקלה נוסעת למחסן מיד, גם כשהיא קרתה כאן בהגדרות

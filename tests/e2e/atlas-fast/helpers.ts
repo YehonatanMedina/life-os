@@ -11,9 +11,10 @@ import type { AppState } from '../../../src/types'
 export const TEST_API_KEY = 'sk-ant-test-0123456789'
 
 /** מצב מכשיר/מחסן עם מפתח ה-API של המסלול המהיר */
-export function fastState(deviceId: string, ai: string, apiKey: string | null = TEST_API_KEY): AppState {
+export function fastState(deviceId: string, ai: string, apiKey: string | null = TEST_API_KEY, workspaceId?: string): AppState {
   const st = baseState({ deviceId, aiKey: ai })
   if (apiKey) st.settings.apiKey = apiKey
+  if (workspaceId) st.settings.workspaceId = workspaceId
   return st
 }
 

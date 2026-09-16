@@ -325,3 +325,44 @@ test('דחייה בכל הגרסאות: ההודעה עוברת לאטלס הע�
   const pulse = await decryptJSON<any>(fake.files['pulse.json'], ai)
   expect(pulse.fastRecovery ?? null).toBeNull()
 })
+
+test('מפתח ברמת הארגון: הדחייה מוסברת בעברית ומסומנת בהגדרות; עם מזהה workspace הכותרת נשלחת והתשובה חוזרת', async ({ fake, claude, key, openDevice }) => {
+  // זה היה הבאג האמיתי (16.9.2026): המפתח נוצר ברמת הארגון, ו-Claude דחה כל
+  // בקשה מהמסלול המהיר. ההודעה שהוצגה הייתה "שגיאה 400" בלי סיבה.
+  const WS_MSG =
+    'This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header with the ID of the workspace to use. Add the header, or use an API key that is scoped to a workspace.'
+  const ai = await seedFast(fake, key)
+  const A = await openDevice({ tag: 'A', state: fastState('dA', ai), login: true, allowConsole: [NOISE, /status of 400/] })
+  await waitSynced(A.page)
+  await openAtlas(A.page)
+
+  for (let i = 0; i < 3; i++) claude.reply({ status: 400, errorMessage: WS_MSG })
+  await say(A.page, 'מה יש לי מחר?')
+  const bubble = atlasBubbles(A.page).last()
+  await expect(bubble).toContainText('ברמת הארגון', { timeout: 15_000 })
+  await expect(bubble).toContainText('העברתי לאטלס העמוק')
+  // שלוש הגרסאות נוסו, ואף אחת לא יכולה לעזור כאן — ואז העמוק
+  expect(claude.requests.filter((r) => r.tag === 'A')).toHaveLength(3)
+  await expect.poll(() => fake.issues.length, { timeout: 10_000 }).toBe(1)
+  expect(claude.requests.every((r) => !('anthropic-workspace-id' in r.headers))).toBe(true)
+
+  // בהגדרות: השדה מסומן כנדרש, והסיבה המלאה מוצגת
+  await gotoSettings(A.page)
+  const card = A.page.locator('.card').filter({ hasText: 'מפתח API של Claude' })
+  await expect(card).toContainText('נדרש למפתח הזה')
+  await expect(card).toContainText('not scoped to a workspace')
+
+  // מדביקים מזהה workspace — הכותרת נשלחת, והתשובה חוזרת מהר
+  const n = claude.requests.length
+  await card.getByLabel('מזהה workspace').fill('wrkspc_test123')
+  await card.getByLabel('מזהה workspace').blur()
+  await expect.poll(async () => (await readState(A.page)).settings.workspaceId, { timeout: 8_000 }).toBe('wrkspc_test123')
+  claude.reply({ text: 'מחר: סמינר ב-10:40 ואימון ב-18:00.' })
+  await gotoTab(A.page, 'שיחה')
+  await say(A.page, 'ומה מחרתיים?')
+  await expect(atlasBubbles(A.page).last()).toContainText('סמינר ב-10:40', { timeout: 10_000 })
+  const sent = claude.requests.slice(n).filter((r) => r.tag === 'A')
+  expect(sent.length).toBeGreaterThan(0)
+  expect(sent.every((r) => r.headers['anthropic-workspace-id'] === 'wrkspc_test123')).toBe(true)
+  await expect(A.page.locator('.bubble.me.failed')).toHaveCount(0)
+})

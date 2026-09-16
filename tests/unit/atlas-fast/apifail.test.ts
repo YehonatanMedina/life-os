@@ -5,8 +5,8 @@
 // ---------------------------------------------------------------------------
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  FastError, VARIANTS, clearApiFailure, clearRecovery, describeApiError, failureFrom, parseApiError, readApiFailure,
-  readRecovery, recordApiFailure, recordRecovery, requestMetrics, variantBody,
+  FastError, NEEDS_WORKSPACE, VARIANTS, apiHeaders, clearApiFailure, clearRecovery, describeApiError, failureFrom,
+  parseApiError, readApiFailure, readRecovery, recordApiFailure, recordRecovery, requestMetrics, variantBody,
 } from '../../../src/atlasFast'
 
 const errBody = (type: string, message: string) => JSON.stringify({ type: 'error', error: { type, message } })
@@ -205,5 +205,37 @@ describe('רישום התאוששות', () => {
     expect(readRecovery()).toBeNull()
     localStorage.setItem('life-os-atlas-recovery', '{"variant":"lean"}')
     expect(readRecovery()).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// מפתח שנוצר ברמת הארגון ולא שויך ל-workspace. 16.9.2026: זה מה שחסם את המסלול
+// המהיר לגמרי — כל בקשה נדחתה ב-400, וההודעה הוצגה כ"שגיאה 400" בלי סיבה.
+// ---------------------------------------------------------------------------
+const WS_MSG =
+  'This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header with the ID of the workspace to use. Add the header, or use an API key that is scoped to a workspace.'
+
+describe('מפתח ברמת הארגון', () => {
+  it('הכותרת נשלחת רק כשיש מזהה, ומנוקה מרווחים', () => {
+    const base = apiHeaders('sk-ant-x')
+    expect(base['x-api-key']).toBe('sk-ant-x')
+    expect(base['anthropic-version']).toBe('2023-06-01')
+    expect(base['anthropic-dangerous-direct-browser-access']).toBe('true')
+    expect('anthropic-workspace-id' in base).toBe(false)
+    expect(apiHeaders(' sk-ant-y ', '  wrkspc_abc  ')['anthropic-workspace-id']).toBe('wrkspc_abc')
+    expect('anthropic-workspace-id' in apiHeaders('sk-ant-y', '   ')).toBe(false)
+  })
+
+  it('הביטוי מזהה את התשובה של ה-API', () => {
+    expect(NEEDS_WORKSPACE.test(WS_MSG)).toBe(true)
+    expect(NEEDS_WORKSPACE.test('Your credit balance is too low')).toBe(false)
+  })
+
+  it('ההודעה אומרת מה לעשות — שתי הדרכים, בעברית', () => {
+    const msg = describeApiError(400, JSON.stringify({ error: { type: 'invalid_request_error', message: WS_MSG } }))
+    expect(msg).toContain('ברמת הארגון')
+    expect(msg).toContain('API keys')
+    expect(msg).toContain('wrkspc_')
+    expect(msg).not.toContain('בלי לומר למה')
   })
 })

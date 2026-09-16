@@ -48,6 +48,28 @@ export type ThreadTurn = { from: 'user' | 'atlas'; text: string; ops?: string[] 
 export function apiKey(s: AppState): string {
   return (s.settings.apiKey ?? '').trim()
 }
+export function workspaceId(s: AppState): string {
+  return (s.settings.workspaceId ?? '').trim()
+}
+
+/**
+ * הכותרות של הקריאה. מפתח שנוצר ברמת הארגון (ולא שויך ל-workspace) נדחה
+ * ב-400 בלי הכותרת anthropic-workspace-id — זה מה שחסם את המסלול המהיר
+ * ב-16.9.2026. מפתח שמשויך ל-workspace לא צריך אותה, ואז היא לא נשלחת.
+ */
+export function apiHeaders(key: string, ws = ''): Record<string, string> {
+  const h: Record<string, string> = {
+    'content-type': 'application/json',
+    'x-api-key': key.trim(),
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true',
+  }
+  if (ws.trim()) h['anthropic-workspace-id'] = ws.trim()
+  return h
+}
+
+/** תשובת ה-API שאומרת "המפתח לא משויך ל-workspace" */
+export const NEEDS_WORKSPACE = /not scoped to a workspace|anthropic-workspace-id/i
 export function fastReady(): boolean {
   return !!apiKey(store.get())
 }
@@ -345,6 +367,13 @@ export function describeApiError(status: number, body: string): string {
   if (status === 429) return `יותר מדי בקשות לרגע — נסה שוב בעוד רגע${why}`
   if (status === 529 || status === 503) return `השרת של Claude עמוס כרגע. נסה שוב בעוד רגע${why}`
   if (status === 400 && /credit|billing/i.test(message)) return `אין יתרה בחשבון ה-API. טען ב-platform.claude.com${why}`
+  if (status === 400 && NEEDS_WORKSPACE.test(message)) {
+    return (
+      'מפתח ה-API נוצר ברמת הארגון ולא שויך ל-workspace, ולכן Claude דוחה אותו. ' +
+      'שתי דרכים: (1) ב-platform.claude.com ← API keys ← Create key, לבחור workspace (Default), ולהדביק את המפתח החדש כאן; ' +
+      '(2) להדביק כאן את מזהה ה-workspace (wrkspc_…) מ-platform.claude.com ← Workspaces.'
+    )
+  }
   if (status === 400) return `Claude דחה את הבקשה${why || ' בלי לומר למה'}`
   return `Claude החזיר שגיאה ${status}${why || ' בלי הסבר'}`
 }
@@ -573,6 +602,7 @@ export async function askFast(
   key: string = apiKey(store.get()),
 ): Promise<FastReply> {
   if (!key) throw new FastError('אין מפתח API לאטלס המהיר — הגדרות → אטלס.', 0, true)
+  const ws = workspaceId(store.get())
   const full = buildRequest(input)
   let shown = ''
   let status = 0
@@ -583,12 +613,7 @@ export async function askFast(
     try {
       const r = await fetch(API_URL, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': key,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
+        headers: apiHeaders(key, ws),
         body: JSON.stringify(body),
         signal: ctl.signal,
       })
@@ -646,7 +671,7 @@ export async function askFast(
  */
 export async function testFast(
   key: string,
-  opts: { memory?: string; thread?: ThreadTurn[]; state?: AppState } = {},
+  opts: { memory?: string; thread?: ThreadTurn[]; state?: AppState; workspaceId?: string } = {},
 ): Promise<{ ok: true; ms: number; chars: number } | { ok: false; error: string }> {
   const t0 = Date.now()
   const full = buildRequest({
@@ -660,12 +685,7 @@ export async function testFast(
   try {
     const r = await fetch(API_URL, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': key.trim(),
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
+      headers: apiHeaders(key, opts.workspaceId ?? workspaceId(opts.state ?? store.get())),
       body: JSON.stringify(body),
     })
     if (!r.ok) return { ok: false, error: await failureFrom(r, body, 'test') }
