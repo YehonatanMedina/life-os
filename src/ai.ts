@@ -16,6 +16,7 @@ import { buildWeekStats } from './insights'
 import { decryptText } from './crypto'
 import { STATUS_LABEL } from './types'
 import type { AppState, ID } from './types'
+import { readApiFailure } from './atlasFast'
 
 const INSIGHT_URL = './insights/latest.json'
 
@@ -269,6 +270,8 @@ export function buildPulse(s: AppState) {
   return {
     generatedAt: new Date().toISOString(),
     today: t,
+    // התקלה האחרונה של המסלול המהיר (סטטוס וסיבה, בלי תוכן) — לאבחון מרחוק
+    fastApiFailure: readApiFailure(),
     wakeTime: s.settings.wakeTime,
     bedTime: s.settings.bedTime,
     minutesToday,

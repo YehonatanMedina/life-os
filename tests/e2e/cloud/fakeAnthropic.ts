@@ -19,6 +19,8 @@ export type Script = {
   /** במקום תשובה — שגיאת HTTP */
   status?: number
   errorMessage?: string
+  /** ברירת מחדל: הסוג שה-API האמיתי מחזיר לסטטוס הזה */
+  errorType?: string
   /** לחתוך את הזרם באמצע (מדמה נפילת רשת) */
   cutAfterChars?: number
   usage?: { input?: number; cacheWrite?: number; cacheRead?: number; output?: number }
@@ -39,6 +41,8 @@ const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-headers': '*',
   'access-control-allow-methods': 'POST,OPTIONS',
+  // כמו ה-API האמיתי: request-id נגיש לדפדפן, כדי שתקלה תהיה ניתנת לזיהוי
+  'access-control-expose-headers': 'request-id,anthropic-ratelimit-requests-remaining,retry-after',
 }
 
 export class FakeAnthropic {
@@ -107,11 +111,16 @@ export class FakeAnthropic {
     const script = this.scripts.shift() ?? this.fallback
     if (script.delayMs) await new Promise((r) => setTimeout(r, script.delayMs))
     if (script.status) {
+      // כמו ה-API האמיתי: סוג השגיאה נגזר מהסטטוס, ויש request-id בכותרות
+      const type =
+        script.errorType ??
+        ({ 400: 'invalid_request_error', 401: 'authentication_error', 403: 'permission_error', 404: 'not_found_error', 413: 'request_too_large', 429: 'rate_limit_error', 500: 'api_error', 529: 'overloaded_error' } as Record<number, string>)[script.status] ??
+        'api_error'
       return route.fulfill({
         status: script.status,
-        headers: CORS,
+        headers: { ...CORS, 'request-id': `req_fake_${this.requests.length}` },
         contentType: 'application/json',
-        body: JSON.stringify({ type: 'error', error: { type: 'api_error', message: script.errorMessage ?? `fake ${script.status}` } }),
+        body: JSON.stringify({ type: 'error', error: { type, message: script.errorMessage ?? `fake ${script.status}` } }),
       })
     }
     if (!body.stream) {

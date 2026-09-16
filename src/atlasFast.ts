@@ -315,20 +315,117 @@ export function visibleText(partial: string): string {
   return (i >= 0 ? partial.slice(0, i) : partial).replace(/\s+$/, '')
 }
 
-/** הודעת שגיאה בעברית לפי תשובת ה-API */
-export function describeApiError(status: number, body: string): string {
-  let msg = ''
+/** הסיבה שה-API החזיר, כפי שהוא ניסח אותה */
+export function parseApiError(body: string): { type: string; message: string } {
   try {
-    msg = JSON.parse(body)?.error?.message ?? ''
+    const e = JSON.parse(body)?.error
+    return { type: String(e?.type ?? ''), message: String(e?.message ?? '') }
+  } catch {
+    return { type: '', message: String(body ?? '').slice(0, 400) }
+  }
+}
+
+/**
+ * הודעת שגיאה בעברית — **תמיד עם הסיבה שה-API נתן.**
+ * ב-16.9.2026 ההודעה שהוצגה הייתה "שגיאה 400" בלי הסבר, ואי אפשר היה לדעת אם
+ * זה המפתח, היתרה, המודל או צורת הבקשה. הסיבה המקורית שווה יותר מניסוח יפה.
+ */
+export function describeApiError(status: number, body: string): string {
+  const { message } = parseApiError(body)
+  const why = message ? `: ${message.slice(0, 400)}` : ''
+  if (status === 401) return `מפתח ה-API לא תקין. בדוק אותו בהגדרות → אטלס${why}`
+  if (status === 403) return `למפתח הזה אין הרשאה למודל. בדוק ב-platform.claude.com${why}`
+  if (status === 404) return `Claude לא מכיר את המודל ${FAST_MODEL} בחשבון הזה${why}`
+  if (status === 429) return `יותר מדי בקשות לרגע — נסה שוב בעוד רגע${why}`
+  if (status === 529 || status === 503) return `השרת של Claude עמוס כרגע. נסה שוב בעוד רגע${why}`
+  if (status === 400 && /credit|billing/i.test(message)) return `אין יתרה בחשבון ה-API. טען ב-platform.claude.com${why}`
+  if (status === 400) return `Claude דחה את הבקשה${why || ' בלי לומר למה'}`
+  return `Claude החזיר שגיאה ${status}${why || ' בלי הסבר'}`
+}
+
+// -- רישום התקלה האחרונה ----------------------------------------------------------
+// בלי תוכן: רק הסטטוס, הסיבה של ה-API, ומדדים של הבקשה (אורכים). זה נשמר במכשיר,
+// מוצג בהגדרות ← אטלס, ונוסע ב-pulse.json המוצפן — כך שאפשר לאבחן תקלה שקרתה
+// בטלפון גם בלי הטלפון ביד.
+const FAIL_KEY = 'life-os-atlas-apifail'
+
+export type RequestMetrics = {
+  model: string
+  maxTokens: number
+  stream: boolean
+  /** אורך כל בלוק בהודעת המערכת (פרסונה, זיכרון, הקשר) */
+  systemChars: number[]
+  cacheBlocks: number
+  messages: Array<{ role: string; chars: number }>
+  totalChars: number
+}
+
+export type ApiFailure = {
+  at: number
+  where: 'send' | 'test'
+  status: number
+  errType?: string
+  message: string
+  requestId?: string
+  req?: RequestMetrics
+}
+
+/** מדדים בלבד — בלי טקסט, כדי שאפשר יהיה לשתף אבחון בלי לשתף תוכן */
+export function requestMetrics(body: any): RequestMetrics {
+  const system: any[] = Array.isArray(body?.system) ? body.system : []
+  const messages: any[] = Array.isArray(body?.messages) ? body.messages : []
+  const systemChars = system.map((b) => String(b?.text ?? '').length)
+  const msgs = messages.map((m) => ({ role: String(m?.role ?? ''), chars: String(m?.content ?? '').length }))
+  return {
+    model: String(body?.model ?? ''),
+    maxTokens: Number(body?.max_tokens ?? 0),
+    stream: !!body?.stream,
+    systemChars,
+    cacheBlocks: system.filter((b) => b?.cache_control).length,
+    messages: msgs,
+    totalChars: systemChars.reduce((a, b) => a + b, 0) + msgs.reduce((a, b) => a + b.chars, 0),
+  }
+}
+
+export function recordApiFailure(f: ApiFailure) {
+  try {
+    localStorage.setItem(FAIL_KEY, JSON.stringify(f))
   } catch {
     /* ignore */
   }
-  if (status === 401) return 'מפתח ה-API לא תקין. בדוק אותו בהגדרות → אטלס.'
-  if (status === 403) return 'למפתח הזה אין הרשאה למודל. בדוק ב-console.anthropic.com.'
-  if (status === 400 && /credit|billing/i.test(msg)) return 'אין יתרה בחשבון ה-API. טען ב-console.anthropic.com.'
-  if (status === 429) return 'יותר מדי בקשות לרגע — נסה שוב בעוד רגע.'
-  if (status === 529 || status === 503) return 'השרת של Claude עמוס כרגע. נסה שוב בעוד רגע.'
-  return `Claude החזיר שגיאה ${status}${msg ? `: ${msg.slice(0, 120)}` : ''}`
+}
+
+export function readApiFailure(): ApiFailure | null {
+  try {
+    const f = JSON.parse(localStorage.getItem(FAIL_KEY) || 'null')
+    return f && typeof f.status === 'number' && typeof f.at === 'number' ? (f as ApiFailure) : null
+  } catch {
+    return null
+  }
+}
+
+export function clearApiFailure() {
+  try {
+    localStorage.removeItem(FAIL_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+/** תקלה מתשובה שנכשלה — קוראת את הגוף פעם אחת ומחזירה גם את ההודעה להצגה */
+export async function failureFrom(res: Response, body: Record<string, unknown>, where: 'send' | 'test'): Promise<string> {
+  const text = await res.text().catch(() => '')
+  const { type, message } = parseApiError(text)
+  recordApiFailure({
+    at: Date.now(),
+    where,
+    status: res.status,
+    errType: type || undefined,
+    message: message || text.slice(0, 400),
+    requestId: res.headers?.get?.('request-id') ?? undefined,
+    req: requestMetrics(body),
+  })
+  return describeApiError(res.status, text)
 }
 
 /**
@@ -403,7 +500,7 @@ export async function askFast(
       body: JSON.stringify(body),
       signal: ctl.signal,
     })
-    if (!r.ok) throw new Error(describeApiError(r.status, await r.text().catch(() => '')))
+    if (!r.ok) throw new Error(await failureFrom(r, body, 'send'))
     if (!r.body) throw new Error('Claude החזיר תשובה ריקה')
     let raw = ''
     const usage = await readStream(r.body.getReader(), (d) => {
@@ -411,6 +508,7 @@ export async function askFast(
       onDelta?.(visibleText(raw))
     })
     addUsage(usage)
+    clearApiFailure()
     const parsed = parseReply(raw)
     return { ...parsed, usage, model: FAST_MODEL }
   } catch (e) {
@@ -422,9 +520,24 @@ export async function askFast(
   }
 }
 
-/** בדיקת חיבור קצרה מההגדרות — בקשה זעירה בלי הקשר */
-export async function testFast(key: string): Promise<{ ok: true; ms: number } | { ok: false; error: string }> {
+/**
+ * בדיקת חיבור מההגדרות — **אותה בקשה בדיוק כמו שיחה אמיתית**: הפרסונה, הזיכרון
+ * וההקשר, רק עם תקרת תשובה זעירה ובלי זרימה. בדיקה על בקשה מינימלית (מה שהיה
+ * כאן קודם) יכולה לעבור בזמן שכל הודעה אמיתית נדחית — וזה בדיוק מה שקרה ב-16.9.
+ */
+export async function testFast(
+  key: string,
+  opts: { memory?: string; thread?: ThreadTurn[]; state?: AppState } = {},
+): Promise<{ ok: true; ms: number; chars: number } | { ok: false; error: string }> {
   const t0 = Date.now()
+  const full = buildRequest({
+    text: 'ענה במילה אחת: מוכן?',
+    thread: opts.thread ?? [],
+    memory: opts.memory ?? '',
+    state: opts.state ?? store.get(),
+    stream: false,
+  })
+  const body = { ...full, max_tokens: 24 }
   try {
     const r = await fetch(API_URL, {
       method: 'POST',
@@ -434,12 +547,20 @@ export async function testFast(key: string): Promise<{ ok: true; ms: number } | 
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
       },
-      body: JSON.stringify({ model: FAST_MODEL, max_tokens: 8, messages: [{ role: 'user', content: 'ענה במילה אחת: מוכן?' }] }),
+      body: JSON.stringify(body),
     })
-    if (!r.ok) return { ok: false, error: describeApiError(r.status, await r.text().catch(() => '')) }
+    if (!r.ok) return { ok: false, error: await failureFrom(r, body, 'test') }
     const j = await r.json()
-    if (j?.usage) addUsage({ input: j.usage.input_tokens ?? 0, cacheWrite: 0, cacheRead: 0, output: j.usage.output_tokens ?? 0 })
-    return { ok: true, ms: Date.now() - t0 }
+    if (j?.usage) {
+      addUsage({
+        input: j.usage.input_tokens ?? 0,
+        cacheWrite: j.usage.cache_creation_input_tokens ?? 0,
+        cacheRead: j.usage.cache_read_input_tokens ?? 0,
+        output: j.usage.output_tokens ?? 0,
+      })
+    }
+    clearApiFailure()
+    return { ok: true, ms: Date.now() - t0, chars: requestMetrics(body).totalChars }
   } catch {
     return { ok: false, error: 'אין רשת, או שהדפדפן חסם את הקריאה ל-Claude.' }
   }

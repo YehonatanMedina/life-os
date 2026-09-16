@@ -1,0 +1,125 @@
+// ---------------------------------------------------------------------------
+// "שגיאה 400" בלי סיבה. 16.9.2026: הודעה במסלול המהיר נדחתה, וכל מה שהוצג היה
+// המספר — אי אפשר היה לדעת אם זה המפתח, היתרה, המודל או צורת הבקשה. מעכשיו
+// הסיבה של ה-API נשמרת, מוצגת, ונוסעת בדופק המוצפן לאבחון מרחוק.
+// ---------------------------------------------------------------------------
+import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  clearApiFailure, describeApiError, failureFrom, parseApiError, readApiFailure, recordApiFailure, requestMetrics,
+} from '../../../src/atlasFast'
+
+const errBody = (type: string, message: string) => JSON.stringify({ type: 'error', error: { type, message } })
+const TOO_LONG = errBody('invalid_request_error', 'prompt is too long: 214057 tokens > 200000 maximum')
+
+describe('parseApiError', () => {
+  it('מוציא את הסוג וההודעה', () => {
+    expect(parseApiError(TOO_LONG)).toEqual({ type: 'invalid_request_error', message: 'prompt is too long: 214057 tokens > 200000 maximum' })
+  })
+
+  it('גוף שאינו JSON — נשמר כטקסט, חתוך', () => {
+    expect(parseApiError('<html>502 Bad Gateway</html>').message).toBe('<html>502 Bad Gateway</html>')
+    expect(parseApiError('x'.repeat(900)).message).toHaveLength(400)
+    expect(parseApiError('')).toEqual({ type: '', message: '' })
+  })
+})
+
+describe('describeApiError', () => {
+  it('400 — הסיבה של ה-API נכנסת להודעה, לא רק המספר', () => {
+    const msg = describeApiError(400, TOO_LONG)
+    expect(msg).toContain('prompt is too long')
+    expect(msg).toContain('Claude דחה את הבקשה')
+  })
+
+  it('400 בלי הסבר — אומרים את זה במפורש', () => {
+    expect(describeApiError(400, '')).toBe('Claude דחה את הבקשה בלי לומר למה')
+  })
+
+  it('יתרה, מפתח, הרשאה, מודל, עומס — הסבר בעברית ועוד הסיבה המקורית', () => {
+    expect(describeApiError(400, errBody('invalid_request_error', 'Your credit balance is too low'))).toContain('אין יתרה')
+    expect(describeApiError(401, errBody('authentication_error', 'API key is invalid.'))).toMatch(/מפתח ה-API לא תקין.*API key is invalid/)
+    expect(describeApiError(403, errBody('permission_error', 'no access'))).toContain('platform.claude.com')
+    expect(describeApiError(404, errBody('not_found_error', 'model: x'))).toContain('לא מכיר את המודל')
+    expect(describeApiError(429, errBody('rate_limit_error', 'slow down'))).toContain('יותר מדי בקשות')
+    expect(describeApiError(529, '')).toContain('עמוס כרגע')
+    expect(describeApiError(418, '')).toBe('Claude החזיר שגיאה 418 בלי הסבר')
+  })
+})
+
+describe('מדדי הבקשה', () => {
+  const body = {
+    model: 'claude-sonnet-5',
+    max_tokens: 1400,
+    stream: true,
+    system: [
+      { type: 'text', text: 'פרסונה', cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: 'זיכרון ארוך', cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: 'הקשר' },
+    ],
+    messages: [
+      { role: 'user', content: 'שאלה' },
+      { role: 'assistant', content: 'תשובה ארוכה' },
+      { role: 'user', content: 'עוד' },
+    ],
+  }
+
+  it('אורכים בלבד — בלי תוכן, כדי שאפשר יהיה לשתף אבחון', () => {
+    const m = requestMetrics(body)
+    expect(m).toMatchObject({ model: 'claude-sonnet-5', maxTokens: 1400, stream: true, cacheBlocks: 2 })
+    expect(m.systemChars).toEqual([6, 11, 4])
+    expect(m.messages).toEqual([
+      { role: 'user', chars: 4 },
+      { role: 'assistant', chars: 11 },
+      { role: 'user', chars: 3 },
+    ])
+    expect(m.totalChars).toBe(39)
+    expect(JSON.stringify(m)).not.toContain('פרסונה')
+    expect(JSON.stringify(m)).not.toContain('שאלה')
+  })
+
+  it('גוף חסר או פגום לא מפיל', () => {
+    expect(requestMetrics(null)).toMatchObject({ model: '', maxTokens: 0, systemChars: [], messages: [], totalChars: 0 })
+    expect(requestMetrics({ system: 'לא מערך', messages: null })).toMatchObject({ systemChars: [], messages: [] })
+  })
+})
+
+describe('רישום התקלה', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    clearApiFailure()
+  })
+
+  it('נשמר ונקרא; תוכן פגום באחסון מתעלמים ממנו', () => {
+    expect(readApiFailure()).toBeNull()
+    recordApiFailure({ at: 1_800_000_000_000, where: 'send', status: 400, message: 'prompt is too long' })
+    expect(readApiFailure()).toMatchObject({ status: 400, where: 'send', message: 'prompt is too long' })
+    localStorage.setItem('life-os-atlas-apifail', '{not json')
+    expect(readApiFailure()).toBeNull()
+    localStorage.setItem('life-os-atlas-apifail', '{"status":"400"}')
+    expect(readApiFailure()).toBeNull()
+  })
+
+  it('failureFrom: קורא את הגוף, רושם סטטוס, סיבה, request-id ומדדים, ומחזיר הודעה בעברית', async () => {
+    const res = new Response(TOO_LONG, { status: 400, headers: { 'request-id': 'req_abc123' } })
+    const body = { model: 'claude-sonnet-5', max_tokens: 1400, stream: true, system: [{ type: 'text', text: 'ארוך מאוד' }], messages: [{ role: 'user', content: 'שלום' }] }
+    const shown = await failureFrom(res, body, 'test')
+    expect(shown).toContain('prompt is too long')
+    const f = readApiFailure()!
+    expect(f).toMatchObject({ status: 400, where: 'test', errType: 'invalid_request_error', requestId: 'req_abc123' })
+    expect(f.message).toContain('214057')
+    expect(f.req).toMatchObject({ model: 'claude-sonnet-5', totalChars: 13 })
+    expect(f.at).toBeGreaterThan(Date.now() - 5_000)
+  })
+
+  it('failureFrom בלי request-id ובלי גוף — עדיין רושם', async () => {
+    await failureFrom(new Response('', { status: 500 }), {}, 'send')
+    const f = readApiFailure()!
+    expect(f).toMatchObject({ status: 500, where: 'send', message: '' })
+    expect(f.requestId).toBeUndefined()
+  })
+
+  it('clearApiFailure מוחק — הצלחה מנקה את הדגל', () => {
+    recordApiFailure({ at: Date.now(), where: 'send', status: 400, message: 'x' })
+    clearApiFailure()
+    expect(readApiFailure()).toBeNull()
+  })
+})

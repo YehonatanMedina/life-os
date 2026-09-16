@@ -373,6 +373,9 @@ async function runFast(id: string): Promise<boolean> {
       messages: cache.messages.filter((m) => m.id !== holderId).map((m) => (m.id === id ? { ...m, pending: false, failed: true } : m)),
       error: String((e as Error)?.message ?? e),
     })
+    // דחיפה מיד: התקלה נוסעת ב-pulse.json המוצפן, כדי שאפשר יהיה לאבחן
+    // כשל שקרה בטלפון בלי הטלפון ביד (ראו recordApiFailure ב-atlasFast.ts)
+    nudgePush()
     return false
   } finally {
     inFlight.delete(id)
