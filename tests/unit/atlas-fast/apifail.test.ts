@@ -5,7 +5,8 @@
 // ---------------------------------------------------------------------------
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  clearApiFailure, describeApiError, failureFrom, parseApiError, readApiFailure, recordApiFailure, requestMetrics,
+  FastError, VARIANTS, clearApiFailure, clearRecovery, describeApiError, failureFrom, parseApiError, readApiFailure,
+  readRecovery, recordApiFailure, recordRecovery, requestMetrics, variantBody,
 } from '../../../src/atlasFast'
 
 const errBody = (type: string, message: string) => JSON.stringify({ type: 'error', error: { type, message } })
@@ -121,5 +122,84 @@ describe('רישום התקלה', () => {
     recordApiFailure({ at: Date.now(), where: 'send', status: 400, message: 'x' })
     clearApiFailure()
     expect(readApiFailure()).toBeNull()
+  })
+})
+
+describe('גרסאות הבקשה', () => {
+  const full = {
+    model: 'claude-sonnet-5',
+    max_tokens: 1400,
+    stream: true,
+    system: [
+      { type: 'text', text: 'פרסונה', cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: 'זיכרון', cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: 'הקשר' },
+    ],
+    messages: [
+      { role: 'user', content: 'ראשונה' },
+      { role: 'assistant', content: 'תשובה' },
+      { role: 'user', content: 'ההודעה עכשיו' },
+    ],
+  }
+
+  it('הסדר: מלאה, רזה, חשופה', () => {
+    expect(VARIANTS).toEqual(['full', 'lean', 'bare'])
+  })
+
+  it('מלאה — בדיוק מה שנבנה', () => {
+    expect(variantBody(full, 'full')).toBe(full)
+  })
+
+  it('רזה — בלי הזיכרון, בלי מטמון, רק ההודעה הנוכחית; ההקשר נשאר', () => {
+    const b = variantBody(full, 'lean')
+    expect(b.system.map((x: any) => x.text)).toEqual(['פרסונה', 'הקשר'])
+    expect(b.system.every((x: any) => !x.cache_control)).toBe(true)
+    expect(b.messages).toEqual([{ role: 'user', content: 'ההודעה עכשיו' }])
+    expect(b.model).toBe('claude-sonnet-5')
+    expect(b.stream).toBe(true)
+  })
+
+  it('חשופה — פרסונה והודעה אחת', () => {
+    const b = variantBody(full, 'bare')
+    expect(b.system.map((x: any) => x.text)).toEqual(['פרסונה'])
+    expect(b.messages).toHaveLength(1)
+  })
+
+  it('גוף חסר לא מפיל', () => {
+    expect(variantBody({}, 'lean')).toMatchObject({ system: [], messages: [] })
+    expect(variantBody({ system: [{ text: 'רק פרסונה' }], messages: [] }, 'bare').messages).toEqual([])
+  })
+})
+
+describe('FastError', () => {
+  it('נושא סטטוס ותשובה לשאלה אם ניסיון חוזר יעזור', () => {
+    const e = new FastError('Claude דחה את הבקשה', 400, true)
+    expect(e).toBeInstanceOf(Error)
+    expect(e.name).toBe('FastError')
+    expect({ status: e.status, permanent: e.permanent }).toEqual({ status: 400, permanent: true })
+    const t = new FastError('עמוס', 529, false)
+    expect(t.permanent).toBe(false)
+  })
+})
+
+describe('רישום התאוששות', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    clearRecovery()
+  })
+
+  it('איזו גרסה כן עברה, ואחרי איזה סטטוס', () => {
+    expect(readRecovery()).toBeNull()
+    recordRecovery('lean', 400)
+    expect(readRecovery()).toMatchObject({ variant: 'lean', afterStatus: 400 })
+    clearRecovery()
+    expect(readRecovery()).toBeNull()
+  })
+
+  it('אחסון פגום מתעלמים ממנו', () => {
+    localStorage.setItem('life-os-atlas-recovery', 'לא json')
+    expect(readRecovery()).toBeNull()
+    localStorage.setItem('life-os-atlas-recovery', '{"variant":"lean"}')
+    expect(readRecovery()).toBeNull()
   })
 })

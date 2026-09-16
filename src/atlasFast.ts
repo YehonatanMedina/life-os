@@ -363,6 +363,8 @@ export type RequestMetrics = {
 export type ApiFailure = {
   at: number
   where: 'send' | 'test'
+  /** איזו גרסה של הבקשה נדחתה — ראו variantBody */
+  variant?: Variant
   status: number
   errType?: string
   message: string
@@ -413,12 +415,18 @@ export function clearApiFailure() {
 }
 
 /** תקלה מתשובה שנכשלה — קוראת את הגוף פעם אחת ומחזירה גם את ההודעה להצגה */
-export async function failureFrom(res: Response, body: Record<string, unknown>, where: 'send' | 'test'): Promise<string> {
+export async function failureFrom(
+  res: Response,
+  body: Record<string, unknown>,
+  where: 'send' | 'test',
+  variant: Variant = 'full',
+): Promise<string> {
   const text = await res.text().catch(() => '')
   const { type, message } = parseApiError(text)
   recordApiFailure({
     at: Date.now(),
     where,
+    variant,
     status: res.status,
     errType: type || undefined,
     message: message || text.slice(0, 400),
@@ -426,6 +434,74 @@ export async function failureFrom(res: Response, body: Record<string, unknown>, 
     req: requestMetrics(body),
   })
   return describeApiError(res.status, text)
+}
+
+// -- כשהבקשה המלאה נדחית -----------------------------------------------------------
+// 400 הוא דחייה של הבקשה עצמה, ולכן ניסיון חוזר זהה יידחה גם הוא. במקום להשאיר
+// אותו בלי תשובה: שולחים גרסה רזה יותר, ואם גם היא נדחית — גרסה חשופה. מה
+// שהצליח מספר בדיוק מה היה האשם (הזיכרון? ההיסטוריה? המטמון? ההקשר?), וזה
+// נרשם למחסן. אם כולן נדחו — ההודעה עוברת לאטלס העמוק, שלא עובר דרך ה-API הזה.
+export const VARIANTS = ['full', 'lean', 'bare'] as const
+export type Variant = (typeof VARIANTS)[number]
+/** סטטוסים שבהם יש טעם לנסות גרסה רזה (דחייה של הבקשה, לא של המפתח או השרת) */
+const LEAN_RETRY = new Set([400, 413])
+/** סטטוסים שלא יעברו מעצמם — ההודעה תעבור לעמוק */
+const PERMANENT = new Set([400, 401, 403, 404, 413])
+
+/**
+ * גרסה מצומצמת של הבקשה:
+ *   lean — בלי הזיכרון ובלי היסטוריה, בלי cache_control. הפרסונה וההקשר נשארים.
+ *   bare — הפרסונה וההודעה הנוכחית בלבד.
+ */
+export function variantBody(body: any, v: Variant): any {
+  if (v === 'full') return body
+  const system: any[] = Array.isArray(body?.system) ? body.system : []
+  const plain = system.map((b) => ({ type: 'text', text: String(b?.text ?? '') }))
+  const messages: any[] = Array.isArray(body?.messages) ? body.messages : []
+  const lastUser = messages.length ? [messages[messages.length - 1]] : messages
+  // סדר הבלוקים: 0 פרסונה, 1 זיכרון, 2 הקשר
+  const keep = v === 'lean' ? [plain[0], ...plain.slice(2)] : [plain[0]]
+  return { ...body, system: keep.filter(Boolean), messages: lastUser }
+}
+
+/** שגיאה של המסלול המהיר, עם סטטוס ועם התשובה לשאלה "יעזור לנסות שוב?" */
+export class FastError extends Error {
+  status: number
+  permanent: boolean
+  constructor(message: string, status = 0, permanent = false) {
+    super(message)
+    this.name = 'FastError'
+    this.status = status
+    this.permanent = permanent
+  }
+}
+
+const RECOVERY_KEY = 'life-os-atlas-recovery'
+export type FastRecovery = { at: number; variant: Variant; afterStatus: number }
+
+export function recordRecovery(variant: Variant, afterStatus: number) {
+  try {
+    localStorage.setItem(RECOVERY_KEY, JSON.stringify({ at: Date.now(), variant, afterStatus }))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearRecovery() {
+  try {
+    localStorage.removeItem(RECOVERY_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readRecovery(): FastRecovery | null {
+  try {
+    const r = JSON.parse(localStorage.getItem(RECOVERY_KEY) || 'null')
+    return r && typeof r.at === 'number' && typeof r.variant === 'string' ? (r as FastRecovery) : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -484,40 +560,60 @@ export async function askFast(
   onDelta?: (visible: string) => void,
   key: string = apiKey(store.get()),
 ): Promise<FastReply> {
-  if (!key) throw new Error('אין מפתח API לאטלס המהיר — הגדרות → אטלס.')
-  const body = buildRequest(input)
-  const ctl = new AbortController()
-  const t = window.setTimeout(() => ctl.abort(), TIMEOUT_MS)
-  try {
-    const r = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify(body),
-      signal: ctl.signal,
-    })
-    if (!r.ok) throw new Error(await failureFrom(r, body, 'send'))
-    if (!r.body) throw new Error('Claude החזיר תשובה ריקה')
-    let raw = ''
-    const usage = await readStream(r.body.getReader(), (d) => {
-      raw += d
-      onDelta?.(visibleText(raw))
-    })
-    addUsage(usage)
-    clearApiFailure()
-    const parsed = parseReply(raw)
-    return { ...parsed, usage, model: FAST_MODEL }
-  } catch (e) {
-    if ((e as Error)?.name === 'AbortError') throw new Error('Claude לא ענה בזמן. נסה שוב.')
-    if (e instanceof TypeError) throw new Error('אין רשת, או שהדפדפן חסם את הקריאה ל-Claude.')
-    throw e
-  } finally {
-    window.clearTimeout(t)
+  if (!key) throw new FastError('אין מפתח API לאטלס המהיר — הגדרות → אטלס.', 0, true)
+  const full = buildRequest(input)
+  let shown = ''
+  let status = 0
+  for (const variant of VARIANTS) {
+    const body = variantBody(full, variant)
+    const ctl = new AbortController()
+    const t = window.setTimeout(() => ctl.abort(), TIMEOUT_MS)
+    try {
+      const r = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify(body),
+        signal: ctl.signal,
+      })
+      if (!r.ok) {
+        shown = await failureFrom(r, body, 'send', variant)
+        status = r.status
+        // דחייה של המפתח או תקלת שרת — גרסה רזה לא תעזור
+        if (!LEAN_RETRY.has(r.status)) throw new FastError(shown, status, PERMANENT.has(status))
+        continue
+      }
+      if (!r.body) throw new FastError('Claude החזיר תשובה ריקה', 0, false)
+      let raw = ''
+      const usage = await readStream(r.body.getReader(), (d) => {
+        raw += d
+        onDelta?.(visibleText(raw))
+      })
+      addUsage(usage)
+      // הבקשה המלאה עברה — אין תקלה פתוחה. עברה גרסה רזה? הרישום נשאר, כי
+      // הוא מספר בדיוק מה נדחה ומה כן עבד.
+      if (variant === 'full') {
+        clearApiFailure()
+        clearRecovery()
+      } else {
+        recordRecovery(variant, status)
+      }
+      const parsed = parseReply(raw)
+      return { ...parsed, usage, model: FAST_MODEL }
+    } catch (e) {
+      if (e instanceof FastError) throw e
+      if ((e as Error)?.name === 'AbortError') throw new FastError('Claude לא ענה בזמן. נסה שוב.', 0, false)
+      if (e instanceof TypeError) throw new FastError('אין רשת, או שהדפדפן חסם את הקריאה ל-Claude.', 0, false)
+      throw e
+    } finally {
+      window.clearTimeout(t)
+    }
   }
+  throw new FastError(shown || `Claude דחה את הבקשה (${status})`, status, true)
 }
 
 /**

@@ -123,10 +123,13 @@ test('כשל של Claude: ההודעה מסומנת "לא נשלח" עם הסב�
   await expect(A.page.locator('.bubble.failed')).toHaveCount(0)
   expect(claude.requests.filter((r) => r.tag === 'A')).toHaveLength(2)
 
-  // מפתח שגוי — הודעה שמכוונת להגדרות
+  // מפתח שגוי — דחייה שלא תעבור מעצמה: ההודעה עוברת לאטלס העמוק, והסיבה
+  // נשארת בבועה (ולא בבאנר, שנמחק במשיכה הבאה) — כדי שלא ייווצר מסלול מבוי סתום
   claude.reply({ status: 401, errorMessage: 'invalid x-api-key' })
   await say(A.page, 'עוד שאלה')
-  await expect(A.page.locator('.card.rail.alert')).toContainText('מפתח ה-API לא תקין', { timeout: 8_000 })
+  await expect(atlasBubbles(A.page).last()).toContainText('מפתח ה-API לא תקין', { timeout: 8_000 })
+  await expect(atlasBubbles(A.page).last()).toContainText('העברתי לאטלס העמוק')
+  await expect.poll(() => fake.issues.length, { timeout: 8_000 }).toBe(1)
 })
 
 test('בלי מפתח API הכל הולך למסלול העמוק, כמו קודם', async ({ fake, claude, key, openDevice }) => {
@@ -217,22 +220,35 @@ test('שיחה ארוכה: 30 תורות — כל תשובה תוך שניות, 
   await sleep(300)
 })
 
-test('שגיאה 400 עם סיבה: הסיבה מוצגת בשיחה ובהגדרות, ונוסעת בדופק המוצפן — אבחון תקלה של הטלפון בלי הטלפון ביד', async ({ fake, claude, key, openDevice }) => {
-  // 16.9.2026: הודעה מהטלפון נדחתה, וכל מה שהוצג היה "שגיאה 400". חצי יום של
-  // ניחושים אחר כך — מעכשיו הסיבה של ה-API נשמרת ומגיעה גם למחסן.
+test('דחייה של הבקשה המלאה: גרסה רזה עונה בכל זאת, והסיבה נשמרת ונוסעת למחסן', async ({ fake, claude, key, openDevice }) => {
+  // 16.9.2026: הודעה מהטלפון נדחתה ב-400, וכל מה שהוצג היה המספר. מעכשיו גם
+  // מקבלים תשובה (בקשה רזה יותר), וגם יודעים מה נדחה ומה כן עבר.
   const ai = await seedFast(fake, key)
   const A = await openDevice({ tag: 'A', state: fastState('dA', ai), login: true, allowConsole: [NOISE, /status of 400/] })
   await waitSynced(A.page)
   await openAtlas(A.page)
 
   claude.reply({ status: 400, errorMessage: 'prompt is too long: 214057 tokens > 200000 maximum' })
+  claude.reply({ text: 'קיבלתי. שני בלוקים עמוקים היום.' })
   await say(A.page, 'מה המצב היום?')
-  const alert = A.page.locator('.card.rail.alert')
-  await expect(alert).toContainText('prompt is too long', { timeout: 8_000 })
-  await expect(alert).toContainText('Claude דחה את הבקשה')
-  await expect(A.page.locator('.bubble.me.failed')).toHaveCount(1)
+  await expect(atlasBubbles(A.page).last()).toContainText('שני בלוקים עמוקים', { timeout: 10_000 })
+  await settled(A.page)
 
-  // הגדרות ← אטלס: סטטוס, סוג, סיבה, ומדדי הבקשה שנדחתה
+  // שתי בקשות: המלאה (3 בלוקי מערכת, 2 במטמון) והרזה (בלי הזיכרון, בלי מטמון, הודעה אחת)
+  const reqs = claude.requests.filter((r) => r.tag === 'A')
+  expect(reqs).toHaveLength(2)
+  expect(reqs[0].system).toHaveLength(3)
+  expect(reqs[0].system.filter((b) => b.cached)).toHaveLength(2)
+  expect(reqs[1].system).toHaveLength(2)
+  expect(reqs[1].system.filter((b) => b.cached)).toHaveLength(0)
+  expect(reqs[1].messages).toHaveLength(1)
+  expect(reqs[1].messages[0].role).toBe('user')
+
+  // ההודעה לא נכשלה ולא עברה לעמוק
+  await expect(A.page.locator('.bubble.me.failed')).toHaveCount(0)
+  expect(fake.issues).toHaveLength(0)
+
+  // הגדרות ← אטלס: סטטוס, סוג, סיבה ומדדי הבקשה שנדחתה
   await gotoSettings(A.page)
   const card = A.page.locator('.card').filter({ hasText: 'מפתח API של Claude' })
   await expect(card).toContainText('שגיאה 400')
@@ -240,7 +256,7 @@ test('שגיאה 400 עם סיבה: הסיבה מוצגת בשיחה ובהגד�
   await expect(card).toContainText('prompt is too long')
   await expect(card).toContainText('claude-sonnet-5')
 
-  // הדופק נושא את התקלה — בלי טקסט של השיחה
+  // המחסן: התקלה וההתאוששות, בלי טקסט של השיחה
   await gotoTab(A.page, 'היום')
   await addQuickTask(A.page, 'משימה שדוחפת סנכרון')
   await expect
@@ -255,19 +271,57 @@ test('שגיאה 400 עם סיבה: הסיבה מוצגת בשיחה ובהגד�
     )
     .toBe(400)
   const pulse = await decryptJSON<any>(fake.files['pulse.json'], ai)
-  expect(pulse.fastApiFailure).toMatchObject({ where: 'send', errType: 'invalid_request_error' })
+  expect(pulse.fastApiFailure).toMatchObject({ where: 'send', variant: 'full', errType: 'invalid_request_error' })
   expect(pulse.fastApiFailure.requestId).toMatch(/^req_/)
   expect(pulse.fastApiFailure.message).toContain('214057')
   expect(pulse.fastApiFailure.req).toMatchObject({ model: 'claude-sonnet-5', stream: true })
   expect(pulse.fastApiFailure.req.totalChars).toBeGreaterThan(100)
+  expect(pulse.fastRecovery).toMatchObject({ variant: 'lean', afterStatus: 400 })
   expect(JSON.stringify(pulse.fastApiFailure)).not.toContain('מה המצב היום')
+})
 
-  // תשובה מוצלחת מנקה את הרישום
-  claude.reply({ text: 'הכל בסדר עכשיו.' })
-  await gotoTab(A.page, 'שיחה')
-  await A.page.getByRole('button', { name: 'שלח שוב' }).click()
-  await expect(atlasBubbles(A.page).last()).toContainText('הכל בסדר עכשיו.', { timeout: 8_000 })
-  await settled(A.page)
+test('דחייה בכל הגרסאות: ההודעה עוברת לאטלס העמוק ומקבלת תשובה, ולא נשארת "לא נשלח"', async ({ fake, claude, key, openDevice }) => {
+  const ai = await seedFast(fake, key)
+  const A = await openDevice({ tag: 'A', state: fastState('dA', ai), login: true, allowConsole: [NOISE, /status of 400/] })
+  await waitSynced(A.page)
+  await openAtlas(A.page)
+
+  for (let i = 0; i < 3; i++) claude.reply({ status: 400, errorMessage: 'nope' })
+  await say(A.page, 'שאלה שנדחית בכל הגרסאות')
+  await expect(atlasBubbles(A.page).last()).toContainText('העברתי לאטלס העמוק', { timeout: 15_000 })
+  await expect(atlasBubbles(A.page).last()).toContainText('Claude דחה את הבקשה')
+
+  // שלוש בקשות (מלאה, רזה, חשופה), ואז Issue לעמוק
+  expect(claude.requests.filter((r) => r.tag === 'A')).toHaveLength(3)
+  await expect.poll(() => fake.issues.length, { timeout: 10_000 }).toBe(1)
+  await expect(A.page.locator('.bubble.me.failed')).toHaveCount(0)
+  // ובהגדרות — הסיבה המלאה, עם מדדי הבקשה
   await gotoSettings(A.page)
-  await expect(A.page.locator('.card').filter({ hasText: 'מפתח API של Claude' })).not.toContainText('התקלה האחרונה')
+  await expect(A.page.locator('.card').filter({ hasText: 'מפתח API של Claude' })).toContainText('nope')
+  await gotoTab(A.page, 'שיחה')
+
+  // הגרסה החשופה: הפרסונה בלבד, הודעה אחת
+  const bare = claude.requests.filter((r) => r.tag === 'A')[2]
+  expect(bare.system).toHaveLength(1)
+  expect(bare.messages).toHaveLength(1)
+
+  // הערוץ המובטח: הסיבה נכתבת ל-thread.json (נדחף בכל תשובה), ולכן אפשר
+  // לאבחן כשל של הטלפון גם בלי שהמצב במכשיר השתנה.
+  await expect
+    .poll(async () => (await repoThread(fake, ai))?.some((m: any) => /Claude דחה את הבקשה/.test(m.text ?? '')), { timeout: 15_000 })
+    .toBe(true)
+
+  // הדופק נוסע עם השינוי הבא במצב — עם הרישום המלא, ובלי רישום התאוששות
+  await gotoTab(A.page, 'היום')
+  await addQuickTask(A.page, 'משימה שדוחפת סנכרון')
+  await expect
+    .poll(async () => {
+      const raw = fake.files['pulse.json']
+      if (!raw) return undefined
+      const p = await decryptJSON<any>(raw, ai)
+      return p?.fastApiFailure?.variant
+    }, { timeout: 25_000 })
+    .toBe('bare')
+  const pulse = await decryptJSON<any>(fake.files['pulse.json'], ai)
+  expect(pulse.fastRecovery ?? null).toBeNull()
 })

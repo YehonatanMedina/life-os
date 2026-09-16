@@ -23,7 +23,7 @@ import { useSyncExternalStore } from 'react'
 import { actions, alive, skillOf, store, workoutHasData } from './store'
 import { decryptEnvelope, encryptText } from './crypto'
 import { aiKey } from './ai'
-import { askFast, fastReady, type ThreadTurn } from './atlasFast'
+import { askFast, fastReady, type FastError, type ThreadTurn } from './atlasFast'
 import { cloudConfigured, hasPulledOnce, nudgePush } from './cloud'
 import { today } from './dates'
 import type { CalEvent, Exercise, HabitDef, HabitStep, ID, RecurRule, SkillProgress, Task, Track, WeeklyDef, WeekGoal, WorkoutDay, WorkoutLog } from './types'
@@ -369,12 +369,29 @@ async function runFast(id: string): Promise<boolean> {
     if (reply.memory) void appendMemory(reply.memory).catch(() => undefined)
     return true
   } catch (e) {
-    save({
-      messages: cache.messages.filter((m) => m.id !== holderId).map((m) => (m.id === id ? { ...m, pending: false, failed: true } : m)),
-      error: String((e as Error)?.message ?? e),
-    })
+    const err = e as FastError
+    const msg = String(err?.message ?? e)
     // דחיפה מיד: התקלה נוסעת ב-pulse.json המוצפן, כדי שאפשר יהיה לאבחן
     // כשל שקרה בטלפון בלי הטלפון ביד (ראו recordApiFailure ב-atlasFast.ts)
+    if (err?.permanent) {
+      // ה-API דחה את הבקשה עצמה (או את המפתח) — ניסיון חוזר זהה יידחה שוב.
+      // אטלס העמוק לא עובר דרך ה-API הזה, ולכן ההודעה כן תקבל תשובה.
+      // הסיבה נכנסת לבועה עצמה: באנר שגיאה נמחק בשליחה או במשיכה הבאה, ובועה נשארת
+      const note = `המסלול המהיר נדחה: ${msg}${/[.!?]$/.test(msg) ? '' : '.'} העברתי לאטלס העמוק, התשובה תגיע לכאן.`
+      save({
+        messages: cache.messages.map((m) =>
+          m.id === holderId ? { ...m, text: note, streaming: false, replyTo: undefined } : m.id === id ? { ...m, lane: 'deep' as const } : m,
+        ),
+        error: msg,
+      })
+      void pushThread()
+      nudgePush()
+      return sendDeep(id)
+    }
+    save({
+      messages: cache.messages.filter((m) => m.id !== holderId).map((m) => (m.id === id ? { ...m, pending: false, failed: true } : m)),
+      error: msg,
+    })
     nudgePush()
     return false
   } finally {
