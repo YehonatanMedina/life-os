@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { normalizeEdition, type Edition, type Section, type Story } from '../news'
 import { plural } from '../dates'
 import { useToast, vibrate } from '../ui'
 import { actions, useApp } from '../store'
@@ -13,17 +14,6 @@ import { queueNewsFeedback } from '../cloud'
 // של הדפדפן (speechSynthesis) — עובדת גם בלי קובץ ובלי רשת.
 // ---------------------------------------------------------------------------
 
-type Story = { headline: string; body: string }
-type Section = { key: string; title: string; stories: Story[] }
-type Edition = {
-  date: string
-  title?: string
-  minutes?: number
-  audio?: string
-  intro?: string
-  outro?: string
-  sections: Section[]
-}
 
 const READ_KEY = 'life-os-news-read'
 const CACHE_KEY = 'life-os-news-cache'
@@ -68,11 +58,13 @@ export default function NewsCard() {
     // רשת קודם; המטמון מציל כשפותחים בלי אינטרנט
     fetch('./news/latest.json', { cache: 'no-cache' })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((j: Edition) => {
-        if (!alive || !j || !Array.isArray(j.sections)) return
-        setEd(j)
+      .then((j: unknown) => {
+        // מהדורה בצורה חורגת עוברת נרמול במקום להיעלם בשקט — ראו src/news.ts
+        const norm = normalizeEdition(j)
+        if (!alive || !norm) return
+        setEd(norm)
         try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify(j))
+          localStorage.setItem(CACHE_KEY, JSON.stringify(norm))
         } catch {
           /* ignore */
         }
@@ -80,7 +72,8 @@ export default function NewsCard() {
       .catch(() => {
         try {
           const c = localStorage.getItem(CACHE_KEY)
-          if (c && alive) setEd(JSON.parse(c))
+          const cached = c ? normalizeEdition(JSON.parse(c)) : null
+          if (cached && alive) setEd(cached)
         } catch {
           /* ignore */
         }

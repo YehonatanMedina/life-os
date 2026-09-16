@@ -12,8 +12,13 @@ import { execSync } from 'child_process'
 
 const ed = JSON.parse(fs.readFileSync('docs/news/latest.json', 'utf8'))
 
+// אותו נרמול כמו באפליקציה (src/news.ts): sections יכול להגיע כאובייקט לפי מדור
+const secs = Array.isArray(ed.sections)
+  ? ed.sections
+  : Object.entries(ed.sections ?? {}).map(([key, v]) => ({ key, title: v?.title ?? key, stories: Array.isArray(v) ? v : (v?.stories ?? []) }))
+
 const parts = [ed.intro]
-for (const sec of ed.sections ?? []) {
+for (const sec of secs) {
   parts.push(`פרק ${sec.title}.`)
   for (const st of sec.stories ?? []) {
     parts.push(st.headline + '.')
