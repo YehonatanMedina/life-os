@@ -37,6 +37,8 @@ export type FastReply = {
   memory?: string
   usage: UsageDelta
   model: string
+  /** stop_reason של התשובה, כשהוא חריג (max_tokens וכדומה) */
+  stopReason?: string
 }
 export type UsageDelta = { input: number; cacheWrite: number; cacheRead: number; output: number }
 export type Usage = UsageDelta & { month: string; calls: number }
@@ -276,6 +278,10 @@ export function buildRequest(input: { text: string; thread: ThreadTurn[]; memory
   return {
     model: FAST_MODEL,
     max_tokens: MAX_TOKENS,
+    // Sonnet 5 חושב כברירת מחדל, וטוקני החשיבה נספרים בתוך max_tokens — כלומר
+    // מעבר חשיבה ארוך היה יכול לאכול את התקרה ולהחזיר תשובה חתוכה או ריקה.
+    // המסלול הזה קיים כדי לענות תוך שניות; מה שדורש חשיבה עוברת לעמוק (Opus).
+    thinking: { type: 'disabled' },
     stream: input.stream !== false,
     system,
     messages: turns,
@@ -461,7 +467,11 @@ export function variantBody(body: any, v: Variant): any {
   const lastUser = messages.length ? [messages[messages.length - 1]] : messages
   // סדר הבלוקים: 0 פרסונה, 1 זיכרון, 2 הקשר
   const keep = v === 'lean' ? [plain[0], ...plain.slice(2)] : [plain[0]]
-  return { ...body, system: keep.filter(Boolean), messages: lastUser }
+  const out = { ...body, system: keep.filter(Boolean), messages: lastUser }
+  // בגרסה החשופה יורדת גם הגדרת החשיבה — אם מודל עתידי ידחה אותה, הגרסה הזאת
+  // תעבור, והרישום יגיד בדיוק מה היה האשם.
+  if (v === 'bare') delete out.thinking
+  return out
 }
 
 /** שגיאה של המסלול המהיר, עם סטטוס ועם התשובה לשאלה "יעזור לנסות שוב?" */
@@ -511,6 +521,7 @@ export function readRecovery(): FastRecovery | null {
 export async function readStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   onText: (delta: string) => void,
+  onStop?: (reason: string) => void,
 ): Promise<UsageDelta> {
   const dec = new TextDecoder()
   let buf = ''
@@ -530,8 +541,9 @@ export async function readStream(
       usage.cacheWrite += u.cache_creation_input_tokens ?? 0
       usage.cacheRead += u.cache_read_input_tokens ?? 0
       usage.output += u.output_tokens ?? 0
-    } else if (ev.type === 'message_delta' && ev.usage) {
-      usage.output = ev.usage.output_tokens ?? usage.output
+    } else if (ev.type === 'message_delta') {
+      if (ev.usage) usage.output = ev.usage.output_tokens ?? usage.output
+      if (typeof ev.delta?.stop_reason === 'string') onStop?.(ev.delta.stop_reason)
     } else if (ev.type === 'error') {
       throw new Error(ev.error?.message ?? 'stream error')
     }
@@ -589,10 +601,17 @@ export async function askFast(
       }
       if (!r.body) throw new FastError('Claude החזיר תשובה ריקה', 0, false)
       let raw = ''
-      const usage = await readStream(r.body.getReader(), (d) => {
-        raw += d
-        onDelta?.(visibleText(raw))
-      })
+      let stop = ''
+      const usage = await readStream(
+        r.body.getReader(),
+        (d) => {
+          raw += d
+          onDelta?.(visibleText(raw))
+        },
+        (reason) => {
+          stop = reason
+        },
+      )
       addUsage(usage)
       // הבקשה המלאה עברה — אין תקלה פתוחה. עברה גרסה רזה? הרישום נשאר, כי
       // הוא מספר בדיוק מה נדחה ומה כן עבד.
@@ -603,7 +622,11 @@ export async function askFast(
         recordRecovery(variant, status)
       }
       const parsed = parseReply(raw)
-      return { ...parsed, usage, model: FAST_MODEL }
+      // נגמרה התקרה באמצע — עדיף לומר את זה מלהציג חצי תשובה כאילו היא שלמה
+      if (stop === 'max_tokens' || stop === 'model_context_window_exceeded') {
+        parsed.text = `${parsed.text}\n\n(התשובה נקטעה באמצע — שאל אותי להמשך, או סמן "משימה גדולה" כדי להעביר לעמוק.)`.trim()
+      }
+      return { ...parsed, usage, model: FAST_MODEL, stopReason: stop && stop !== 'end_turn' ? stop : undefined }
     } catch (e) {
       if (e instanceof FastError) throw e
       if ((e as Error)?.name === 'AbortError') throw new FastError('Claude לא ענה בזמן. נסה שוב.', 0, false)

@@ -94,6 +94,10 @@ describe('buildRequest — מה נשלח למודל', () => {
     })
     expect(req.model).toBe('claude-sonnet-5')
     expect(req.stream).toBe(true)
+    // Sonnet 5 חושב כברירת מחדל והחשיבה נספרת ב-max_tokens — במסלול שאמור
+    // לענות תוך שניות זה היה חותך תשובות
+    expect(req.thinking).toEqual({ type: 'disabled' })
+    expect(req.max_tokens).toBe(1400)
     expect(req.system).toHaveLength(3)
     expect(req.system[0].cache_control).toEqual({ type: 'ephemeral' })
     expect(req.system[1].cache_control).toEqual({ type: 'ephemeral' })
@@ -203,11 +207,11 @@ describe('askFast — הקריאה עצמה (fetch מדומה)', () => {
   })
 })
 
-function FakeStream(text: string) {
+function FakeStream(text: string, stopReason = 'end_turn') {
   const full = sse([
     ['message_start', { message: { usage: { input_tokens: 500, cache_creation_input_tokens: 0, cache_read_input_tokens: 2000, output_tokens: 1 } } }],
     ...[...text].map((ch) => ['content_block_delta', { index: 0, delta: { type: 'text_delta', text: ch } }] as [string, unknown]),
-    ['message_delta', { delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 40 } }],
+    ['message_delta', { delta: { stop_reason: stopReason }, usage: { output_tokens: 40 } }],
   ])
   const bytes = enc(full)
   let i = 0
@@ -234,5 +238,25 @@ describe('חשבון החודש', () => {
     expect(F.usageCostUSD(u)).toBeCloseTo(0.0234, 6)
     localStorage.setItem('life-os-atlas-usage', JSON.stringify({ ...u, month: '2026-08' }))
     expect(F.readUsage().calls).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+describe('תשובה שנקטעה בתקרת הטוקנים', () => {
+  it('stop_reason=max_tokens — אומרים שהתשובה נקטעה ולא מציגים חצי תשובה בשקט', async () => {
+    const body = FakeStream('התחלתי לענות ואז', 'max_tokens')
+    globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200, body, text: async () => '' })) as any
+    const r = await F.askFast({ text: 'שאלה', thread: [], memory: '', state: S.store.get() }, undefined, 'sk-ant-test')
+    expect(r.stopReason).toBe('max_tokens')
+    expect(r.text).toContain('התחלתי לענות ואז')
+    expect(r.text).toContain('התשובה נקטעה באמצע')
+  })
+
+  it('stop_reason רגיל — בלי הערה', async () => {
+    const body = FakeStream('תשובה שלמה.')
+    globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200, body, text: async () => '' })) as any
+    const r = await F.askFast({ text: 'שאלה', thread: [], memory: '', state: S.store.get() }, undefined, 'sk-ant-test')
+    expect(r.text).toBe('תשובה שלמה.')
+    expect(r.stopReason).toBeUndefined()
   })
 })

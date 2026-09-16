@@ -130,6 +130,7 @@ describe('גרסאות הבקשה', () => {
     model: 'claude-sonnet-5',
     max_tokens: 1400,
     stream: true,
+    thinking: { type: 'disabled' },
     system: [
       { type: 'text', text: 'פרסונה', cache_control: { type: 'ephemeral' } },
       { type: 'text', text: 'זיכרון', cache_control: { type: 'ephemeral' } },
@@ -159,10 +160,13 @@ describe('גרסאות הבקשה', () => {
     expect(b.stream).toBe(true)
   })
 
-  it('חשופה — פרסונה והודעה אחת', () => {
+  it('חשופה — פרסונה והודעה אחת, ובלי הגדרת חשיבה (אם מודל ידחה אותה, הגרסה הזאת תזהה)', () => {
     const b = variantBody(full, 'bare')
     expect(b.system.map((x: any) => x.text)).toEqual(['פרסונה'])
     expect(b.messages).toHaveLength(1)
+    expect('thinking' in b).toBe(false)
+    // הרזה כן שומרת את הגדרת החשיבה — היא בודקת את הזיכרון וההיסטוריה
+    expect(variantBody(full, 'lean').thinking).toEqual({ type: 'disabled' })
   })
 
   it('גוף חסר לא מפיל', () => {
