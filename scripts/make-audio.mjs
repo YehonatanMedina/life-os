@@ -10,27 +10,24 @@
 import fs from 'fs'
 import { execSync } from 'child_process'
 
+import { AUDIO_FILE, audioUrl, isAudioFresh, narrationChunks, readSidecar, stampEditions, textHash, writeSidecar } from './edition-text.mjs'
+
 const ed = JSON.parse(fs.readFileSync('docs/news/latest.json', 'utf8'))
-
-// אותו נרמול כמו באפליקציה (src/news.ts): sections יכול להגיע כאובייקט לפי מדור
-const secs = Array.isArray(ed.sections)
-  ? ed.sections
-  : Object.entries(ed.sections ?? {}).map(([key, v]) => ({ key, title: v?.title ?? key, stories: Array.isArray(v) ? v : (v?.stories ?? []) }))
-
-const parts = [ed.intro]
-for (const sec of secs) {
-  parts.push(`פרק ${sec.title}.`)
-  for (const st of sec.stories ?? []) {
-    parts.push(st.headline + '.')
-    parts.push(st.body)
-  }
-}
-parts.push(ed.outro)
-const chunks = parts.filter(Boolean).map((t) => t.replace(/["״]/g, ''))
+const chunks = narrationChunks(ed)
 const fullText = chunks.join('\n\n')
-console.log('chars:', fullText.length)
+const hash = textHash(chunks)
+const OUT = AUDIO_FILE
+const bytesOf = () => (fs.existsSync(OUT) ? fs.statSync(OUT).size : 0)
+// TTS_STAMP_ONLY: יש קובץ שהוקלט מהטקסט הזה, חסרה רק החתימה (הרצה ידנית)
+const stampOnly = process.env.TTS_STAMP_ONLY === '1'
+const force = process.env.TTS_FORCE === 'true' || process.env.TTS_FORCE === '1'
+console.log('date:', ed.date, 'chars:', fullText.length, 'hash:', hash, stampOnly ? '(stamp only)' : '')
 
-const OUT = 'docs/news/latest.mp3'
+// כבר יש קריינות לטקסט הזה בדיוק — לא מקליטים שוב, ולא דוחפים commit שיעיר אותנו מחדש
+if (!force && !stampOnly && isAudioFresh(readSidecar(), ed, hash, bytesOf())) {
+  console.log('audio already matches this edition — nothing to do')
+  process.exit(0)
+}
 
 async function elevenlabs() {
   const key = process.env.ELEVENLABS_API_KEY
@@ -120,9 +117,23 @@ function edgeTts() {
   return true
 }
 
-const ok = (await elevenlabs()) || (await openai()) || edgeTts()
-if (!ok || !fs.existsSync(OUT) || fs.statSync(OUT).size < 500_000) {
-  console.error('audio generation failed')
+const provider = stampOnly
+  ? 'existing'
+  : (await elevenlabs())
+    ? 'elevenlabs'
+    : (await openai())
+      ? 'openai'
+      : edgeTts()
+        ? 'edge-tts'
+        : ''
+const bytes = bytesOf()
+if (!provider || bytes < 500_000) {
+  // נכשלנו? לא נוגעים בשדה audio — האפליקציה תקריא את המהדורה בעצמה,
+  // במקום לנגן את הקריינות של אתמול מתחת לכותרות של היום.
+  console.error('audio generation failed', { provider, bytes })
   process.exit(1)
 }
-console.log('mp3 bytes:', fs.statSync(OUT).size)
+
+writeSidecar({ date: ed.date, textHash: hash, bytes, provider, generatedAt: new Date().toISOString() })
+const stamped = stampEditions(audioUrl(hash), ed.date)
+console.log('mp3 bytes:', bytes, 'provider:', provider, 'stamped:', stamped.join(', ') || '(none)')

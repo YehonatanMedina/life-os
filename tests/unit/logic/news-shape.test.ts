@@ -53,6 +53,17 @@ describe('normalizeEdition', () => {
     expect(normalizeEdition({ ...base, sections: { tech: { title: 'טק', stories: [] } } })).toBeNull()
   })
 
+  it('שמע בלי חתימה לא מנוגן (יכול להיות של אתמול); עם חתימה — כן', () => {
+    const one = { ...base, sections: [{ key: 'israel', title: 'ישראל', stories: [story('א')] }] }
+    expect(normalizeEdition({ ...one, audio: './news/latest.mp3' })!.audio).toBeUndefined()
+    expect(normalizeEdition({ ...one, audio: './news/latest.mp3?v=' })!.audio).toBeUndefined()
+    expect(normalizeEdition({ ...one, audio: 42 })!.audio).toBeUndefined()
+    expect(normalizeEdition(one)!.audio).toBeUndefined()
+    expect(normalizeEdition({ ...one, audio: './news/latest.mp3?v=abc1234567' })!.audio).toBe(
+      './news/latest.mp3?v=abc1234567',
+    )
+  })
+
   it('סיפור פגום נזרק; קלט שהוא לא מהדורה מחזיר null', () => {
     const ed = normalizeEdition({
       ...base,

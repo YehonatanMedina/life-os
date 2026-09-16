@@ -45,5 +45,8 @@ export function normalizeEdition(input: unknown): Edition | null {
     }))
     .filter((s) => s.stories.length > 0)
   if (!sections.length) return null
-  return { ...j, sections } as Edition
+  // שדה audio בלי חתימה (?v=) הוא שם קובץ קבוע מתבנית הגיליון, ויכול להצביע על
+  // הקריינות של אתמול. בלי חתימה — הדפדפן יקריא את המהדורה החדשה בקולו.
+  const audio = typeof j.audio === 'string' && /[?&]v=[^&]/.test(j.audio) ? j.audio : undefined
+  return { ...j, audio, sections } as Edition
 }
