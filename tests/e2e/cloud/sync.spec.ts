@@ -231,7 +231,6 @@ test('מכשיר שנפתח פעם אחת לפני החיבור (הזרע כבר
   // באג אמיתי (ראו tests/reports/cloud.md, ממצא #1): freshInstall נקבע רק לפי "אין כלום ב-localStorage".
   // מכשיר שנפתח פעם אחת (סגירת כרטיס ההסבר → settingsUpdatedAt טרי) ואז חובר, מנצח במיזוג ההגדרות
   // ודורס במחסן את שעת הקימה, השם וכל שאר ההגדרות של המכשיר הראשי.
-  test.fixme(true, 'ההגדרות של המחסן נדרסות בברירות המחדל של מכשיר שנפתח לפני החיבור')
   const remote = baseState({ deviceId: 'dMain', aiKey: 'k'.repeat(43) })
   remote.settings.wakeTime = '05:45'
   remote.settings.name = 'יהונתן'

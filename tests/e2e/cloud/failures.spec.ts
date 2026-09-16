@@ -99,7 +99,6 @@ test('מחסן עם JSON שבור: האפליקציה מציגה שגיאה ול
   // באג אמיתי (ראו tests/reports/cloud.md, ממצא #3): readRemote מחזיר null גם כשהקובץ קיים
   // אבל לא קריא, והאפליקציה מדווחת "מסונכרן" וכותבת מעליו בדחיפה הבאה. גיסט בפורמט
   // שגרסה ישנה במכשיר לא מכירה (למשל מעטפה עתידית) יידרס באותה דרך.
-  test.fixme(true, 'מחסן לא קריא נחשב "אין מחסן" — סטטוס מסונכרן וכתיבה מעל הקובץ')
   fake.setGistFile('life-os.json', '{"enc":1,"iv":"broken", this is not json')
   const A = await openDevice({ tag: 'A', state: baseState({ deviceId: 'dA' }) })
   await waitStatus(A.page, 'הסנכרון נכשל', 10_000)

@@ -112,24 +112,28 @@ test('שינוי שלא משנה את קבצי הצד (חוץ מ-generatedAt) ל
   expect(fake.patches.slice(n + 1).filter((x) => x.tag === 'A' && encryptedSide(x))).toEqual([])
 })
 
-test('news-feedback.json לא נשלח שוב כשרק updatedAt השתנה', async ({ fake, key, openDevice }) => {
-  // באג אמיתי (ראו tests/reports/cloud.md, ממצא #4): הביטוי שמנקה את החותמת לפני ההשוואה
-  // מצפה ל-"updatedAt":"…" בלי רווח, אבל המשוב נכתב עם JSON.stringify(…, null, 2) — "updatedAt": "…"
-  // — ולכן החותמת אף פעם לא מנוקה והקובץ נשלח מחדש בכל דחיפה.
-  test.fixme(true, 'news-feedback.json נשלח בכל PATCH — הרווח אחרי הנקודתיים לא נתפס ב-stamp()')
+test('news-feedback.json נשלח פעם אחת — ולא שוב בכל דחיפה רק כי החותמת שלו השתנתה', async ({ fake, key, openDevice }) => {
+  // הרקע: החותמת (updatedAt) משתנה בכל בנייה, ולכן קובץ צד עלול להישלח בכל דחיפה.
+  // זו בדיוק המשפחה של הבאג שהציף את GitHub ב-14.9 — השוואה על הטקסט בלי החותמת.
   fake.setGistFile('life-os.json', await encryptJSON(baseState({ deviceId: 'dGist' }), key))
   const A = await openDevice({ tag: 'A', state: baseState({ deviceId: 'dA' }) })
   await waitSynced(A.page)
-  await quiet(fake, 3_000)
-  let n = fake.patches.length
   await addQuickTask(A.page, 'משימה ראשונה')
-  const p1 = await waitPatch(fake, n, (p) => 'life-os.json' in p.files)
-  expect(Object.keys(p1.files)).toContain('news-feedback.json')
+  // נשלח — פעם אחת, בדחיפה הראשונה שיש בה מה לכתוב
+  await expect
+    .poll(() => fake.patches.some((p) => 'news-feedback.json' in p.files), { timeout: 20_000 })
+    .toBe(true)
   await quiet(fake, 3_000)
-  n = fake.patches.length
+
+  // ומכאן — שינוי שלא נוגע במשוב לא גורר אותו שוב
+  const n = fake.patches.length
   await addQuickTask(A.page, 'משימה שנייה')
   const p2 = await waitPatch(fake, n, (p) => 'life-os.json' in p.files)
   expect(Object.keys(p2.files)).toEqual(['life-os.json'])
+  await quiet(fake, 3_000)
+  await addQuickTask(A.page, 'משימה שלישית')
+  await quiet(fake, 4_000)
+  expect(fake.patches.slice(n + 1).filter((p) => 'news-feedback.json' in p.files)).toEqual([])
 })
 
 test('בלי מפתח ניתוח: רק news-feedback.json (גלוי) מצטרף למצב', async ({ fake, key, openDevice }) => {
