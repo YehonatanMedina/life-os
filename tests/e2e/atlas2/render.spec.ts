@@ -76,9 +76,7 @@ test('טקסט עוין בהודעות ובצ׳יפים — מוצג כטקסט,
   expect(await A.page.evaluate(() => (window as any).__pwned)).toBeUndefined()
 })
 
-// FIXME (minor): .cmd / .cmd .grow בלי word-break — כותרת בלי רווחים של 5,000 תווים בצ׳יפ מותחת את
-//   .chat-list ל-36,000px (גלילה אופקית של כל השיחה). .bubble-text כן עוטף (word-break: break-word).
-test.fixme('צ׳יפ עם כותרת של 5,000 תווים בלי רווח — לא מותח את השיחה לרוחב', async ({ fake, key, openDevice }) => {
+test('צ׳יפ עם כותרת של 5,000 תווים בלי רווח — לא מותח את השיחה לרוחב', async ({ fake, key, openDevice }) => {
   const ai = await seedCloud(fake, key)
   await writeThread(fake, ai, [atlasMsg('a1', minutesAgo(1), [{ id: 'c-long', op: 'addEvent', event: { title: LONG, date: today, start: '20:00', end: '21:00' } }], { text: 'הוספתי' })])
   const A = await openDevice({ tag: 'A', state: baseState({ deviceId: 'dA', aiKey: ai }), login: true, allowConsole: ALLOW })
