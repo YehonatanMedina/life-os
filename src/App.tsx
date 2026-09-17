@@ -322,7 +322,7 @@ function Shell() {
           </div>
         )}
         {view === 'today' && <Today goto={goto} />}
-        {view === 'atlas' && <AtlasView />}
+        {view === 'atlas' && <AtlasView goto={goto} />}
         {view === 'calendar' && <CalendarView initialDate={calDate} />}
         {view === 'workout' && <WorkoutsView />}
         {view === 'projects' && <Projects />}

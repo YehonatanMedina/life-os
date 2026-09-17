@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  FastError, NEEDS_WORKSPACE, VARIANTS, apiHeaders, clearApiFailure, clearRecovery, describeApiError, failureFrom,
+  FastError, NEEDS_WORKSPACE, VARIANTS, apiHeaders, blockedByConfig, clearApiFailure, clearRecovery, describeApiError, failureFrom,
   parseApiError, readApiFailure, readRecovery, recordApiFailure, recordRecovery, requestMetrics, variantBody,
 } from '../../../src/atlasFast'
 
@@ -237,5 +237,25 @@ describe('מפתח ברמת הארגון', () => {
     expect(msg).toContain('API keys')
     expect(msg).toContain('wrkspc_')
     expect(msg).not.toContain('בלי לומר למה')
+  })
+})
+
+describe('חסום בגלל הגדרה', () => {
+  const f = (status: number, message = '') => ({ at: Date.now(), where: 'send' as const, status, message })
+
+  it('מפתח, הרשאה, מודל, workspace ויתרה — חסום עד שמתקנים', () => {
+    expect(blockedByConfig(f(401, 'API key is invalid.'))).toBe(true)
+    expect(blockedByConfig(f(403, 'no permission'))).toBe(true)
+    expect(blockedByConfig(f(404, 'model not found'))).toBe(true)
+    expect(blockedByConfig(f(400, WS_MSG))).toBe(true)
+    expect(blockedByConfig(f(400, 'Your credit balance is too low'))).toBe(true)
+  })
+
+  it('תקלה חולפת או בלי רישום — לא חסום', () => {
+    expect(blockedByConfig(f(429, 'slow down'))).toBe(false)
+    expect(blockedByConfig(f(500, 'boom'))).toBe(false)
+    expect(blockedByConfig(f(529, ''))).toBe(false)
+    expect(blockedByConfig(f(400, 'prompt is too long: 214057 tokens'))).toBe(false)
+    expect(blockedByConfig(null)).toBe(false)
   })
 })

@@ -70,6 +70,17 @@ export function apiHeaders(key: string, ws = ''): Record<string, string> {
 
 /** תשובת ה-API שאומרת "המפתח לא משויך ל-workspace" */
 export const NEEDS_WORKSPACE = /not scoped to a workspace|anthropic-workspace-id/i
+
+/**
+ * האם המסלול המהיר חסום בגלל הגדרה — כלומר לא יעבוד שוב עד שמישהו יתקן משהו
+ * בהגדרות (מפתח, workspace, יתרה, הרשאה). שונה מתקלה חולפת: אין טעם לחכות.
+ * הסטטוסים: 400 של בקשה שנדחתה בגלל המפתח/היתרה, 401, 403, 404.
+ */
+export function blockedByConfig(f: ApiFailure | null): boolean {
+  if (!f) return false
+  if (f.status === 401 || f.status === 403 || f.status === 404) return true
+  return f.status === 400 && (NEEDS_WORKSPACE.test(f.message || '') || /credit|billing|api key/i.test(f.message || ''))
+}
 export function fastReady(): boolean {
   return !!apiKey(store.get())
 }

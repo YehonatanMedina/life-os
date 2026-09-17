@@ -346,6 +346,13 @@ test('מפתח ברמת הארגון: הדחייה מוסברת בעברית ו�
   await expect.poll(() => fake.issues.length, { timeout: 10_000 }).toBe(1)
   expect(claude.requests.every((r) => !('anthropic-workspace-id' in r.headers))).toBe(true)
 
+  // פס קבוע בשיחה: הסיבה + כפתור שמוביל ישר להגדרות (באנר רגיל נמחק במשיכה הבאה)
+  const strip = A.page.locator('.card.rail.alert').filter({ hasText: 'המסלול המהיר כבוי' })
+  await expect(strip).toBeVisible()
+  await expect(strip).toContainText('not scoped to a workspace')
+  await strip.getByRole('button', { name: 'לתיקון' }).click()
+  await expect(A.page.getByText('מפתח API של Claude (למסלול המהיר)')).toBeVisible({ timeout: 8_000 })
+
   // בהגדרות: השדה מסומן כנדרש, והסיבה המלאה מוצגת
   await gotoSettings(A.page)
   const card = A.page.locator('.card').filter({ hasText: 'מפתח API של Claude' })

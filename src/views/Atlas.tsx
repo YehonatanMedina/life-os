@@ -8,7 +8,7 @@ import {
   atlasReady, canUndo, commandFailed, describeCommand, discardMessage, nextSweepAt, pollAtlas, retrySend, sendToAtlas,
   undoCommand, useAtlas, type AtlasMessage,
 } from '../atlas'
-import { fastReady } from '../atlasFast'
+import { blockedByConfig, fastReady, readApiFailure } from '../atlasFast'
 import { useTick, useToast, vibrate } from '../ui'
 import { hhmm, iso, niceDate } from '../dates'
 
@@ -26,9 +26,13 @@ const EXAMPLES = [
   'מה הכי חשוב שאעשה עכשיו?',
 ]
 
-export default function AtlasView() {
+export default function AtlasView({ goto }: { goto?: (v: string, arg?: any) => void }) {
   const a = useAtlas()
   const toast = useToast()
+  // תקלת הגדרה (מפתח, workspace, יתרה) לא תיעלם מעצמה — פס קבוע עם דרך לתקן,
+  // במקום באנר שנמחק במשיכה הבאה. ראו blockedByConfig ב-atlasFast.ts.
+  const failure = readApiFailure()
+  const blocked = blockedByConfig(failure) ? failure : null
   // דופק רק בזמן המתנה לתשובה — לספירת השניות ליד "אטלס חושב…"
   const waiting = a.messages.find((m) => m.from === 'user' && m.pending)
   const now = useTick(waiting ? 1000 : null)
@@ -128,6 +132,19 @@ export default function AtlasView() {
             <b>אטלס עוד לא מחובר במכשיר הזה.</b>
             <div className="tiny faint">פתח את קישור ההתקנה מהמחשב (הגדרות → סנכרון) — הוא נושא גם את המפתח של אטלס.</div>
           </div>
+        </div>
+      )}
+      {blocked && ready && (
+        <div className="card rail alert" style={{ ['--rail' as any]: 'var(--warn)' }}>
+          <div className="txt">
+            <b>המסלול המהיר כבוי — הודעות עוברות לאטלס העמוק</b>
+            <div className="tiny faint">{blocked.message}</div>
+          </div>
+          {goto && (
+            <button className="btn sm" onClick={() => goto('settings')}>
+              לתיקון
+            </button>
+          )}
         </div>
       )}
       {a.error && ready && (
