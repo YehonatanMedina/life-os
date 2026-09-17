@@ -166,7 +166,8 @@ export const PERSONA = `אתה אטלס — מנהל החיים של המשתמ�
 { "op": "patchWeekly", "weeklyId", "patch": { … } }
 { "op": "deleteWeekly", "weeklyId" }
 { "op": "addHabit", "habit": { "name", "emoji"?, "minutes"?, "steps"?: ["…"] } }
-{ "op": "patchHabit", "habitId", "patch": { … } }
+{ "op": "patchHabit", "habitId", "patch": { "name"?, "emoji"?, "minutes"?, "steps"?: ["…"] } }
+// steps מחליף את כל רשימת הצעדים. להוספת צעד — לשלוח את הרשימה הקיימת (מופיעה בהקשר) ועוד הצעד החדש, אחרת השאר נמחקים.
 { "op": "deleteHabit", "habitId" }
 כללים: כלל שבועי חייב days לא ריק; כלל חודשי חייב monthDay בין 1 ל-31; אירוע חייב title ו-date; משימה חייבת title. פעולה הפיכה וברורה — בצע. מחיקה או שינוי גדול (עשר משימות, כל התוכנית) — שאל קודם, אלא אם הוא ביקש במפורש. אל תיצור כפילויות: בדוק בהקשר אם זה כבר קיים. אל תבצע פעולות שהוא לא ביקש או לא הסכים להן.
 
@@ -251,7 +252,8 @@ export function buildFastContext(s: AppState, now: number = Date.now()) {
         .sort((a, b) => (a.start ?? '').localeCompare(b.start ?? ''))
         .map((e) => ({ title: e.title, start: e.start, end: e.end, deep: e.deep || undefined })),
       wake: log.wake,
-      habits: alive(s.habits).map((h) => ({ id: h.id, name: h.name, done: !!log.habits?.[h.id] })),
+      // הצעדים נשלחים כדי ש-patchHabit על steps יוכל לשחזר את הרשימה המלאה ולא ימחק אותה
+      habits: alive(s.habits).map((h) => ({ id: h.id, name: h.name, done: !!log.habits?.[h.id], steps: h.steps?.map((x) => x.text) })),
       workout: (() => {
         const plan = alive(s.workoutPlan ?? []).find((d) => d.dow === dow)
         const done = (s.workouts ?? []).find((w) => w.date === t && !w.deleted)
