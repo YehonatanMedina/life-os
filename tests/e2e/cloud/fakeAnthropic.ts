@@ -124,13 +124,14 @@ export class FakeAnthropic {
       })
     }
     if (!body.stream) {
-      // בדיקת החיבור מההגדרות — תשובה רגילה
+      // בקשה בלי זרימה — בדיקת החיבור מההגדרות, או השומר שמבקש בלוק פקודות
       const u = script.usage ?? {}
+      const block = script.block === undefined ? '' : '\n<<<atlas\n' + (typeof script.block === 'string' ? script.block : JSON.stringify(script.block)) + '\n>>>'
       return route.fulfill({
         status: 200,
         headers: CORS,
         contentType: 'application/json',
-        body: JSON.stringify({ id: 'msg_fake', type: 'message', role: 'assistant', model: body.model, content: [{ type: 'text', text: script.text }], stop_reason: 'end_turn', usage: { input_tokens: u.input ?? 12, output_tokens: u.output ?? 3 } }),
+        body: JSON.stringify({ id: 'msg_fake', type: 'message', role: 'assistant', model: body.model, content: [{ type: 'text', text: script.text + block }], stop_reason: 'end_turn', usage: { input_tokens: u.input ?? 12, output_tokens: u.output ?? 3 } }),
       })
     }
     let sse = FakeAnthropic.sse(script)

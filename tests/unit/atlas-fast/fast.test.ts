@@ -76,6 +76,43 @@ describe('parseReply — הטקסט והבלוק', () => {
 })
 
 // ---------------------------------------------------------------------------
+describe('הצהרה בלי פקודה — השומר', () => {
+  it('שורת "[פעולות שבוצעו: …]" שהמודל כתב בעצמו יורדת מהטקסט, גם תוך כדי זרימה', () => {
+    const r = F.parseReply('בוצע — Superman Row במקום חתירה.\n[פעולות שבוצעו: תרגיל עודכן: חתירה אופקית]')
+    expect(r.text).toBe('בוצע — Superman Row במקום חתירה.')
+    expect(r.commands).toEqual([])
+    expect(F.visibleText('בוצע.\n[פעולות שבוצעו: תרגיל עוד')).toBe('בוצע.')
+    // גם כשיש בלוק אמיתי, שורת היומן המזויפת לא נשארת בטקסט
+    const withBlock = F.parseReply('עדכנתי.\n[פעולה שבוצעה: משימה]\n<<<atlas\n{"commands":[{"op":"deleteTask","taskId":"t1"}]}\n>>>')
+    expect(withBlock.text).toBe('עדכנתי.')
+    expect(withBlock.commands).toHaveLength(1)
+  })
+
+  it('claimsAction מזהה הצהרה על שינוי, ולא טקסט רגיל', () => {
+    for (const t of ['בוצע.', 'עדכנתי את האימון', 'הורדתי את התרגיל מהיום', 'החלפתי, 3×10', 'נמחק מהיומן']) expect(F.claimsAction(t)).toBe(true)
+    for (const t of ['שלוש חלופות בלי ציוד', 'כדאי לעדכן את המשקל בסט הבא', 'מה אתה רוצה שאעשה?']) expect(F.claimsAction(t)).toBe(false)
+  })
+
+  it('בקשת השומר: אותה בקשה, בלי זרימה, עם הטיוטה והנחיה לחזור עם הבלוק בלבד', () => {
+    const req = F.verifyRequest({ text: 'תחליף את התרגיל', thread: [], memory: '', state: blankState() }, 'בוצע.')
+    expect(req.stream).toBe(false)
+    const roles = req.messages.map((m) => m.role)
+    expect(roles.slice(-2)).toEqual(['assistant', 'user'])
+    expect(req.messages[req.messages.length - 2].content).toBe('בוצע.')
+    expect(req.messages[req.messages.length - 1].content).toContain('החזר עכשיו את הבלוק בלבד')
+  })
+
+  it('pastBlock: בלוק תקין, בלי מזהים, וחסום בגודל', () => {
+    expect(F.pastBlock([])).toBe('')
+    expect(F.pastBlock([{ id: 'x', op: 'deleteTask', taskId: 't1' }])).toBe('\n<<<atlas\n{"commands":[{"op":"deleteTask","taskId":"t1"}]}\n>>>')
+    const many = Array.from({ length: 30 }, (_, i) => ({ id: `c${i}`, op: 'addEvent', event: { title: `אירוע ארוך למדי מספר ${i}`, date: '2026-10-01' } }))
+    const block = F.pastBlock(many)
+    expect(block.length).toBeLessThan(1200)
+    expect(() => JSON.parse(block.slice(block.indexOf('{'), block.lastIndexOf('}') + 1))).not.toThrow()
+  })
+})
+
+// ---------------------------------------------------------------------------
 describe('buildRequest — מה נשלח למודל', () => {
   it('שלושה בלוקי מערכת: פרסונה (מטמון), זיכרון (מטמון), הקשר (בלי); תורות מתחלפים שמתחילים במשתמש', () => {
     const s = blankState()
@@ -87,7 +124,7 @@ describe('buildRequest — מה נשלח למודל', () => {
       thread: [
         { from: 'atlas', text: 'פתיחה שלא אמורה להיכנס ראשונה' },
         { from: 'user', text: 'שלום' },
-        { from: 'atlas', text: 'שלום.', ops: ['משימה חדשה: א'] },
+        { from: 'atlas', text: 'שלום.', cmds: [{ id: 'c1', op: 'addTask', task: { title: 'א' } }] },
         { from: 'atlas', text: 'עוד משהו.' },
         { from: 'user', text: 'תודה' },
       ],
@@ -106,7 +143,10 @@ describe('buildRequest — מה נשלח למודל', () => {
     expect(req.system[2].text).toContain('"לקרוא"')
     const roles = req.messages.map((m) => m.role)
     expect(roles).toEqual(['user', 'assistant', 'user'])
-    expect(req.messages[1].content).toContain('[פעולות שבוצעו: משימה חדשה: א]')
+    // מה שבוצע נכנס להיסטוריה בפורמט שבו המודל אמור להחזיר פקודות — בלי המזהה
+    expect(req.messages[1].content).toContain('<<<atlas\n{"commands":[{"op":"addTask","task":{"title":"א"}}]}\n>>>')
+    expect(req.messages[1].content).not.toContain('"id"')
+    expect(req.messages[1].content).not.toContain('פעולות שבוצעו')
     expect(req.messages[1].content).toContain('עוד משהו.')
     // ההודעה החדשה מצטרפת לתור האחרון של המשתמש
     expect(req.messages[2].content).toBe('תודה\n\nמה עכשיו?')

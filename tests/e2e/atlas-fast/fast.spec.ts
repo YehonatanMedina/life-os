@@ -96,11 +96,48 @@ test('פקודות מהמסלול המהיר מבוצעות מיד עם ביטו
   // השיחה הקודמת נכנסת כתורות, כולל מה שבוצע
   const msgs = claude.last('A')!.messages
   expect(msgs.map((m) => m.role)).toEqual(['user', 'assistant', 'user'])
-  expect(msgs[1].content).toContain('[פעולות שבוצעו:')
+  // מה שבוצע נכנס להיסטוריה בפורמט הפקודות עצמו, לא כשורת טקסט בעברית
+  expect(msgs[1].content).toContain('<<<atlas')
+  expect(msgs[1].content).toContain('"op":"addEvent"')
+  expect(msgs[1].content).not.toContain('פעולות שבוצעו')
 
   // ביטול מהצ׳יפ מוחק את האירוע
   await atlasBubbles(A.page).nth(0).locator('.cmd').first().getByRole('button', { name: 'ביטול' }).click()
   await expect.poll(async () => (await readState(A.page)).events.find((e) => e.title === 'רופא שיניים מהיר')?.deleted).toBe(true)
+})
+
+test('"בוצע" בלי בלוק: שורת היומן המזויפת יורדת, והשומר מביא את הפקודה האמיתית', async ({ fake, claude, key, openDevice }) => {
+  const ai = await seedFast(fake, key)
+  const A = await openDevice({ tag: 'A', state: fastState('dA', ai), login: true, allowConsole: [NOISE] })
+  await waitSynced(A.page)
+  await openAtlas(A.page)
+
+  // התשובה הראשונה: הצהרה על ביצוע, בלי בלוק — וגם שורת "יומן" שהמודל כתב בעצמו
+  claude.reply({ text: 'בוצע — החלפתי את התרגיל.\n[פעולות שבוצעו: תרגיל עודכן: חתירה אופקית]' })
+  // השומר שואל, והפעם מגיע הבלוק
+  claude.reply({ text: '', block: { commands: [{ op: 'addTask', task: { title: 'תרגיל חלופי לבדוק' } }] } })
+  await say(A.page, 'תחליף לי את התרגיל')
+  await settled(A.page)
+
+  const last = atlasBubbles(A.page).last()
+  await expect(last.locator('.bubble-text')).toHaveText('בוצע — החלפתי את התרגיל.')
+  await expect(last.locator('.cmd')).toHaveCount(1)
+  await expect.poll(async () => (await readState(A.page)).tasks.some((t) => t.title === 'תרגיל חלופי לבדוק' && !t.deleted)).toBe(true)
+
+  // השומר: אותה שיחה, בלי זרימה, עם הטיוטה והנחיה
+  const reqs = claude.requests.filter((r) => r.tag === 'A')
+  expect(reqs).toHaveLength(2)
+  expect(reqs[1].stream).toBe(false)
+  expect(reqs[1].messages.slice(-2).map((m) => m.role)).toEqual(['assistant', 'user'])
+  expect(reqs[1].messages[reqs[1].messages.length - 1].content).toContain('הבלוק בלבד')
+
+  // תשובה שמצהירה ושוב אין פקודה — הטקסט נשאר, בלי צ׳יפים, בלי לולאה
+  claude.reply({ text: 'עדכנתי את זה אתמול.' })
+  claude.reply({ text: '', block: { commands: [] } })
+  await say(A.page, 'ומה עם אתמול?')
+  await settled(A.page)
+  await expect(atlasBubbles(A.page).last().locator('.cmd')).toHaveCount(0)
+  expect(claude.requests.filter((r) => r.tag === 'A')).toHaveLength(4)
 })
 
 test('כשל של Claude: ההודעה מסומנת "לא נשלח" עם הסבר בעברית, "שלח שוב" מנסה שוב במסלול המהיר', async ({ fake, claude, key, openDevice }) => {

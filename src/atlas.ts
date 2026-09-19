@@ -23,7 +23,7 @@ import { useSyncExternalStore } from 'react'
 import { actions, alive, skillOf, store, workoutHasData } from './store'
 import { decryptEnvelope, encryptText } from './crypto'
 import { aiKey } from './ai'
-import { askFast, fastReady, type FastError, type ThreadTurn } from './atlasFast'
+import { askFast, claimsAction, fastReady, verifyFast, type FastError, type ThreadTurn } from './atlasFast'
 import { cloudConfigured, hasPulledOnce, nudgePush } from './cloud'
 import { today } from './dates'
 import type { CalEvent, Exercise, HabitDef, HabitStep, ID, RecurRule, SkillProgress, Task, Track, WeeklyDef, WeekGoal, WorkoutDay, WorkoutLog } from './types'
@@ -310,7 +310,7 @@ export function discardMessage(id: string) {
 function threadForModel(exceptId: string): ThreadTurn[] {
   return cache.messages
     .filter((m) => m.id !== exceptId && !m.pending && !m.failed && !m.streaming && m.text)
-    .map((m) => ({ from: m.from, text: m.text, ops: m.commands?.map((c) => describeCommand(c)) }))
+    .map((m) => ({ from: m.from, text: m.text, cmds: m.commands }))
 }
 
 const inFlight = new Set<string>()
@@ -342,6 +342,11 @@ async function runFast(id: string): Promise<boolean> {
   }
   try {
     const reply = await askFast({ text: user.text, thread: threadForModel(id), memory: cache.memory ?? '', state: store.get() }, paint)
+    // הצהרה בלי פקודה ("בוצע" ושום דבר לא בוצע) — שואלים פעם אחת ומבצעים באמת
+    if (!reply.commands.length && !reply.escalate && claimsAction(reply.text)) {
+      const late = await verifyFast({ text: user.text, thread: threadForModel(id), memory: cache.memory ?? '', state: store.get() }, reply.text)
+      if (late.length) reply.commands = late
+    }
     if (reply.escalate) {
       // ההסבר נשאר כבועה בלי replyTo — כדי שההודעה תיחשב עדיין ממתינה עד שהעמוק יענה
       const note = reply.text || 'על זה אני צריך זמן — מעביר לאטלס העמוק.'

@@ -43,7 +43,7 @@ export type FastReply = {
 export type UsageDelta = { input: number; cacheWrite: number; cacheRead: number; output: number }
 export type Usage = UsageDelta & { month: string; calls: number }
 /** הודעה כפי שהמסלול המהיר רואה אותה — בלי תלות ב-atlas.ts (שמייבא אותנו) */
-export type ThreadTurn = { from: 'user' | 'atlas'; text: string; ops?: string[] }
+export type ThreadTurn = { from: 'user' | 'atlas'; text: string; cmds?: Array<Record<string, any>> }
 
 export function apiKey(s: AppState): string {
   return (s.settings.apiKey ?? '').trim()
@@ -155,6 +155,7 @@ export const PERSONA = `אתה אטלס — מנהל החיים של המשתמ�
 { "op": "addExercise", "dayId", "exercise": { "name", "sets"?, "reps"?, "metric", "note"?, "rest"? (שניות), "cues"? (דגשי ביצוע), "video"? (קישור) } }
 { "op": "patchExercise", "dayId", "exerciseId", "patch": { … } }
 { "op": "deleteExercise", "dayId", "exerciseId" }
+// להחליף או לתקן תרגיל באימון של יום מסוים: patchExercise עם dayId של אותו יום ו-exerciseId — שניהם מופיעים ב-workoutPlan שבהקשר. לשנות שם של תרגיל = patch עם name.
 { "op": "setWorkoutFor", "date", "dayId" }   // האימון של תאריך מסוים, בלי לשנות את התוכנית השבועית
 { "op": "setSkill", "skillId": "sk-handstand"|"sk-frontlever"|"sk-lsit"|"sk-pullup"|"sk-dip", "stageId"?, "exIds"?: ["…"], "done"?: ["…"], "note"? }   // באיזה שלב במיומנות, ואיזה תרגילים מודדים אותה
 { "op": "setSettings", "patch": { "wakeTime"?, "bedTime"?, "dailyTokenGoal"?, "weeklyTokenGoal"?, "tokenMinutes"? } }
@@ -182,7 +183,9 @@ export const PERSONA = `אתה אטלס — מנהל החיים של המשתמ�
 <<<atlas
 {"commands":[…], "escalate": "סיבה" | null, "memory": "שורה" | null}
 >>>
-בלי הבלוק כשאין מה לשים בו. בלי טקסט אחרי הבלוק.`
+בלי הבלוק כשאין מה לשים בו. בלי טקסט אחרי הבלוק.
+
+**פעולה קיימת רק אם היא בבלוק.** הטקסט לא משנה כלום במערכת. אמרת "בוצע", "עדכנתי", "הוספתי", "החלפתי" או "הורדתי" — הפקודה חייבת להופיע בבלוק של אותה תשובה. אין "אעדכן עכשיו" בלי פקודה. אל תכתוב בטקסט רשימה של פעולות שביצעת, ובפרט לא שורה בסגנון [פעולות שבוצעו: …] — האפליקציה מציגה בעצמה את מה שבוצע, מתוך הבלוק, עם כפתור ביטול. בתורות הקודמות בשיחה אתה רואה את הבלוקים שלך בדיוק בצורה הזו: זה מה שבאמת בוצע.`
 
 // -- ההקשר הדחוס -----------------------------------------------------------------
 /**
@@ -294,6 +297,33 @@ export function buildFastContext(s: AppState, now: number = Date.now()) {
 // -- בקשה -------------------------------------------------------------------------
 type Block = { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }
 
+/** כמה תווים של פקודות קודמות נכנסים לתור אחד בשיחה */
+const PAST_BLOCK_CHARS = 900
+
+/**
+ * מה שאטלס עשה בתור קודם — בדיוק בפורמט שבו הוא אמור להחזיר פקודות.
+ *
+ * קודם כאן הופיעה שורה בעברית ("[פעולות שבוצעו: …]"), והמודל למד לחקות אותה:
+ * ב-19.9.2026 הוא כתב "בוצע" ואת שורת הפעולות כטקסט, בלי בלוק — כלומר הצהיר
+ * על עדכון שלא קרה. עכשיו ההיסטוריה מלמדת את הצורה הנכונה: בלוק אמיתי.
+ * המזהים יורדים — הם נקבעים באפליקציה, ומזהה חוזר היה נחשב כפקודה שכבר בוצעה.
+ */
+export function pastBlock(cmds?: Array<Record<string, any>>): string {
+  if (!cmds?.length) return ''
+  const kept: string[] = []
+  let len = 0
+  for (const c of cmds) {
+    if (!c || typeof c.op !== 'string') continue
+    const { id, ...rest } = c
+    const one = JSON.stringify(rest)
+    if (kept.length && len + one.length > PAST_BLOCK_CHARS) break
+    kept.push(one)
+    len += one.length
+  }
+  if (!kept.length) return ''
+  return `\n<<<atlas\n{"commands":[${kept.join(',')}]}\n>>>`
+}
+
 /** גוף הבקשה — מיוצא כדי שהבדיקות יראו בדיוק מה נשלח */
 export function buildRequest(input: { text: string; thread: ThreadTurn[]; memory: string; state: AppState; now?: number; stream?: boolean }) {
   const ctx = buildFastContext(input.state, input.now)
@@ -306,7 +336,7 @@ export function buildRequest(input: { text: string; thread: ThreadTurn[]; memory
   const turns: Array<{ role: 'user' | 'assistant'; content: string }> = []
   for (const m of input.thread.slice(-THREAD_WINDOW)) {
     const role = m.from === 'user' ? 'user' : 'assistant'
-    const content = (m.text || '(פעולה בלי טקסט)') + (m.ops?.length ? `\n[פעולות שבוצעו: ${m.ops.join(', ')}]` : '')
+    const content = (m.text || '(פעולה בלי טקסט)') + pastBlock(m.cmds)
     const last = turns[turns.length - 1]
     if (last && last.role === role) last.content += '\n\n' + content
     else turns.push({ role, content })
@@ -328,11 +358,29 @@ export function buildRequest(input: { text: string; thread: ThreadTurn[]; memory
   }
 }
 
+/**
+ * שורת "יומן פעולות" שהמודל כתב בעצמו בתוך הטקסט. היא תמיד שקר: מה שבוצע
+ * מוצג באפליקציה מתוך הבלוק, לא מהטקסט. יורדת מהתצוגה ומהשיחה השמורה.
+ */
+const FAKE_LOG = /^[ \t]*\[?\s*(?:פעולות שבוצעו|פעולה שבוצעה|הפעולות שבוצעו)\s*:.*$/gm
+export function stripFakeLog(text: string): string {
+  return text.replace(FAKE_LOG, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/**
+ * הטקסט מצהיר על שינוי במערכת? משמש לשומר שמוודא שהצהרה כזו הגיעה עם פקודה.
+ * מכוון לניסוח של ביצוע ("בוצע", "עדכנתי", "הורדתי את X"), לא לשיחה על העבר.
+ */
+const CLAIM = /(^|[\s"'(—,])(בוצע|בוצעו|ביצעתי|עדכנתי|עודכן|עודכנו|עידכנתי|הוספתי|הוספנו|נוספה|נוספו|מחקתי|נמחק|נמחקו|הסרתי|הורדתי|הזזתי|העברתי|החלפתי|שיניתי|קבעתי|רשמתי|סימנתי|עדכנתי\u05D5)([\s.,!?:;—"')]|$)/
+export function claimsAction(text: string): boolean {
+  return CLAIM.test(text || '')
+}
+
 /** מפרק את הטקסט שהמודל החזיר: תשובה + בלוק <<<atlas … >>> אופציונלי */
 export function parseReply(raw: string, now: number = Date.now()): Omit<FastReply, 'usage' | 'model'> {
   const marker = raw.indexOf('<<<atlas')
-  if (marker < 0) return { text: raw.trim(), commands: [] }
-  const text = raw.slice(0, marker).trim()
+  if (marker < 0) return { text: stripFakeLog(raw), commands: [] }
+  const text = stripFakeLog(raw.slice(0, marker))
   let json = raw.slice(marker + '<<<atlas'.length)
   const end = json.indexOf('>>>')
   if (end >= 0) json = json.slice(0, end)
@@ -358,7 +406,9 @@ export function parseReply(raw: string, now: number = Date.now()): Omit<FastRepl
 /** הטקסט להצגה תוך כדי זרימה — מסתיר את הבלוק (או את תחילתו) */
 export function visibleText(partial: string): string {
   const i = partial.indexOf('<<<')
-  return (i >= 0 ? partial.slice(0, i) : partial).replace(/\s+$/, '')
+  const shown = (i >= 0 ? partial.slice(0, i) : partial).replace(/\s+$/, '')
+  // שורת יומן מזויפת לא מהבהבת על המסך גם תוך כדי כתיבה
+  return stripFakeLog(shown)
 }
 
 /** הסיבה שה-API החזיר, כפי שהוא ניסח אותה */
@@ -692,6 +742,68 @@ export async function askFast(
     }
   }
   throw new FastError(shown || `Claude דחה את הבקשה (${status})`, status, true)
+}
+
+// -- השומר: הצהרה בלי פקודה -------------------------------------------------------
+/**
+ * כשהתשובה מצהירה על שינוי ("בוצע", "עדכנתי") אבל לא הגיע בלוק פקודות, שואלים
+ * את המודל שאלה אחת קצרה: התכוונת לבצע? אם כן — הבלוק בלבד. זו הרשת השנייה
+ * מתחת לפרסונה, כדי שהצהרה על עדכון לא תישאר בלי עדכון.
+ */
+export const VERIFY_NUDGE = `בדיקה אוטומטית של האפליקציה, לא הודעה ממנו: בתשובה האחרונה שלך לא היה בלוק פקודות, אבל הטקסט נשמע כאילו משהו עודכן במערכת. פעולה מתבצעת רק דרך הבלוק.
+אם התכוונת שמשהו יתעדכן — החזר עכשיו את הבלוק בלבד, עם הפקודות המדויקות (מזהים מההקשר, בלי שדה id).
+אם לא הייתה כוונה לעדכן (דיברת על העבר, או שזו הייתה התייעצות בלבד) — החזר בלוק עם commands ריק.
+בלי שום טקסט מחוץ לבלוק.`
+
+const VERIFY_MAX_TOKENS = 700
+
+/** הבקשה של השומר — מיוצאת לבדיקות */
+export function verifyRequest(input: { text: string; thread: ThreadTurn[]; memory: string; state: AppState; now?: number }, draft: string) {
+  const base = buildRequest({ ...input, stream: false })
+  return {
+    ...base,
+    max_tokens: VERIFY_MAX_TOKENS,
+    messages: [...base.messages, { role: 'assistant' as const, content: draft.trim() || '(בלי טקסט)' }, { role: 'user' as const, content: VERIFY_NUDGE }],
+  }
+}
+
+/** מריץ את השומר. כישלון כלשהו = בלי פקודות; התשובה שכבר נכתבה לא נפגעת. */
+export async function verifyFast(
+  input: { text: string; thread: ThreadTurn[]; memory: string; state: AppState },
+  draft: string,
+  key: string = apiKey(store.get()),
+): Promise<FastCommand[]> {
+  if (!key) return []
+  const body = verifyRequest(input, draft)
+  const ctl = new AbortController()
+  const t = window.setTimeout(() => ctl.abort(), TIMEOUT_MS)
+  try {
+    const r = await fetch(API_URL, {
+      method: 'POST',
+      headers: apiHeaders(key, workspaceId(store.get())),
+      body: JSON.stringify(body),
+      signal: ctl.signal,
+    })
+    if (!r.ok) return []
+    const j = await r.json()
+    if (j?.usage) {
+      addUsage({
+        input: j.usage.input_tokens ?? 0,
+        cacheWrite: j.usage.cache_creation_input_tokens ?? 0,
+        cacheRead: j.usage.cache_read_input_tokens ?? 0,
+        output: j.usage.output_tokens ?? 0,
+      })
+    }
+    const raw = (Array.isArray(j?.content) ? j.content : [])
+      .filter((b: any) => b?.type === 'text' && typeof b.text === 'string')
+      .map((b: any) => b.text)
+      .join('')
+    return parseReply(raw).commands
+  } catch {
+    return []
+  } finally {
+    window.clearTimeout(t)
+  }
 }
 
 /**
