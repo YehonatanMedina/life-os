@@ -1082,7 +1082,17 @@ function TasksStep({ nextWs }: { nextWs: string }) {
                       <div key={t.id}>
                         <button
                           className="btn xs ghost"
-                          style={{ display: 'block', width: '100%', textAlign: 'start', padding: '3px 6px', marginBottom: 2 }}
+                          style={{
+                            width: '100%',
+                            justifyContent: 'flex-start',
+                            flexWrap: 'wrap',
+                            gap: 4,
+                            textAlign: 'start',
+                            whiteSpace: 'normal',
+                            lineHeight: 1.35,
+                            padding: '3px 6px',
+                            marginBottom: 2,
+                          }}
                           onClick={() => setOpen(open === t.id ? null : t.id)}
                         >
                           · {t.title}
