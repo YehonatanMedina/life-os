@@ -1768,6 +1768,15 @@ export function skillExIds(s: AppState, lad: SkillLadder): ID[] {
  * השלב הנוכחי בסולם. שלב שנקבע ידנית גובר; אחרת מחשבים מהיומן — השלב הראשון
  * שתנאי המעבר שלו עוד לא נסגר. שלב בלי יעד מדיד עוצר את החישוב, כי אין דרך
  * לדעת מהנתונים אם עברת אותו.
+ *
+ * **הכלל שמונע קפיצה של כמה שלבים בבת אחת:** כל השלבים בסולם נמדדים מול אותו
+ * תרגיל בתוכנית (הזיהוי הוא לפי שם), אבל תרגיל מודד רק את הווריאציה שבאמת
+ * בוצעה. שלב מתקדם יותר הוא תרגיל אחר, ולפעמים גם סף נמוך יותר במספרים —
+ * L-Sit עם עקבים על הרצפה דורש 3×20 שניות, ורגל אחת ישרה באוויר דורשת 3×15.
+ * בלי הכלל הזה, 20/35/50 שניות בישיבה עם עקבים היו "סוגרים" גם את Tuck, גם
+ * את רגל אחת וגם את ה-L-Sit המלא — וקופצים מהשלב השני לחמישי בסשן אחד.
+ * לכן מדידה אוטומטית סוגרת **שלב אחד בלבד**: את זה שאתה מתאמן עליו עכשיו.
+ * שלב שנסגר בדרך אחרת מסומן ידנית (`done`) או נקבע במפורש (`stageId`).
  */
 export function currentStage(s: AppState, lad: SkillLadder): number {
   const prog = skillOf(s, lad.id)
@@ -1778,11 +1787,14 @@ export function currentStage(s: AppState, lad: SkillLadder): number {
   const exIds = skillExIds(s, lad)
   const done = new Set(prog?.done ?? [])
   let i = 0
+  let auto = false
   while (i < lad.stages.length - 1) {
     const st = lad.stages[i]
     if (done.has(st.id)) { i++; continue }
+    if (auto) break
     const p = stageProgress(s, exIds, st.target)
     if (!p?.met) break
+    auto = true
     i++
   }
   return i

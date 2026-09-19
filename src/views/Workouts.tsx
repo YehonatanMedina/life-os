@@ -14,6 +14,7 @@ import {
   FOCUS_TIER, RUN_MILESTONES, RUN_WEEKLY_GROWTH, SKILL_TIERS, laddersInTier, tutorial,
 } from '../skills'
 import type { SkillLadder, SkillStage } from '../skills'
+import { basisText, etaText, fitnessForecast, runForecast, skillForecast } from '../forecast'
 import type { ID, WorkoutLog } from '../types'
 import { WORKOUT_KIND_LABEL } from '../types'
 
@@ -59,6 +60,11 @@ export default function Workouts() {
             <section className="sec">
               <div className="sec-h"><h2>ההתקדמות הכוללת</h2></div>
               <OverallCard />
+            </section>
+
+            <section className="sec">
+              <div className="sec-h"><h2>מתי זה קורה</h2></div>
+              <ForecastCard />
             </section>
 
             <section className="sec">
@@ -271,6 +277,72 @@ function OverallCard() {
 }
 
 // ---------------------------------------------------------------------------
+// מתי זה קורה — תאריך יעד לכל מטרה, מחושב מהיומן.
+//
+// למה זה כאן ולא רק אחוזים: אחוז אומר כמה נסגר, לא כמה נשאר. "עמידת ידיים
+// חופשית בפברואר" זה מה שמחזיק אימון בערב שלא בא בו. החוקים כולם ב-forecast.ts
+// — המסך רק מצייר, ולכן אי אפשר שהמסך והמספר יגידו שני דברים שונים.
+// ---------------------------------------------------------------------------
+function ForecastCard() {
+  const s = useApp()
+  const from = todayISO()
+  const skills = useMemo(() => fitnessForecast(s, from), [s.workouts, s.workoutPlan, s.skills, from])
+  const run = useMemo(() => runForecast(s, from), [s.workouts, from])
+  const soonest = [...skills].sort((a, b) => a.next.weeks - b.next.weeks)[0]
+  const nextRun = run.items[0]
+
+  return (
+    <div className="card pad">
+      <div className="tiny faint">לפי הקצב שנרשם ביומן, לא לפי תחושה</div>
+      {soonest && (
+        <div style={{ margin: '6px 0 10px' }}>
+          <b>
+            הכי קרוב: {soonest.emoji} {soonest.stageName}
+          </b>
+          <div className="tiny faint">
+            {etaText(soonest.next.weeks)} · {shortDate(soonest.next.date)} · {basisText(soonest.basis)}
+          </div>
+        </div>
+      )}
+      <div className="list">
+        {skills.map((f) => (
+          <div className="item" key={f.id} style={{ minHeight: 40 }}>
+            <span style={{ width: 22, flex: '0 0 22px', fontSize: 15 }} aria-hidden="true">{f.emoji}</span>
+            <div className="txt">
+              <div className="ttl">{f.name}</div>
+              <div className="tiny faint">
+                השלב הבא: {etaText(f.next.weeks)} · המטרה: {etaText(f.goalWeeks)}
+              </div>
+            </div>
+            <div className="tiny faint ltr" style={{ flexShrink: 0, minWidth: 52, textAlign: 'end' }}>
+              {shortDate(f.goalDate)}
+            </div>
+          </div>
+        ))}
+        <div className="item" style={{ minHeight: 40 }}>
+          <span style={{ width: 22, flex: '0 0 22px', fontSize: 15 }} aria-hidden="true">🏃</span>
+          <div className="txt">
+            <div className="ttl">חצי מרתון</div>
+            <div className="tiny faint">
+              {nextRun
+                ? `הבא: ${nextRun.name} ${etaText(nextRun.weeks)} · +${run.growth} ק״מ לשבוע`
+                : 'כל המרחקים נסגרו'}
+            </div>
+          </div>
+          <div className="tiny faint ltr" style={{ flexShrink: 0, minWidth: 52, textAlign: 'end' }}>
+            {run.goalDate ? shortDate(run.goalDate) : '—'}
+          </div>
+        </div>
+      </div>
+      <div className="tiny faint" style={{ marginTop: 8 }}>
+        התאריך זז רק בשבועות, גם אחרי אימון חזק במיוחד או חלש במיוחד — הוא נשען
+        על חלון של אימונים ועל זמן טיפוסי לשלב, לא על האימון האחרון.
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // המטרות הגדולות — מה שלא בתוכנית עכשיו, מקובץ לפי מתי נוגעים בו.
 //
 // זה לא קישוט: בלי לראות את הרשימה, סולם של שבעה שלבים מרגיש כמו עבודה בלי
@@ -346,6 +418,8 @@ function SkillCard({ lad }: { lad: SkillLadder }) {
   const ids = lad.stages.map((x) => x.id)
   const cur = currentStage(s, lad)
   const exIds = skillExIds(s, lad)
+  // ההערכה מתי השלב ייסגר — אותם חוקים בדיוק של כרטיס "מתי זה קורה"
+  const fc = useMemo(() => skillForecast(s, lad), [s.workouts, s.skills, s.workoutPlan, lad])
   const doneSet = new Set(prog?.done ?? [])
   // שלב נחשב מאחוריך אם הוא לפני השלב הנוכחי או שסומן ידנית
   const passed = (i: number) => i < cur || doneSet.has(ids[i])
@@ -384,8 +458,12 @@ function SkillCard({ lad }: { lad: SkillLadder }) {
 
       <div style={{ padding: '2px 13px 12px' }}>
         <StageBlock lad={lad} st={lad.stages[cur]} state="now" exIds={exIds} />
+        <div className="tiny faint" style={{ marginTop: 8 }}>
+          הערכה: השלב {etaText(fc.next.weeks)} ({shortDate(fc.next.date)}) · המטרה{' '}
+          {etaText(fc.goalWeeks)}
+        </div>
         {!open && cur + 1 < lad.stages.length && (
-          <div className="tiny faint" style={{ marginTop: 8 }}>
+          <div className="tiny faint" style={{ marginTop: 4 }}>
             הבא בתור: {lad.stages[cur + 1].name}
           </div>
         )}

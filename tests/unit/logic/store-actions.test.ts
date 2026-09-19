@@ -900,12 +900,13 @@ describe('מיומנויות — זיהוי אוטומטי מהתוכנית', ()
   it('השלב מחושב מהיומן כשלא נקבע ידנית, וקביעה ידנית גוברת', async () => {
     S = await freshStore(blankState({
       workoutPlan: plan,
-      // 4 סטים של 60 שנ׳ סוגרים גם את "הבסיס" וגם את "טיפוס" ו"פנים לקיר"
+      // 4 סטים של 60 שנ׳ עומדים בתנאי של כמה שלבים בו־זמנית — אבל התרגיל
+      // שבוצע מודד שלב אחד, ולכן מדידה אוטומטית סוגרת אותו ועוצרת
       workouts: [workout({ date: '2026-09-10', sets: { 'ex-handstand': [{ sec: 60 }, { sec: 60 }, { sec: 60 }, { sec: 60 }] } })],
     }))
     const lad = SKILL_LADDERS.find((x) => x.id === 'sk-handstand')!
-    // עבר את שלושת הראשונים, ועומד ב"נגיעות כתף" (אין לו חזרות)
-    expect(lad.stages[S.currentStage(get(), lad)].id).toBe('shoulder-taps')
+    // סגר את "הבסיס" ועומד ב"טיפוס על הקיר" — ולא קופץ שלושה שלבים קדימה
+    expect(lad.stages[S.currentStage(get(), lad)].id).toBe('wall-walk')
     S.actions.setSkill('sk-handstand', { stageId: 'chest-wall' })
     expect(lad.stages[S.currentStage(get(), lad)].id).toBe('chest-wall')
   })
@@ -969,11 +970,11 @@ describe('ההתקדמות הכוללת', () => {
   it('שלב שנסגר מזיז את המחוון, ותוספת משקל לא', async () => {
     S = await freshStore(blankState({ workoutPlan: plan }))
     const before = S.fitnessProgress(get()).pct
-    // 4×60 שנ׳ בעמידת ידיים סוגרות שלושה שלבים בסולם של שבעה
+    // 4×60 שנ׳ בעמידת ידיים סוגרות שלב אחד בסולם של שבעה — זה שבוצע
     S.actions.patchWorkout('2026-09-10', { sets: { 'ex-handstand': [{ sec: 60 }, { sec: 60 }, { sec: 60 }, { sec: 60 }] } })
     const after = S.fitnessProgress(get())
     expect(after.pct).toBeGreaterThan(before)
-    expect(after.parts.find((p) => p.id === 'sk-handstand')).toMatchObject({ stage: 3, total: 7 })
+    expect(after.parts.find((p) => p.id === 'sk-handstand')).toMatchObject({ stage: 1, total: 7 })
     // אימון של חתירה כבדה לא נוגע באף סולם — המחוון לא זז
     S.actions.patchWorkout('2026-09-11', { sets: { 'ex-row': [{ kg: 40, reps: 12 }] } })
     expect(S.fitnessProgress(get()).pct).toBe(after.pct)

@@ -13,6 +13,7 @@
 import { alive, dayCapacity, dayLog, eventsOn, plannedOn, sessionsOn, store, trackById, weekLog } from './store'
 import { addDays, logicalDate, today, weekStart } from './dates'
 import { buildWeekStats } from './insights'
+import { fitnessForecast, runForecast } from './forecast'
 import { decryptText } from './crypto'
 import { STATUS_LABEL } from './types'
 import type { AppState, ID } from './types'
@@ -174,6 +175,17 @@ export function buildAtlasContext(s: AppState) {
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((w) => ({ date: w.date, dayId: w.dayId, title: w.title, kind: w.kind, sets: w.sets, km: w.km, minutes: w.minutes, note: w.note, finished: !!w.finishedAt, at: w.updatedAt })),
     skills: alive(s.skills ?? []).map((k) => ({ id: k.id, stageId: k.stageId, exIds: k.exIds, done: k.done, note: k.note })),
+    // מתי כל מטרת כושר נסגרת, לפי החוקים ב-forecast.ts. בלי זה כל תור של
+    // אטלס מעריך את זה מחדש בעצמו — ומקבל מספר אחר בכל פעם.
+    forecast: {
+      skills: fitnessForecast(s, t).map((f) => ({
+        id: f.id, name: f.name, stage: f.stage + 1, of: f.goal, stageName: f.stageName,
+        level: f.level, need: f.need, metric: f.metric, perWeek: f.perWeek, freq: f.freq,
+        basis: f.basis, nextWeeks: f.next.weeks, nextDate: f.next.date,
+        goalWeeks: f.goalWeeks, goalDate: f.goalDate,
+      })),
+      run: runForecast(s, t),
+    },
     news: (s.news ?? [])
       .filter((n) => !n.deleted && n.date >= addDays(t, -14))
       .map((n) => ({
