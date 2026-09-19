@@ -1506,9 +1506,13 @@ export function plannedOn(s: AppState, date: ISODate): number {
 }
 
 /**
- * מפזר משימות על הימים הקרובים בלי לחרוג מהקיבולת היומית.
- * מחזיר את התאריכים הקודמים כדי לאפשר ביטול.
+ * משקל המשימה בחישוב העומס. משימה בלי הערכת זמן נחשבת אסימון אחד — אחרת
+ * כל המשימות חסרות ההערכה שוקלות אפס, וכולן נופלות על אותו יום.
  */
+export function taskWeight(t: { est?: number }): number {
+  return Math.max(0, t.est ?? 0) || 1
+}
+
 /** האם לפיזור יש בכלל לאן ללכת בטווח הנתון */
 export function hasSpreadRoom(fromDate: ISODate, horizon = 21): boolean {
   const s = store.get()
@@ -1516,7 +1520,24 @@ export function hasSpreadRoom(fromDate: ISODate, horizon = 21): boolean {
   return false
 }
 
-export function spreadTasks(ids: ID[], fromDate: ISODate, horizon = 21): Array<{ id: ID; due?: ISODate }> {
+/**
+ * שתי דרכים לפזר:
+ * `pack` — כמה שיותר מוקדם בלי לחרוג מהקיבולת (דחיפה קדימה ממסך היום).
+ * `balance` — לחלק את העומס בין ימי הטווח, כך שיום אחד לא בולע את כולן
+ *             (פיזור על ימי השבוע בסקירה).
+ */
+export type SpreadMode = 'pack' | 'balance'
+
+/**
+ * מפזר משימות על הימים הקרובים בלי לחרוג מהקיבולת היומית.
+ * מחזיר את התאריכים הקודמים כדי לאפשר ביטול.
+ */
+export function spreadTasks(
+  ids: ID[],
+  fromDate: ISODate,
+  horizon = 21,
+  mode: SpreadMode = 'pack',
+): Array<{ id: ID; due?: ISODate }> {
   const s = store.get()
   const before = ids.map((id) => {
     const t = s.tasks.find((x) => x.id === id)
@@ -1529,36 +1550,57 @@ export function spreadTasks(ids: ID[], fromDate: ISODate, horizon = 21): Array<{
   )
   if (!days.length) return before
 
-  const leftTokens = new Map<ISODate, number>()
-  const leftCount = new Map<ISODate, number>()
   // המשימות שמפזרים לא נספרות כעומס קיים ביום שהן יושבות בו עכשיו
   const moving = new Set(ids)
+  const load = new Map<ISODate, number>()
+  const count = new Map<ISODate, number>()
   for (const d of days) {
-    const cap = dayCapacity(s, d)
     const others = alive(s.tasks).filter((x) => x.due === d && x.status !== 'done' && !moving.has(x.id))
-    leftTokens.set(d, Math.max(0, cap - others.reduce((a, t) => a + (t.est ?? 0), 0)))
-    // גם מספר המשימות ליום מוגבל — אחרת כל המשימות בלי הערכת זמן נופלות על היום הראשון
-    leftCount.set(d, Math.max(0, cap + 2 - others.length))
+    load.set(d, others.reduce((a, t) => a + taskWeight(t), 0))
+    count.set(d, others.length)
   }
 
+  // קריטי קודם, ואז לפי תאריך היעד הנוכחי, ואז הכבדות — הן צריכות את הימים הפנויים
   const tasks = ids
     .map((id) => s.tasks.find((x) => x.id === id))
     .filter((t): t is Task => !!t)
-    .sort((a, b) => (a.due ?? '').localeCompare(b.due ?? ''))
+    .sort(
+      (a, b) =>
+        Number(b.critical ?? false) - Number(a.critical ?? false) ||
+        (a.due ?? '').localeCompare(b.due ?? '') ||
+        taskWeight(b) - taskWeight(a),
+    )
+
+  // תקרת מספר משימות ליום: בפיזור מאוזן — חלוקה שווה על ימי הטווח; אחרת רכה,
+  // רק כדי שמשימות קצרות לא יתערמו בלי גבול.
+  const busy = days.reduce((a, d) => a + (count.get(d) ?? 0), 0)
+  const evenCount = Math.max(1, Math.ceil((tasks.length + busy) / days.length))
+  const roomFor = (d: ISODate) =>
+    mode === 'balance' ? evenCount : dayCapacity(s, d) + 2
+
+  // כמה מלא היום אחרי שנכניס אליו את המשימה — יחסית לקיבולת שלו
+  const fillAfter = (d: ISODate, w: number) => ((load.get(d) ?? 0) + w) / Math.max(1, dayCapacity(s, d))
 
   for (const t of tasks) {
-    const need = Math.max(0, t.est ?? 0)
-    let target =
-      days.find((d) => (leftTokens.get(d) ?? 0) >= need && (leftCount.get(d) ?? 0) > 0) ?? null
-    // אם באמת אין מקום — ליום הכי פנוי מבין ימי העבודה
-    if (!target) {
-      target = days.reduce(
-        (best, d) => ((leftTokens.get(d) ?? -99) > (leftTokens.get(best) ?? -99) ? d : best),
-        days[0],
+    const w = taskWeight(t)
+    const fits = days.filter(
+      (d) => (load.get(d) ?? 0) + w <= dayCapacity(s, d) && (count.get(d) ?? 0) < roomFor(d),
+    )
+    let target: ISODate
+    if (mode === 'balance') {
+      // היום הכי פנוי מבין אלה שנשאר בהם מקום; אם אין — הכי פנוי בכלל
+      const pool = fits.length ? fits : days.filter((d) => (count.get(d) ?? 0) < roomFor(d))
+      target = (pool.length ? pool : days).reduce((best, d) =>
+        fillAfter(d, w) < fillAfter(best, w) ? d : best,
       )
+    } else {
+      // הכי מוקדם שנכנס; אם באמת אין מקום — היום הכי פנוי מבין ימי העבודה
+      target =
+        fits[0] ??
+        days.reduce((best, d) => (fillAfter(d, w) < fillAfter(best, w) ? d : best), days[0])
     }
-    leftTokens.set(target, (leftTokens.get(target) ?? 0) - need)
-    leftCount.set(target, (leftCount.get(target) ?? 0) - 1)
+    load.set(target, (load.get(target) ?? 0) + w)
+    count.set(target, (count.get(target) ?? 0) + 1)
     actions.patchTask(t.id, { due: target })
   }
   return before

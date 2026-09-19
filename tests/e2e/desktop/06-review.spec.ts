@@ -259,13 +259,50 @@ test.describe('סקירה', () => {
     await expect(flow).toContainText('3 משימות בשבוע')
     await flow.getByRole('button', { name: 'פזר על ימי השבוע' }).click()
     await expect(app.locator('.toast')).toContainText('המשימות פוזרו על ימי השבוע')
-    // בלי הערכת אסימונים: מוגבל ל-cap+2 משימות ליום — כולן נכנסות ליום הראשון שנשאר (שישי 11.9)
+    // בלי הערכת אסימונים כל משימה שווה אסימון אחד — שלוש משימות על שני ימים: 2 ו-1
     const friday = flow.locator('.item', { has: app.locator('.tiny.faint.ltr:text-is("11.9")') })
     await expect(friday).toContainText('משימה א')
     await expect(friday).toContainText('משימה ג')
+    const saturday = flow.locator('.item', { has: app.locator('.tiny.faint.ltr:text-is("12.9")') })
+    await expect(saturday).toContainText('משימה ב')
 
     let st = await readState(app)
-    expect(live<Task>(st.tasks).filter((t) => /^משימה [אבג]$/.test(t.title)).every((t) => t.due === '2026-09-11')).toBe(true)
+    expect(live<Task>(st.tasks).filter((t) => /^משימה [אבג]$/.test(t.title)).map((t) => t.due).sort())
+      .toEqual(['2026-09-11', '2026-09-11', '2026-09-12'])
+  })
+
+  test('נגיעה במשימה בתמונת השבוע: יום אחר, אסימונים, והוצאה מהשבוע', async ({ app }) => {
+    await go(app, 'סקירה')
+    await app.locator('.card.rail', { hasText: 'סגירת השבוע שהסתיים' }).click()
+    const flow = app.getByRole('dialog', { name: 'מעבר שבועי' })
+    const next = flow.getByRole('button', { name: 'הבא ←' })
+    for (let i = 0; i < 2; i++) await next.click()
+    await flow.locator('.qcard textarea').first().fill('x')
+    await flow.locator('.scorebar').getByRole('button', { name: '5', exact: true }).click()
+    await next.click()
+    await next.click()
+    const inp = flow.getByPlaceholder('מה עוד חייב לקרות בשבוע הבא?')
+    await inp.fill('משימה לבדיקה')
+    await inp.press('Enter')
+    const dayRow = (d: string) => flow.locator('.item', { has: app.locator(`.tiny.faint.ltr:text-is("${d}")`) })
+    await expect(dayRow('11.9')).toContainText('משימה לבדיקה')
+
+    // פתיחה: העברה לשבת, ואז שתי לחיצות על "עוד אסימונים"
+    await flow.getByRole('button', { name: /משימה לבדיקה/ }).click()
+    await flow.getByRole('button', { name: /להעביר לש׳ 12.9/ }).click()
+    await expect(dayRow('12.9')).toContainText('משימה לבדיקה')
+    await flow.getByRole('button', { name: 'עוד אסימונים' }).click()
+    await flow.getByRole('button', { name: 'עוד אסימונים' }).click()
+    await expect(dayRow('12.9')).toContainText('2/6')
+    await expect(flow).toContainText('2 מתוך 12 אסימונים')
+
+    // החוצה מהשבוע — עם ביטול
+    await flow.getByRole('button', { name: 'הוצאה מהשבוע' }).click()
+    await expect(flow).toContainText('0 משימות בשבוע')
+    await app.locator('.toast').getByRole('button', { name: 'ביטול' }).click()
+    await expect(flow).toContainText('משימה אחת בשבוע')
+    const st = await readState(app)
+    expect(live<Task>(st.tasks).find((t) => t.title === 'משימה לבדיקה')).toMatchObject({ due: '2026-09-12', est: 2 })
   })
 
   test('"פזר על ימי השבוע" עם הערכות אסימונים מכבד את הקיבולת היומית', async ({ app }) => {

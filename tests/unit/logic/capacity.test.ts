@@ -223,6 +223,79 @@ describe('spreadTasks / hasSpreadRoom', () => {
     expect(st.store.get().tasks[0].due).toBe('2026-09-11')
   })
 
+  it('בלי הערכת זמן משימה שווה אסימון אחד — ולא אפס שמערים הכל על יום אחד', async () => {
+    const st = await freshStore(
+      blankState({ tasks: Array.from({ length: 4 }, (_, i) => task({ id: `t${i}` })) }),
+    )
+    st.spreadTasks(['t0', 't1', 't2', 't3'], '2026-09-11', 21, 'balance')
+    const s = st.store.get()
+    const days = new Set(s.tasks.map((t) => t.due))
+    expect(days.size).toBe(4) // יום לכל משימה, לא ערימה אחת
+  })
+
+  it('פיזור מאוזן: שש משימות על שלושה ימים — שתיים לכל יום', async () => {
+    const st = await freshStore(
+      blankState({
+        settings: settings({ dailyTokenGoal: 6 }),
+        tasks: Array.from({ length: 6 }, (_, i) => task({ id: `t${i}`, est: 1 })),
+      }),
+    )
+    st.spreadTasks(
+      ['t0', 't1', 't2', 't3', 't4', 't5'],
+      '2026-09-11',
+      3,
+      'balance',
+    )
+    const s = st.store.get()
+    const count: Record<string, number> = {}
+    for (const t of s.tasks) count[t.due!] = (count[t.due!] ?? 0) + 1
+    expect(Object.values(count).sort()).toEqual([2, 2, 2])
+  })
+
+  it('פיזור מאוזן מכבד קיבולת: משימה כבדה הולכת ליום שיש בו מקום', async () => {
+    const st = await freshStore(
+      blankState({
+        settings: settings({ dailyTokenGoal: 6 }),
+        tasks: [
+          task({ id: 'fixed', due: '2026-09-11', est: 5 }),
+          task({ id: 'heavy', est: 4 }),
+          task({ id: 'light', est: 1 }),
+        ],
+      }),
+    )
+    st.spreadTasks(['heavy', 'light'], '2026-09-11', 3, 'balance')
+    const s = st.store.get()
+    expect(s.tasks.find((t) => t.id === 'heavy')?.due).not.toBe('2026-09-11')
+    for (const d of new Set(s.tasks.map((t) => t.due!))) {
+      expect(st.plannedOn(s, d)).toBeLessThanOrEqual(st.dayCapacity(s, d))
+    }
+  })
+
+  it('קריטי קודם: המשימה הקריטית מקבלת את היום הראשון', async () => {
+    const st = await freshStore(
+      blankState({
+        settings: settings({ dailyTokenGoal: 2 }),
+        tasks: [
+          task({ id: 'plain', est: 2, due: '2026-09-11' }),
+          task({ id: 'must', est: 2, due: '2026-09-13', critical: true }),
+        ],
+      }),
+    )
+    st.spreadTasks(['plain', 'must'], '2026-09-11', 3, 'balance')
+    expect(st.store.get().tasks.find((t) => t.id === 'must')?.due).toBe('2026-09-11')
+  })
+
+  it('מצב pack נשאר מוקדם ככל האפשר — ולא מפזר סתם', async () => {
+    const st = await freshStore(
+      blankState({
+        settings: settings({ dailyTokenGoal: 6 }),
+        tasks: Array.from({ length: 3 }, (_, i) => task({ id: `t${i}`, est: 2 })),
+      }),
+    )
+    st.spreadTasks(['t0', 't1', 't2'], '2026-09-11', 21)
+    expect(st.store.get().tasks.every((t) => t.due === '2026-09-11')).toBe(true)
+  })
+
   it('לא מפזר אל תוך ימים שכבר מלאים ממשימות קיימות', async () => {
     const st = await freshStore(
       blankState({

@@ -644,12 +644,13 @@ test.describe('שבוע שלם', () => {
       const dayRow = (d: string) => flow.locator('.item', { has: app.locator(`.tiny.faint.ltr:text-is("${d}")`) })
       await expect(dayRow('20.9')).toContainText('8/6')
       await flow.getByRole('button', { name: 'פזר על ימי השבוע' }).click()
-      // 1 + 3 נכנסים לראשון (6), 4 לא נכנסים בשארית (2) → שני
+      // פיזור מאוזן: שלוש משימות על שבעה ימים → יום לכל אחת, הכבדה ראשונה
       await expect(dayRow('20.9')).toContainText('4/6')
-      await expect(dayRow('20.9')).toContainText('לקרוא על SOTA')
-      await expect(dayRow('20.9')).toContainText('לבנות דף נחיתה')
-      await expect(dayRow('21.9')).toContainText('4/6')
-      await expect(dayRow('21.9')).toContainText('לכתוב את פרק 2')
+      await expect(dayRow('20.9')).toContainText('לכתוב את פרק 2')
+      await expect(dayRow('21.9')).toContainText('3/6')
+      await expect(dayRow('21.9')).toContainText('לבנות דף נחיתה')
+      await expect(dayRow('22.9')).toContainText('1/6')
+      await expect(dayRow('22.9')).toContainText('לקרוא על SOTA')
       await next.click()
       await expect(title).toHaveText('סיום')
       await expect(flow.locator('.card', { hasText: 'מטרות־העל' }).locator('.item')).toHaveCount(2)
@@ -662,7 +663,7 @@ test.describe('שבוע שלם', () => {
       const goals = app.locator('.card', { hasText: 'מטרות־העל של השבוע' })
       await expect(goals.locator('.item .ttl')).toHaveText(['לסיים את פרק 2 בסמינר', 'שלושה אימונים'])
       await expect(goals).toContainText('0/2')
-      await expect(tasksCard(app).locator('.item .ttl')).toHaveText(['לקרוא על SOTA', 'לבנות דף נחיתה'])
+      await expect(tasksCard(app).locator('.item .ttl')).toHaveText(['לכתוב את פרק 2'])
       await expect(tasksCard(app)).toContainText('4 אסימונים מתוכננים · קיבולת 6')
 
       // סקירה: השבוע שנסגר, הגרף, שבועות קודמים
@@ -685,9 +686,9 @@ test.describe('שבוע שלם', () => {
       await nav(app, 'יומן')
       await app.getByRole('button', { name: 'יום', exact: true }).click()
       await expect(dayList(app)).toContainText('יום ראשון, 20 בספטמבר')
-      await expect(dayList(app).locator('.item', { hasText: 'לבנות דף נחיתה' })).toBeVisible()
-      await app.getByRole('button', { name: 'הבא' }).click()
       await expect(dayList(app).locator('.item', { hasText: 'לכתוב את פרק 2' })).toBeVisible()
+      await app.getByRole('button', { name: 'הבא' }).click()
+      await expect(dayList(app).locator('.item', { hasText: 'לבנות דף נחיתה' })).toBeVisible()
 
       await reload(app)
       await expect(app.locator('.card', { hasText: 'מטרות־העל של השבוע' })).toContainText('0/2')
@@ -700,8 +701,9 @@ test.describe('שבוע שלם', () => {
       expect(cur.goals.map((g: any) => g.text)).toEqual(['לסיים את פרק 2 בסמינר', 'שלושה אימונים'])
       expect(typeof cur.plannedAt).toBe('number')
       const tasks = live<Task>(st.tasks)
-      expect(tasks.find((t) => t.id === 't-pool-ch2')!.due).toBe(NEXT_MON)
-      expect(tasks.find((t) => t.id === 't-pool-landing')!.due).toBe(NEXT_SUN)
+      // הפיזור המאוזן: הכבדה (4) לראשון, אחריה דף הנחיתה (3) לשני
+      expect(tasks.find((t) => t.id === 't-pool-ch2')!.due).toBe(NEXT_SUN)
+      expect(tasks.find((t) => t.id === 't-pool-landing')!.due).toBe(NEXT_MON)
       await measure('ראשון הבא')
     })
 

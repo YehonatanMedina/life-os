@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   actions, alive, dayCapacity, dayLog, defaultTrackId, habitPct, hasSpreadRoom, minutesByTrack,
-  minutesOn, plannedOn, spreadTasks, trackById, uid, useApp, weekLog, weekMinutes, weekSessions,
+  minutesOn, plannedOn, spreadTasks, taskWeight, trackById, uid, useApp, weekLog, weekMinutes,
+  weekSessions,
 } from '../store'
 import { REVIEW_QUESTIONS } from '../seed'
 import {
@@ -932,11 +933,64 @@ function GoalsStep({
 }
 
 // ---------------------------------------------------------------------------
+/** עריכה מהירה של משימה בתוך תמונת השבוע: יום, אסימונים, קריטי, או החוצה */
+function TaskTune({ task, dates, onOut }: { task: Task; dates: string[]; onOut: () => void }) {
+  const est = task.est ?? 0
+  return (
+    <div className="stack" style={{ gap: 6, margin: '2px 0 8px' }}>
+      <div className="row wrap" style={{ gap: 4 }}>
+        {dates.map((d) => (
+          <button
+            key={d}
+            className={`tag${task.due === d ? ' on' : ''}`}
+            style={{ ['--tc' as any]: 'var(--accent)' }}
+            aria-label={`להעביר ל${HE_DAYS_SHORT[dow(d)]} ${shortDate(d)}`}
+            onClick={() => {
+              actions.patchTask(task.id, { due: d })
+              vibrate()
+            }}
+          >
+            {HE_DAYS_SHORT[dow(d)]}
+          </button>
+        ))}
+      </div>
+      <div className="row wrap" style={{ gap: 4 }}>
+        <span className="tiny faint">אסימונים</span>
+        <button
+          className="btn xs ghost"
+          aria-label="פחות אסימונים"
+          disabled={est <= 0}
+          onClick={() => actions.patchTask(task.id, { est: Math.max(0, est - 1) || undefined })}
+        >
+          −
+        </button>
+        <b className="tiny ltr" style={{ minWidth: 14, textAlign: 'center' }}>{est}</b>
+        <button
+          className="btn xs ghost"
+          aria-label="עוד אסימונים"
+          onClick={() => actions.patchTask(task.id, { est: Math.min(12, est + 1) })}
+        >
+          +
+        </button>
+        <button
+          className={`btn xs${task.critical ? '' : ' ghost'}`}
+          onClick={() => actions.patchTask(task.id, { critical: !task.critical })}
+        >
+          קריטי
+        </button>
+        <button className="btn xs ghost" onClick={onOut}>הוצאה מהשבוע</button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 function TasksStep({ nextWs }: { nextWs: string }) {
   const s = useApp()
   const toast = useToast()
   const [txt, setTxt] = useState('')
   const [trk, setTrk] = useState<ID | undefined>(undefined)
+  const [open, setOpen] = useState<ID | null>(null)
   const prevDue = useRef(new Map<string, string | undefined>())
   // סגירה מאוחרת של שבוע: מתכננים מהיום, לא מימים שכבר עברו
   const planFrom = nextWs > todayISO() ? nextWs : todayISO()
@@ -947,7 +1001,7 @@ function TasksStep({ nextWs }: { nextWs: string }) {
   const inWeek = alive(s.tasks).filter(
     (t) => t.status !== 'done' && t.due && t.due >= nextWs && t.due <= weekEnd,
   )
-  const planned = inWeek.reduce((a, t) => a + (t.est ?? 0), 0)
+  const planned = inWeek.reduce((a, t) => a + taskWeight(t), 0)
   const cap = dates.reduce((a, d) => a + dayCapacity(s, d), 0)
 
   // המאגר: באיחור, בלי תאריך, או אחרי השבוע הבא — כל מה שאפשר למשוך פנימה
@@ -969,8 +1023,8 @@ function TasksStep({ nextWs }: { nextWs: string }) {
   return (
     <>
       <p className="small muted" style={{ margin: 0 }}>
-        מה נכנס לשבוע הבא. נגיעה מושכת משימה פנימה, ובסוף אפשר לפזר אותן על הימים לפי הקיבולת של
-        כל יום.
+        מה נכנס לשבוע הבא. נגיעה מושכת משימה פנימה, נגיעה במשימה שכבר בשבוע פותחת אותה —
+        יום, אסימונים, קריטי, או החוצה. הפיזור מחלק את העומס בין הימים לפי הקיבולת שלהם.
       </p>
 
       <div className="card pad">
@@ -994,7 +1048,7 @@ function TasksStep({ nextWs }: { nextWs: string }) {
             disabled={!inWeek.length}
             onClick={() => {
               if (!hasSpreadRoom(planFrom, dates.length)) return toast('אין יום פנוי בשבוע הבא')
-              const before = spreadTasks(inWeek.map((t) => t.id), planFrom, dates.length)
+              const before = spreadTasks(inWeek.map((t) => t.id), planFrom, dates.length, 'balance')
               toast('המשימות פוזרו על ימי השבוע', {
                 label: 'ביטול',
                 run: () => before.forEach((x) => actions.patchTask(x.id, { due: x.due })),
@@ -1006,14 +1060,14 @@ function TasksStep({ nextWs }: { nextWs: string }) {
         </div>
       </div>
 
-      {/* פירוט לפי יום */}
+      {/* פירוט לפי יום — וגם המקום לתקן אותו */}
       <div className="card">
         <div className="section-title" style={{ padding: '12px 13px 4px' }}>איך זה יושב על הימים</div>
         <div className="list">
           {dates.map((d) => {
             const list = inWeek.filter((t) => t.due === d)
             const c = dayCapacity(s, d)
-            const p = list.reduce((a, t) => a + (t.est ?? 0), 0)
+            const p = list.reduce((a, t) => a + taskWeight(t), 0)
             return (
               <div className="item" key={d} style={{ alignItems: 'flex-start' }}>
                 <div style={{ width: 42, flex: '0 0 42px' }}>
@@ -1025,14 +1079,40 @@ function TasksStep({ nextWs }: { nextWs: string }) {
                     <div className="tiny faint">פנוי</div>
                   ) : (
                     list.map((t) => (
-                      <div key={t.id} className="tiny" style={{ marginBottom: 2 }}>
-                        · {t.title}
-                        {t.est ? <span className="faint"> ({t.est})</span> : null}
+                      <div key={t.id}>
+                        <button
+                          className="btn xs ghost"
+                          style={{ display: 'block', width: '100%', textAlign: 'start', padding: '3px 6px', marginBottom: 2 }}
+                          onClick={() => setOpen(open === t.id ? null : t.id)}
+                        >
+                          · {t.title}
+                          <span className="faint"> ({taskWeight(t)})</span>
+                          {t.critical && (
+                            <span className="chip" style={{ background: 'var(--bad-soft)', color: 'var(--bad-text)', marginInlineStart: 6 }}>
+                              קריטי
+                            </span>
+                          )}
+                        </button>
+                        {open === t.id && (
+                          <TaskTune
+                            task={t}
+                            dates={dates}
+                            onOut={() => {
+                              const was = t.due
+                              actions.patchTask(t.id, { due: undefined })
+                              setOpen(null)
+                              toast('יצאה מהשבוע', { label: 'ביטול', run: () => actions.patchTask(t.id, { due: was }) })
+                            }}
+                          />
+                        )}
                       </div>
                     ))
                   )}
                 </div>
-                <span className="tiny faint ltr" style={{ flexShrink: 0 }}>
+                <span
+                  className="tiny ltr"
+                  style={{ flexShrink: 0, color: p > c ? 'var(--warn-text)' : 'var(--text-faint)', fontWeight: p > c ? 700 : 400 }}
+                >
                   {p}/{c}
                 </span>
               </div>
@@ -1139,7 +1219,7 @@ function DoneStep({
     (t) => t.status !== 'done' && t.due && t.due >= nextWs && t.due <= weekEnd,
   )
   const cap = weekDates(nextWs).reduce((a, d) => a + dayCapacity(s, d), 0)
-  const planned = inWeek.reduce((a, t) => a + (t.est ?? 0), 0)
+  const planned = inWeek.reduce((a, t) => a + taskWeight(t), 0)
 
   return (
     <>
