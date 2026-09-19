@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react'
 import {
   actions, alive, currentStage, exerciseHistory, fitnessProgress, ladderFraction, longestRun,
-  runWeeks, skillExIds, skillOf, stageProgress, useApp, workoutDayOn, workoutHasData, workoutOn,
+  runWeeks, skillExIds, skillOf, stageProgress, useApp, workoutDayOn, workoutHasData,
+  workoutMinutes, workoutOn,
 } from '../store'
 import {
   HE_DAYS, HE_DAYS_SHORT, dow, minutesToHM, plural, shortDate, today as todayISO,
@@ -123,20 +124,9 @@ function TodayCard({ date, onOpen }: { date: string; onOpen: () => void }) {
   const started = workoutHasData(log)
   const week = weekDates(weekStart(date))
 
-  // כמה זמן האימון אמור לקחת — סטים × (זמן סט + הפסקה). מספר גס בכוונה:
-  // הוא נועד לענות על "זה נכנס לי בבלוק?", לא לחזות שניות.
-  const minutes = useMemo(() => {
-    if (!day) return 0
-    if (day.kind === 'run' || day.kind === 'walk') return 0
-    let sec = 0
-    for (const ex of day.exercises) {
-      const sets = Math.max(1, ex.sets ?? 3)
-      const rest = ex.rest ?? 90
-      const work = ex.metric === 'time' ? 40 : 45
-      sec += sets * work + (sets - 1) * rest + 30
-    }
-    return Math.round(sec / 60)
-  }, [day])
+  // כמה זמן האימון אמור לקחת. החישוב יושב ב-store (workoutMinutes) כדי
+  // שהתוכנית השבועית תציג בדיוק את אותו מספר.
+  const minutes = useMemo(() => workoutMinutes(day), [day])
 
   return (
     <div className="card">
@@ -692,12 +682,16 @@ function WeekPlan() {
       <div className="list">
         {HE_DAYS.map((label, d) => {
           const day = plan.find((x) => x.dow === d)
+          const mins = workoutMinutes(day)
           return (
             <div className="item" key={d} style={{ minHeight: 38 }}>
               <span className="tiny faint" style={{ width: 34, flex: '0 0 34px' }}>{label}</span>
               <div className="txt">
                 <div className="ttl">
                   {day ? `${KIND_EMOJI[day.kind]} ${day.title}` : '—'}
+                  {mins > 0 && (
+                    <span className="tiny faint" style={{ fontWeight: 400 }}> · כ-{mins} דק׳</span>
+                  )}
                 </div>
                 {day && day.exercises.length > 0 && (
                   <div className="sub2 truncate">

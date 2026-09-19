@@ -1608,6 +1608,30 @@ export function workoutDayOn(s: AppState, date: ISODate): WorkoutDay | undefined
   return (dayId ? plan.find((d) => d.id === dayId) : undefined) ?? plan.find((d) => d.dow === parseISO(date).getDay())
 }
 
+/**
+ * כמה זמן יום האימון אמור לקחת בפועל, בדקות. זה המקור היחיד למספר הזה.
+ *
+ * המודל: לכל תרגיל דקה של מעבר והתארגנות (למצוא מכונה, להעמיס, להגיע למוט),
+ * ואז סט × (זמן הסט + ההפסקה אחריו). ההפסקה נספרת גם אחרי הסט האחרון, כי
+ * אחריו לא ניגשים לתרגיל הבא בלי לנשום. המודל הקודם ספר רק (סטים-1) הפסקות
+ * ושלושים שניות מעבר, ולכן החזיר מספרים נמוכים בכשליש — ויום עם תשעה
+ * תרגילים נראה בו כמו יום של 38 דקות.
+ *
+ * מספר גס בכוונה: הוא עונה על "זה נכנס לי לבלוק?", לא חוזה שניות.
+ * בריצה והליכה אין סטים — שם היעד הוא המספר, ומחזירים 0.
+ */
+export function workoutMinutes(day?: WorkoutDay): number {
+  if (!day || day.kind === 'run' || day.kind === 'walk') return 0
+  let sec = 0
+  for (const ex of day.exercises ?? []) {
+    const sets = Math.max(1, ex.sets ?? 3)
+    const rest = ex.rest ?? 90
+    const work = ex.metric === 'time' ? 40 : 45
+    sec += 60 + sets * (work + rest)
+  }
+  return Math.round(sec / 60)
+}
+
 /** האם נרשם משהו באימון הזה — סט אחד, קילומטר אחד או דקה אחת */
 export function workoutHasData(w?: WorkoutLog): boolean {
   if (!w) return false
