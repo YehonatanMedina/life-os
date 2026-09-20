@@ -305,6 +305,47 @@ const sideStamp = (json: string) => json.replace(/"(generatedAt|updatedAt|since)
 // מה שכבר נכתב (בגרסתו הגלויה) — כדי לא לשלוח שוב קובץ שלא השתנה
 const sideWritten = new Map<string, string>()
 
+// -- פנקס הסיפורים שכבר סופרו ------------------------------------------------
+// העורך בענן רואה לפני הכתיבה את הכותרות של הימים האחרונים בלבד, והן עקיפות
+// בכוונה — אי אפשר לדעת מהן על מי הסיפור, ולכן סיפורים חזרו (רומי סופר ב-17.9
+// וב-20.9). docs/news/covered.json נבנה מהארכיון על ידי scripts/news-ledger.mjs
+// ומחזיק לכל סיפור את המילים המזהות שלו. הוא נוסע בתוך קובץ המשוב, כי זה
+// הקובץ היחיד שהעורך קורא בכל בוקר לפני שהוא בוחר סיפורים.
+const COVERED_URL = './news/covered.json'
+const COVERED_TTL = 6 * 60 * 60 * 1000
+const COVERED_DAYS = 30
+let coveredText = ''
+let coveredAt = 0
+
+async function refreshCovered(): Promise<void> {
+  if (coveredText && Date.now() - coveredAt < COVERED_TTL) return
+  try {
+    const r = await fetch(COVERED_URL, { cache: 'no-cache' })
+    if (!r.ok) return
+    const t = await r.text()
+    JSON.parse(t)
+    coveredText = t
+    coveredAt = Date.now()
+  } catch {
+    // אין רשת או שהקובץ עוד לא נבנה — הפנקס פשוט לא מצורף הפעם
+  }
+}
+
+/** הפנקס כפי שהוא נכנס לקובץ המשוב: חלון של חודשיים, בלי חותמת זמן */
+export function coveredForFeedback(text: string, days = COVERED_DAYS, now = new Date()): unknown {
+  if (!text) return undefined
+  try {
+    const j = JSON.parse(text) as { about?: string; stories?: Array<{ date: string }> }
+    const all = Array.isArray(j.stories) ? j.stories : []
+    const from = new Date(now.getTime() - days * 86400000).toISOString().slice(0, 10)
+    const stories = all.filter((x) => typeof x?.date === 'string' && x.date >= from)
+    if (!stories.length) return undefined
+    return { about: j.about, stories }
+  } catch {
+    return undefined
+  }
+}
+
 /** משוב על החדשות — הקובץ היחיד שהעורך בענן קורא, ולכן גלוי */
 function buildNewsFeedback(s: AppState): string {
   const list = (s.news ?? [])
@@ -325,6 +366,7 @@ function buildNewsFeedback(s: AppState): string {
       about: 'משוב המשתמש על מהדורות הבוקר. נכתב על ידי האפליקציה, נקרא על ידי עורך החדשות.',
       updatedAt: new Date().toISOString(),
       editions,
+      covered: coveredForFeedback(coveredText),
     },
     null,
     2,
@@ -339,6 +381,7 @@ async function sideFiles(s: AppState): Promise<Record<string, { content: string 
   const out: Record<string, { content: string }> = {}
   const stamp = sideStamp
 
+  await refreshCovered()
   const feedback = buildNewsFeedback(s)
   if (sideWritten.get('news-feedback.json') !== stamp(feedback)) out['news-feedback.json'] = { content: feedback }
 

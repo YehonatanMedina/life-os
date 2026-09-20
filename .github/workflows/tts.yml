@@ -43,11 +43,18 @@ jobs:
           ELEVEN_VOICE_ID: ${{ secrets.ELEVEN_VOICE_ID }}
           ELEVEN_MODEL: ${{ secrets.ELEVEN_MODEL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      # פנקס הסיפורים: מה כבר סופר, כדי שהעורך לא יחזור על סיפור שכבר סיפר.
+      # הוא נבנה מהארכיון אחרי כל גיליון, ונוסע לעורך בתוך קובץ המשוב.
+      - name: Covered ledger
+        run: node scripts/news-ledger.mjs build
+      - name: Repeat check
+        continue-on-error: true
+        run: node scripts/news-ledger.mjs check
       - name: Commit
         run: |
           git config user.name "life-os-tts"
           git config user.email "tts@life-os.local"
-          git add docs/news/latest.mp3 docs/news/audio.json docs/news/latest.json docs/news/archive
+          git add docs/news/latest.mp3 docs/news/audio.json docs/news/latest.json docs/news/archive docs/news/covered.json
           git diff --cached --quiet || git commit -m "קריינות הבוקר"
           git pull --rebase origin main
           git push origin main
