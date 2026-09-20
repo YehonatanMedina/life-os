@@ -335,10 +335,13 @@ async function refreshCovered(): Promise<void> {
 export function coveredForFeedback(text: string, days = COVERED_DAYS, now = new Date()): unknown {
   if (!text) return undefined
   try {
-    const j = JSON.parse(text) as { about?: string; stories?: Array<{ date: string }> }
+    const j = JSON.parse(text) as { about?: string; stories?: Array<{ date: string; subjects?: unknown }> }
     const all = Array.isArray(j.stories) ? j.stories : []
     const from = new Date(now.getTime() - days * 86400000).toISOString().slice(0, 10)
-    const stories = all.filter((x) => typeof x?.date === 'string' && x.date >= from)
+    // subjects הן חומר לבדיקה המכנית; העורך שופט לפי הפתיחה, ולכן הן לא נוסעות
+    const stories = all
+      .filter((x) => typeof x?.date === 'string' && x.date >= from)
+      .map(({ subjects: _drop, ...s }) => s)
     if (!stories.length) return undefined
     return { about: j.about, stories }
   } catch {

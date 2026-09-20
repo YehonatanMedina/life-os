@@ -7,7 +7,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { buildLedger, canon, flatten, indexStories, isRepeat, overlap, tokenize } from '../../../scripts/news-ledger.mjs'
+import { buildLedger, canon, flatten, indexStories, isRepeat, lede, overlap, tokenize } from '../../../scripts/news-ledger.mjs'
 import { coveredForFeedback } from '../../../src/cloud'
 
 const tmps: string[] = []
@@ -79,7 +79,35 @@ describe('זיהוי חזרה', () => {
   })
 })
 
+describe('הפתיחה', () => {
+  it('משפט ראשון ארוך מספיק — עוצרים בו', () => {
+    const first =
+      'נשיא המדינה יצחק הרצוג הודיע אתמול שהוא נענה לבקשתו של אלאור אזריה ומוחק את הרישום הפלילי שנשא עשר שנים, בניגוד לעמדת הצבא.'
+    expect(lede(`${first} ההחלטה אינה מבטלת את ההרשעה.`)).toBe(first)
+  })
+
+  it('משפט ראשון קצר מדי כדי לזהות — מצרפים את הבא אחריו', () => {
+    expect(lede('רומי נולד בבלח׳ בשנת אלף מאתיים ושבע. אחר כך הגיע לקוניה.')).toBe(
+      'רומי נולד בבלח׳ בשנת אלף מאתיים ושבע. אחר כך הגיע לקוניה.',
+    )
+  })
+
+  it('לא חורגת מהאורך המרבי גם במשפט אחד ארוך', () => {
+    expect(lede('מ'.repeat(500)).length).toBe(220)
+  })
+
+  it('שורות ורווחים כפולים מתיישרים', () => {
+    expect(lede('שורה ראשונה.\n\nשורה שנייה.')).toBe('שורה ראשונה. שורה שנייה.')
+  })
+})
+
 describe('הפנקס', () => {
+  it('הפתיחה של כל סיפור נשמרת — זה מה שהעורך שופט לפיו', () => {
+    const led = buildLedger(archive([ed('2026-09-17', [RUMI_A, OTHER])]))
+    expect(led.stories[0].lede).toContain('ג׳לאל א־דין')
+    expect(led.stories[0].lede).not.toContain(led.stories[0].headline)
+  })
+
   it('נושאים לכל סיפור, וחזרה מסומנת עם התאריך שבו סופרה', () => {
     const led = buildLedger(archive([ed('2026-09-17', [RUMI_A, OTHER]), ed('2026-09-20', [RUMI_B, ALSO])]))
     expect(led.stories).toHaveLength(4)
@@ -102,14 +130,20 @@ describe('מה שנוסע לקובץ המשוב', () => {
   const text = JSON.stringify({
     about: 'מה כבר סופר',
     stories: [
-      { date: '2026-06-01', headline: 'ישן', subjects: ['א'] },
-      { date: '2026-09-19', headline: 'טרי', subjects: ['ב'] },
+      { date: '2026-06-01', headline: 'ישן', lede: 'פתיחה ישנה.', subjects: ['א'] },
+      { date: '2026-09-19', headline: 'טרי', lede: 'פתיחה טרייה.', subjects: ['ב'] },
     ],
   })
 
   it('חלון של חודש אחרון בלבד', () => {
     const c = coveredForFeedback(text, 30, now) as { stories: Array<{ headline: string }> }
     expect(c.stories.map((s) => s.headline)).toEqual(['טרי'])
+  })
+
+  it('הפתיחה נוסעת, רשימת המילים של הבדיקה המכנית לא', () => {
+    const c = coveredForFeedback(text, 30, now) as { stories: Array<Record<string, unknown>> }
+    expect(c.stories[0].lede).toBe('פתיחה טרייה.')
+    expect(c.stories[0]).not.toHaveProperty('subjects')
   })
 
   it('בלי פנקס, או עם קובץ פגום — פשוט לא מצרפים', () => {

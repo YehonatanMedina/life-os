@@ -75,7 +75,21 @@ export interface SkillLadder {
   stages: SkillStage[]
 }
 
-/** שמות הקבוצות — הסדר הוא הסדר שבו נוגעים בדברים, לא רק דירוג קושי */
+/**
+ * שמות הקבוצות — הסדר הוא הסדר שבו נוגעים בדברים, לא רק דירוג קושי.
+ *
+ * הכלל שקובע קבוצה (20.9.2026): **מתי אפשר לאמן את השלב הראשון שלה בפועל**,
+ * ולא כמה קשה הפסגה. סולם יכול להתחיל בתלייה ולהסתיים בשנים של עבודה, ולכן
+ * כשהפער הזה גדול — `needs` אומר במפורש מה מפריד מהשלב הראשון ומה מהמלא.
+ *
+ * מה שנובע מזה, ולמה הסדר שונה ממה שהיה: מיומנות שהיא תנאי למיומנות אחרת
+ * חייבת לשבת לפניה או איתה, אף פעם לא אחריה. Back Lever קל מ-Front Lever
+ * ומלמד את אותה החזקה אופקית — ולכן הוא בקבוצה 2 ולא 3. דגל הדרקון בונה
+ * בדיוק את הליבה שה-Front Lever דורש, ולכן גם הוא לפניו.
+ *
+ * הסדר בתוך קבוצה 1 הוא סדר העבודה: קודם מה שנמדד כל שבוע מהיומן, ובסוף
+ * הסולם הארוך שנמצא כאן בזכות הרגל הראשונה שלו.
+ */
 export const SKILL_TIERS: Record<number, { name: string; note: string }> = {
   1: { name: 'בתוכנית עכשיו', note: 'אלה נמדדות כל שבוע מהיומן. ההתקדמות הכוללת מחושבת מהן.' },
   2: { name: 'הבא בתור', note: 'נכנסות לתוכנית כשמיומנות מהקבוצה הראשונה נסגרת.' },
@@ -156,69 +170,6 @@ export const SKILL_LADDERS: SkillLadder[] = [
         criteria: '30 שניות רצופות, ללא קיר',
         target: { metric: 'time', value: 30, sets: 1 },
         search: 'freestanding handstand 30 seconds',
-      },
-    ],
-  },
-  {
-    id: 'sk-frontlever',
-    name: 'Front Lever',
-    emoji: '🪂',
-    goal: 'Front Lever מלא, 10 שניות',
-    why: 'התרגיל שבונה גב רחב וליבה שאין דרך לזייף. כל שלב בו נראה בגב תוך שבועות.',
-    match: ['front lever', 'שכמות', 'scapular'],
-    tier: 1,
-    stages: [
-      {
-        id: 'hang',
-        name: 'תלייה ומשיכות שכמות',
-        what: 'תלייה פסיבית, ואז Scapular Pulls — מרפקים ישרים, מורידים כתפיים ומקרבים שכמות.',
-        criteria: 'תלייה 60 שנ׳, ו-3 סטים של 8 משיכות שכמות נקיות',
-        target: { metric: 'reps', value: 8, sets: 3 },
-        tip: 'זה השריר שמחזיק את כל התרגיל. מי שמדלג עליו נתקע ב-Tuck לחודשים.',
-        search: 'scapular pull ups tutorial',
-      },
-      {
-        id: 'tuck',
-        name: 'Tuck Front Lever',
-        what: 'ברכיים לחזה, הגב מקביל לרצפה.',
-        criteria: '3 סטים של 15 שניות',
-        target: { metric: 'time', value: 15, sets: 3 },
-        tip: 'הגב מקביל לרצפה, לא הישבן. אם האגן גבוה מהכתפיים — זה עוד לא Tuck.',
-        search: 'tuck front lever tutorial',
-      },
-      {
-        id: 'adv-tuck',
-        name: 'Advanced Tuck',
-        what: 'אותו דבר, עם הגב שטוח והברכיים מתרחקות מהחזה.',
-        criteria: '3 סטים של 15 שניות',
-        target: { metric: 'time', value: 15, sets: 3 },
-        tip: 'פותחים את הזווית באגן בכמה מעלות בכל שבוע, לא בבת אחת.',
-        search: 'advanced tuck front lever',
-      },
-      {
-        id: 'one-leg',
-        name: 'רגל אחת ישרה',
-        what: 'רגל אחת נפרשת, השנייה נשארת מכופפת. מחליפים צד.',
-        criteria: '3 סטים של 10 שניות לכל צד',
-        target: { metric: 'time', value: 10, sets: 3 },
-        search: 'one leg front lever progression',
-      },
-      {
-        id: 'straddle',
-        name: 'Straddle Front Lever',
-        what: 'שתי רגליים ישרות ופתוחות לצדדים.',
-        criteria: '3 סטים של 10 שניות',
-        target: { metric: 'time', value: 10, sets: 3 },
-        tip: 'ככל שהרגליים פתוחות יותר, המנוף קצר יותר. סוגרים אותן בהדרגה.',
-        search: 'straddle front lever progression',
-      },
-      {
-        id: 'full',
-        name: 'Front Lever מלא',
-        what: 'המטרה.',
-        criteria: '10 שניות, גוף אחד ישר',
-        target: { metric: 'time', value: 10, sets: 1 },
-        search: 'full front lever',
       },
     ],
   },
@@ -395,7 +346,175 @@ export const SKILL_LADDERS: SkillLadder[] = [
       },
     ],
   },
+  {
+    id: 'sk-frontlever',
+    name: 'Front Lever',
+    emoji: '🪂',
+    goal: 'Front Lever מלא, 10 שניות',
+    why: 'התרגיל שבונה גב רחב וליבה שאין דרך לזייף. כל שלב בו נראה בגב תוך שבועות.',
+    match: ['front lever', 'שכמות', 'scapular'],
+    tier: 1,
+    // הסולם הארוך ביותר כאן: הרגל הראשונה היא תלייה ומשיכות שכמות — אפשר להתחיל
+    // אותה השבוע — והפסגה היא שנים. הוא בקבוצה הראשונה בגלל הרגל הראשונה, ולכן
+    // `needs` אומר במפורש מה מפריד ממנה ומה מפריד מהמלא.
+    needs: 'לשלב הראשון — כלום מלבד מוט. למלא — מתח עם תוספת של כשליש ממשקל הגוף, וליבה ברמת דגל הדרקון',
+    stages: [
+      {
+        id: 'hang',
+        name: 'תלייה ומשיכות שכמות',
+        what: 'תלייה פסיבית, ואז Scapular Pulls — מרפקים ישרים, מורידים כתפיים ומקרבים שכמות.',
+        criteria: 'תלייה 60 שנ׳, ו-3 סטים של 8 משיכות שכמות נקיות',
+        target: { metric: 'reps', value: 8, sets: 3 },
+        tip: 'זה השריר שמחזיק את כל התרגיל. מי שמדלג עליו נתקע ב-Tuck לחודשים.',
+        search: 'scapular pull ups tutorial',
+      },
+      {
+        id: 'tuck',
+        name: 'Tuck Front Lever',
+        what: 'ברכיים לחזה, הגב מקביל לרצפה.',
+        criteria: '3 סטים של 15 שניות',
+        target: { metric: 'time', value: 15, sets: 3 },
+        tip: 'הגב מקביל לרצפה, לא הישבן. אם האגן גבוה מהכתפיים — זה עוד לא Tuck.',
+        search: 'tuck front lever tutorial',
+      },
+      {
+        id: 'adv-tuck',
+        name: 'Advanced Tuck',
+        what: 'אותו דבר, עם הגב שטוח והברכיים מתרחקות מהחזה.',
+        criteria: '3 סטים של 15 שניות',
+        target: { metric: 'time', value: 15, sets: 3 },
+        tip: 'פותחים את הזווית באגן בכמה מעלות בכל שבוע, לא בבת אחת.',
+        search: 'advanced tuck front lever',
+      },
+      {
+        id: 'one-leg',
+        name: 'רגל אחת ישרה',
+        what: 'רגל אחת נפרשת, השנייה נשארת מכופפת. מחליפים צד.',
+        criteria: '3 סטים של 10 שניות לכל צד',
+        target: { metric: 'time', value: 10, sets: 3 },
+        search: 'one leg front lever progression',
+      },
+      {
+        id: 'straddle',
+        name: 'Straddle Front Lever',
+        what: 'שתי רגליים ישרות ופתוחות לצדדים.',
+        criteria: '3 סטים של 10 שניות',
+        target: { metric: 'time', value: 10, sets: 3 },
+        tip: 'ככל שהרגליים פתוחות יותר, המנוף קצר יותר. סוגרים אותן בהדרגה.',
+        search: 'straddle front lever progression',
+      },
+      {
+        id: 'full',
+        name: 'Front Lever מלא',
+        what: 'המטרה.',
+        criteria: '10 שניות, גוף אחד ישר',
+        target: { metric: 'time', value: 10, sets: 1 },
+        search: 'full front lever',
+      },
+    ],
+  },
   // --- קבוצה 2: הבא בתור ------------------------------------------------------
+  {
+    id: 'sk-backlever',
+    name: 'Back Lever',
+    emoji: '🔄',
+    goal: 'Back Lever מלא, 10 שניות',
+    why: 'ההפוך של ה-Front Lever וקל ממנו בהרבה — לכן זה ההישג הראשון שנראה בלתי אפשרי ובעצם מגיע מהר. הוא גם הדרך הבטוחה ללמד את המרפק והכתף להחזיק גוף אופקי, וזה בדיוק מה שה-Front Lever דורש אחר כך.',
+    match: ['back lever', 'german hang', 'תלייה גרמנית'],
+    tier: 2,
+    needs: 'תלייה 60 שנ׳, וכתף בריאה',
+    stages: [
+      {
+        id: 'german-hang',
+        name: 'תלייה גרמנית',
+        what: 'מהתלייה, מעבירים את הרגליים דרך הידיים ונשארים תלויים עם הגב לכיוון המוט.',
+        criteria: '3 סטים של 20 שניות',
+        target: { metric: 'time', value: 20, sets: 3 },
+        tip: 'נכנסים לזה לאט מאוד. זו התנוחה שהכי הרבה כתפיים נפגעו בה מחיפזון.',
+        search: 'german hang skin the cat progression',
+      },
+      {
+        id: 'tuck',
+        name: 'Tuck Back Lever',
+        what: 'ברכיים לחזה, הגב מקביל לרצפה, פנים למטה.',
+        criteria: '3 סטים של 15 שניות',
+        target: { metric: 'time', value: 15, sets: 3 },
+      },
+      {
+        id: 'adv-tuck',
+        name: 'Advanced Tuck',
+        what: 'פותחים את האגן, הגב שטוח.',
+        criteria: '3 סטים של 15 שניות',
+        target: { metric: 'time', value: 15, sets: 3 },
+      },
+      {
+        id: 'one-leg',
+        name: 'רגל אחת ישרה',
+        what: '',
+        criteria: '3 סטים של 10 שניות לכל צד',
+        target: { metric: 'time', value: 10, sets: 3 },
+      },
+      {
+        id: 'straddle',
+        name: 'Straddle',
+        what: 'שתי רגליים ישרות ופתוחות.',
+        criteria: '3 סטים של 10 שניות',
+        target: { metric: 'time', value: 10, sets: 3 },
+      },
+      {
+        id: 'full',
+        name: 'Back Lever מלא',
+        what: 'המטרה.',
+        criteria: '10 שניות, גוף אחד ישר',
+        target: { metric: 'time', value: 10, sets: 1 },
+        search: 'full back lever tutorial',
+      },
+    ],
+  },
+  {
+    id: 'sk-dragonflag',
+    name: 'דגל הדרקון',
+    emoji: '🐉',
+    goal: 'Dragon Flag, 3 סטים של 5',
+    why: 'תרגיל הליבה שברוס לי עשה, ואין בו שום דרך לרמות: או שהגוף ישר או שהוא לא. גם בונה בדיוק את הליבה שה-Front Lever צריך.',
+    match: ['dragon', 'דגל הדרקון'],
+    tier: 2,
+    needs: 'Hollow Hold 45 שנ׳',
+    stages: [
+      {
+        id: 'tuck',
+        name: 'ברכיים מכופפות',
+        what: 'שוכבים, אוחזים בספסל או ברגל ספה מעל הראש, מרימים את הגוף על השכמות והברכיים מכופפות.',
+        criteria: '3 סטים של 8 חזרות מבוקרות',
+        target: { metric: 'reps', value: 8, sets: 3 },
+        tip: 'רק השכמות על הרצפה. אם חלק מהגב התחתון נשען — זה עוד לא התרגיל.',
+        search: 'dragon flag progression beginner',
+      },
+      {
+        id: 'one-leg',
+        name: 'רגל אחת ישרה',
+        what: 'רגל אחת נפרשת, השנייה מכופפת.',
+        criteria: '3 סטים של 8 לכל צד',
+        target: { metric: 'reps', value: 8, sets: 3 },
+      },
+      {
+        id: 'negative',
+        name: 'ירידה איטית מלאה',
+        what: 'גוף ישר, ירידה של 5 שניות, וחזרה למעלה בברכיים מכופפות.',
+        criteria: '3 סטים של 5 ירידות',
+        target: { metric: 'reps', value: 5, sets: 3 },
+        tip: 'הגב התחתון לא נכנס לקשת. ברגע שהוא מתקמר — עוצרים את הסט.',
+        search: 'dragon flag negatives',
+      },
+      {
+        id: 'full-5',
+        name: '3×5 מלאים',
+        what: 'המטרה.',
+        criteria: '5 חזרות מלאות בכל אחד מ-3 הסטים',
+        target: { metric: 'reps', value: 5, sets: 3 },
+      },
+    ],
+  },
   {
     id: 'sk-muscleup',
     name: 'מאסל־אפ',
@@ -553,50 +672,6 @@ export const SKILL_LADDERS: SkillLadder[] = [
       },
     ],
   },
-  {
-    id: 'sk-dragonflag',
-    name: 'דגל הדרקון',
-    emoji: '🐉',
-    goal: 'Dragon Flag, 3 סטים של 5',
-    why: 'תרגיל הליבה שברוס לי עשה, ואין בו שום דרך לרמות: או שהגוף ישר או שהוא לא. גם בונה בדיוק את הליבה שה-Front Lever צריך.',
-    match: ['dragon', 'דגל הדרקון'],
-    tier: 2,
-    needs: 'Hollow Hold 45 שנ׳',
-    stages: [
-      {
-        id: 'tuck',
-        name: 'ברכיים מכופפות',
-        what: 'שוכבים, אוחזים בספסל או ברגל ספה מעל הראש, מרימים את הגוף על השכמות והברכיים מכופפות.',
-        criteria: '3 סטים של 8 חזרות מבוקרות',
-        target: { metric: 'reps', value: 8, sets: 3 },
-        tip: 'רק השכמות על הרצפה. אם חלק מהגב התחתון נשען — זה עוד לא התרגיל.',
-        search: 'dragon flag progression beginner',
-      },
-      {
-        id: 'one-leg',
-        name: 'רגל אחת ישרה',
-        what: 'רגל אחת נפרשת, השנייה מכופפת.',
-        criteria: '3 סטים של 8 לכל צד',
-        target: { metric: 'reps', value: 8, sets: 3 },
-      },
-      {
-        id: 'negative',
-        name: 'ירידה איטית מלאה',
-        what: 'גוף ישר, ירידה של 5 שניות, וחזרה למעלה בברכיים מכופפות.',
-        criteria: '3 סטים של 5 ירידות',
-        target: { metric: 'reps', value: 5, sets: 3 },
-        tip: 'הגב התחתון לא נכנס לקשת. ברגע שהוא מתקמר — עוצרים את הסט.',
-        search: 'dragon flag negatives',
-      },
-      {
-        id: 'full-5',
-        name: '3×5 מלאים',
-        what: 'המטרה.',
-        criteria: '5 חזרות מלאות בכל אחד מ-3 הסטים',
-        target: { metric: 'reps', value: 5, sets: 3 },
-      },
-    ],
-  },
 
   // --- קבוצה 3: מתקדם --------------------------------------------------------
   {
@@ -654,63 +729,6 @@ export const SKILL_LADDERS: SkillLadder[] = [
         what: 'המטרה הרחוקה — בלי קיר.',
         criteria: 'חזרה אחת בעמידה חופשית',
         target: { metric: 'reps', value: 1, sets: 1 },
-      },
-    ],
-  },
-  {
-    id: 'sk-backlever',
-    name: 'Back Lever',
-    emoji: '🔄',
-    goal: 'Back Lever מלא, 10 שניות',
-    why: 'ההפוך של ה-Front Lever, וקל ממנו — לכן זה ההישג הראשון שנראה בלתי אפשרי ובעצם מגיע מהר. פותח את החזה והכתף בטווחים שאף תרגיל אחר לא נוגע בהם.',
-    match: ['back lever', 'german hang', 'תלייה גרמנית'],
-    tier: 3,
-    needs: 'תלייה 60 שנ׳, וכתף בריאה',
-    stages: [
-      {
-        id: 'german-hang',
-        name: 'תלייה גרמנית',
-        what: 'מהתלייה, מעבירים את הרגליים דרך הידיים ונשארים תלויים עם הגב לכיוון המוט.',
-        criteria: '3 סטים של 20 שניות',
-        target: { metric: 'time', value: 20, sets: 3 },
-        tip: 'נכנסים לזה לאט מאוד. זו התנוחה שהכי הרבה כתפיים נפגעו בה מחיפזון.',
-        search: 'german hang skin the cat progression',
-      },
-      {
-        id: 'tuck',
-        name: 'Tuck Back Lever',
-        what: 'ברכיים לחזה, הגב מקביל לרצפה, פנים למטה.',
-        criteria: '3 סטים של 15 שניות',
-        target: { metric: 'time', value: 15, sets: 3 },
-      },
-      {
-        id: 'adv-tuck',
-        name: 'Advanced Tuck',
-        what: 'פותחים את האגן, הגב שטוח.',
-        criteria: '3 סטים של 15 שניות',
-        target: { metric: 'time', value: 15, sets: 3 },
-      },
-      {
-        id: 'one-leg',
-        name: 'רגל אחת ישרה',
-        what: '',
-        criteria: '3 סטים של 10 שניות לכל צד',
-        target: { metric: 'time', value: 10, sets: 3 },
-      },
-      {
-        id: 'straddle',
-        name: 'Straddle',
-        what: 'שתי רגליים ישרות ופתוחות.',
-        criteria: '3 סטים של 10 שניות',
-        target: { metric: 'time', value: 10, sets: 3 },
-      },
-      {
-        id: 'full',
-        name: 'Back Lever מלא',
-        what: 'המטרה.',
-        criteria: '10 שניות, גוף אחד ישר',
-        target: { metric: 'time', value: 10, sets: 1 },
-        search: 'full back lever tutorial',
       },
     ],
   },
@@ -878,7 +896,7 @@ export const SKILL_LADDERS: SkillLadder[] = [
     why: 'מבחן הכוח היחסי הקשה ביותר שיש. מי שמגיע לזה נמצא בקבוצה קטנה מאוד.',
     match: ['מתח ביד אחת', 'one arm pull', 'archer pull', 'משיכות קשת'],
     tier: 4,
-    needs: 'מתח עם תוספת 20 ק״ג',
+    needs: 'מתח עם תוספת של כמחצית ממשקל הגוף — הרבה מעבר ליעד של 20 ק״ג',
     stages: [
       {
         id: 'archer',

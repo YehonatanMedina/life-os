@@ -7,8 +7,19 @@
 // עקיפות בכוונה — אי אפשר לדעת מהן על מי הסיפור. לכן המדד לחזרה חייב להיות
 // גוף הסיפור, לא הכותרת.
 //
-// המנגנון: כל סיפור בארכיון מתומצת ל"נושאים" — המילים הנדירות שלו ביחס לכל
-// הארכיון (רומי, שמס, קוניה, דרוויש). שתי חפיפות נושאים = אותו סיפור.
+// המנגנון, בשתי שכבות:
+//
+// 1. **מה העורך קורא.** לכל סיפור נשמרת הפתיחה שלו — המשפט או השניים
+//    הראשונים מגוף הסיפור, כפי שנכתבו. זה מה שנוסע אליו בכל בוקר, והוא
+//    שופט לפי משמעות: "מלומד מוסלמי בשם ג'לאל א־דין, בן שלושים ושבע" ו-
+//    "ג'לאל א־דין רומי נולד בבלח'" הם אותו אדם, גם בלי מילה משותפת אחת.
+//    זה מה שכותרת לא יכולה לתת וגם רשימת מילים לא: מודל שופט טקסט, לא מחרוזות.
+//
+// 2. **מה שתופס את מה שהוא פספס.** כל סיפור מתומצת גם ל"נושאים" — המילים
+//    הנדירות שלו ביחס לכל הארכיון (רומי, שמס, קוניה, דרוויש). שתי חפיפות
+//    נושאים = אותו סיפור. זו בדיקה מכנית, `check`, שנכשלת ועוצרת את הדחיפה.
+//    היא לא מחליפה את השיפוט — היא הרשת מתחתיו.
+//
 // הפנקס נכתב ל-docs/news/covered.json, והאפליקציה מצרפת אותו לקובץ המשוב
 // שהעורך קורא בכל בוקר לפני שהוא בוחר סיפורים.
 //
@@ -74,6 +85,27 @@ export function readArchive(dir = NEWS_DIR) {
     .filter(Boolean)
 }
 
+// אורך הפתיחה: מספיק כדי לזהות מי ומה, קצר מספיק ש-30 יום נכנסים בלי לנפח
+// את קובץ המשוב. בארכיון של ספטמבר 2026 הממוצע יוצא כ-145 תווים לסיפור.
+export const LEDE_MIN = 120
+export const LEDE_MAX = 220
+
+/**
+ * הפתיחה של סיפור — המשפט הראשון, ועוד אחד אם הראשון קצר מדי כדי לזהות.
+ * לא תקציר שנכתב מחדש אלא הטקסט עצמו: בפתיחה של מהדורת הבוקר תמיד יושבים
+ * מי, מה ומתי, ולכן היא המזהה הזול והנאמן ביותר שיש.
+ */
+export function lede(body, { min = LEDE_MIN, max = LEDE_MAX } = {}) {
+  const flat = String(body ?? '').replace(/\s+/g, ' ').trim()
+  let out = ''
+  for (const part of flat.split(/(?<=[.!?:])\s/)) {
+    if (out && out.length + 1 + part.length > max) break
+    out = out ? `${out} ${part}` : part
+    if (out.length >= min) break
+  }
+  return (out || flat).slice(0, max)
+}
+
 /** מיישר גיליונות לרשימת סיפורים שטוחה */
 export function flatten(editions) {
   const out = []
@@ -82,7 +114,14 @@ export function flatten(editions) {
     if (!date) continue
     for (const sec of sectionsOf(ed)) {
       for (const st of sec.stories) {
-        out.push({ date, section: sec.title || sec.key, headline: st.headline, text: `${st.headline} ${st.body ?? ''}` })
+        const body = String(st.body ?? '')
+        out.push({
+          date,
+          section: sec.title || sec.key,
+          headline: st.headline,
+          lede: lede(body),
+          text: `${st.headline} ${body}`,
+        })
       }
     }
   }
@@ -197,16 +236,21 @@ export function buildLedger(dir = NEWS_DIR) {
   const indexed = indexStories(stories)
   return {
     about:
-      'מה כבר סופר במהדורות הבוקר. "subjects" הן המילים המזהות של הסיפור, מתוך הגוף שלו — ' +
-      'הכותרות עקיפות בכוונה ואי אפשר לדעת מהן על מי הסיפור. לפני בחירת סיפור לגיליון חדש: ' +
-      'אם הנושא כבר מופיע כאן, אל תספר אותו שוב. התפתחות או זווית חדשה מותרות, ואז פותחים ' +
-      'בכך שכבר סופר ואומרים מה חדש. "repeats" הן חזרות שכבר נתפסו בגיליונות האחרונים. ' +
-      'נכתב אוטומטית על ידי scripts/news-ledger.mjs.',
+      'מה כבר סופר במהדורות הבוקר. "lede" היא הפתיחה של הסיפור כפי שנכתבה — ' +
+      'הכותרות כאן עקיפות בכוונה ואי אפשר לדעת מהן על מי הסיפור, אבל מהפתיחה כן. ' +
+      'לפני שאתה בוחר סיפור לגיליון חדש קרא את הפתיחות וקבע לפי המשמעות, לא לפי ' +
+      'מילים משותפות: "מלומד מוסלמי בשם ג\'לאל א־דין" ו"ג\'לאל א־דין רומי" הם אותו ' +
+      'אדם, ו"תקציב הביטחון" בשני ימים עוקבים הוא אותו סיפור. סיפור שכבר סופר — לא ' +
+      'נכתב שוב. התפתחות אמיתית או זווית חדשה מותרות, ואז פותחים בכך שכבר סופר ' +
+      'ואומרים מה חדש. "subjects" הן המילים הנדירות של הסיפור, לבדיקה המכנית בלבד — ' +
+      'חפיפה שלהן היא ראיה לחזרה, היעדרה איננו ראיה להיפך. "repeats" הן חזרות שכבר ' +
+      'נתפסו בגיליונות האחרונים. נכתב אוטומטית על ידי scripts/news-ledger.mjs.',
     updatedAt: new Date().toISOString(),
     stories: indexed.map((s) => ({
       date: s.date,
       section: s.section,
       headline: s.headline,
+      lede: s.lede,
       subjects: s.sig.slice(0, 8).map((x) => x.t),
     })),
     repeats: recentRepeats(indexed),
@@ -217,9 +261,9 @@ export function briefText(dir = NEWS_DIR, days = 45) {
   const led = buildLedger(dir)
   const cut = led.stories.length ? led.stories[led.stories.length - 1].date : ''
   const from = new Date(new Date(cut || Date.now()).getTime() - days * 86400000).toISOString().slice(0, 10)
-  const lines = ['סיפורים שכבר סופרו (תאריך | מדור | נושאים | כותרת):']
+  const lines = ['סיפורים שכבר סופרו (תאריך | מדור | כותרת // פתיחה):']
   for (const s of led.stories.filter((x) => x.date >= from)) {
-    lines.push(`${s.date} | ${s.section} | ${s.subjects.join(', ')} | ${s.headline}`)
+    lines.push(`${s.date} | ${s.section} | ${s.headline} // ${s.lede}`)
   }
   return lines.join('\n')
 }

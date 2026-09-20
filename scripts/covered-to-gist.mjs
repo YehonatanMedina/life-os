@@ -29,9 +29,11 @@ const api = (path, init = {}) =>
 
 const led = JSON.parse(fs.readFileSync('docs/news/covered.json', 'utf8'))
 const from = new Date(Date.now() - DAYS * 86400000).toISOString().slice(0, 10)
+// "subjects" הן חומר לבדיקה המכנית בלבד. מה שנוסע לעורך הוא הפתיחות, כי הוא
+// שופט לפי משמעות — רשימת מילים רק מנפחת את מה שהוא קורא בלי להוסיף לו ידע.
 const covered = {
   about: led.about,
-  stories: (led.stories ?? []).filter((s) => s.date >= from),
+  stories: (led.stories ?? []).filter((s) => s.date >= from).map(({ subjects, ...s }) => s),
   repeats: led.repeats ?? [],
 }
 
