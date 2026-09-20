@@ -50,6 +50,13 @@ jobs:
       - name: Repeat check
         continue-on-error: true
         run: node scripts/news-ledger.mjs check
+      # המחסן, לא רק המאגר: כך העורך רואה את הפנקס גם אם הטלפון לא נפתח מאז אתמול
+      - name: Covered ledger to store
+        continue-on-error: true
+        run: node scripts/covered-to-gist.mjs
+        env:
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
       - name: Commit
         run: |
           git config user.name "life-os-tts"
