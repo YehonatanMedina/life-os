@@ -4,7 +4,9 @@ import type {
   SkillProgress, Task, WeekGoal, WeekLog, WorkoutDay, WorkoutLog,
 } from './types'
 import { addDays, iso, logicalDate, parseISO, today, weekStart } from './dates'
-import { FOCUS_TIER, RUN_MILESTONES, laddersInTier, matchesSkill, type SkillLadder } from './skills'
+import {
+  RUN_GOAL, RUN_MILESTONES, goalRank, isFocusGoal, laddersInOrder, matchesSkill, type SkillLadder,
+} from './skills'
 import { HABITS, RULES, SCHEMA_VERSION, TASKS, TRACKS, WEEKLY, EVENTS, DEFAULT_SETTINGS, seedState, newDeviceId, PHASES } from './seed'
 
 const KEY = 'life-os-v1'
@@ -1871,21 +1873,44 @@ export function runFraction(s: AppState): { stage: number; total: number; pct: n
  * 2. **כל מטרה שוקלת אותו דבר.** הסולם מנורמל לאחוז מעצמו לפני הממוצע, אחרת
  *    עמידת ידיים (7 שלבים) הייתה מכריעה את הריצה (7 מיילסטונים) ואת המקבילים
  *    (6 שלבים) רק בגלל האורך שלה.
- * 3. **רק מה שבתוכנית נספר.** הקבוצות המתקדמות הן מפה של לאן זה הולך; הן לא
- *    מדללות את המחוון ולא מורידות אותו ל-3% ביום שהן נוספות.
+ * 3. **הכל נספר** (20.9.2026). קודם נספרה רק הקבוצה שבתוכנית, וזה עיוות את
+ *    המשמעות: המחוון אמר "כמה מהתוכנית הנוכחית סגרת", לא "כמה מהמטרות שלי
+ *    הושגו". מטרה היא מטרה גם כשלא נוגעים בה החודש, ולכן היא בממוצע. מה
+ *    שמשתנה בין מטרה למטרה הוא המוקד (`isFocusGoal`) — לאן הולכת תשומת הלב
+ *    עכשיו — ולא המשקל במחוון.
  * 4. **הנתון הוא היומן.** כל שלב נסגר מול סטים שנרשמו בפועל, ולכן המספר הזה
  *    לא יכול להיות טוב ממה שבאמת נעשה.
+ *
+ * `parts` חוזר בסדר המטרות (`GOAL_ORDER`), כלומר מה שבמוקד בראש.
  */
+export interface GoalPart {
+  id: string
+  name: string
+  emoji: string
+  pct: number
+  stage: number
+  total: number
+  /** האם המטרה במוקד עכשיו — משפיע על התצוגה, לא על החישוב */
+  focus: boolean
+}
+
 export function fitnessProgress(s: AppState): {
   pct: number
-  parts: Array<{ id: string; name: string; emoji: string; pct: number; stage: number; total: number }>
+  parts: GoalPart[]
+  /** אותן רשומות, מסוננות למוקד — כדי שהמסך לא יחזור על הכלל */
+  focus: GoalPart[]
 } {
-  const parts = laddersInTier(FOCUS_TIER).map((lad) => {
-    const f = ladderFraction(s, lad)
-    return { id: lad.id, name: lad.name, emoji: lad.emoji, ...f }
-  })
   const run = runFraction(s)
-  parts.push({ id: 'run', name: 'חצי מרתון', emoji: '🏃', stage: run.stage, total: run.total, pct: run.pct })
+  const parts: GoalPart[] = [
+    {
+      id: RUN_GOAL.id, name: RUN_GOAL.name, emoji: RUN_GOAL.emoji,
+      stage: run.stage, total: run.total, pct: run.pct, focus: isFocusGoal(RUN_GOAL.id),
+    },
+    ...laddersInOrder().map((lad) => ({
+      id: lad.id, name: lad.name, emoji: lad.emoji, focus: isFocusGoal(lad.id),
+      ...ladderFraction(s, lad),
+    })),
+  ].sort((a, b) => goalRank(a.id) - goalRank(b.id))
   const pct = parts.length ? Math.round(parts.reduce((a, b) => a + b.pct, 0) / parts.length) : 0
-  return { pct, parts }
+  return { pct, parts, focus: parts.filter((p) => p.focus) }
 }

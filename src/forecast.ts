@@ -28,7 +28,7 @@ import {
   currentStage, exerciseHistory, longestRun, runWeeks, skillExIds,
 } from './store'
 import {
-  FOCUS_TIER, RUN_MILESTONES, RUN_WEEKLY_GROWTH, laddersInTier, stageWeeks,
+  RUN_MILESTONES, RUN_WEEKLY_GROWTH, focusLadders, stageWeeks,
 } from './skills'
 import type { SkillLadder, StageTarget } from './skills'
 
@@ -279,9 +279,16 @@ export function skillForecast(s: AppState, lad: SkillLadder, from: ISODate = tod
   }
 }
 
-/** התחזית לכל המיומנויות שבתוכנית */
+/**
+ * התחזית למיומנויות שבמוקד.
+ *
+ * למה לא לכולן, כשההתקדמות כן נספרת מכולן: תחזית נשענת על קצב שנמדד מהיומן,
+ * ולמטרה שאין לה תרגיל בתוכנית אין קצב — התאריך שיצא לה יהיה המקסימום הקבוע,
+ * כלומר מספר שנראה כמו נתון ואינו נתון. מוטב לא להבטיח תאריך למה שלא מתאמנים
+ * עליו עדיין.
+ */
 export function fitnessForecast(s: AppState, from: ISODate = todayISO()): SkillForecast[] {
-  return laddersInTier(FOCUS_TIER).map((lad) => skillForecast(s, lad, from))
+  return focusLadders().map((lad) => skillForecast(s, lad, from))
 }
 
 // ---------------------------------------------------------------------------

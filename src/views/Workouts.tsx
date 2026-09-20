@@ -11,7 +11,8 @@ import {
 import { Ring } from '../ui'
 import { PlanSheet, ProgressSheet, WorkoutSheet, KIND_EMOJI, setText, targetText } from './Workout'
 import {
-  FOCUS_TIER, RUN_MILESTONES, RUN_WEEKLY_GROWTH, SKILL_TIERS, laddersInTier, tutorial,
+  FOCUS_COUNT, RUN_MILESTONES, RUN_WEEKLY_GROWTH, focusLadders, isFocusGoal, laddersInOrder,
+  tutorial,
 } from '../skills'
 import type { SkillLadder, SkillStage } from '../skills'
 import { basisText, etaText, fitnessForecast, runForecast, skillForecast } from '../forecast'
@@ -68,11 +69,13 @@ export default function Workouts() {
             </section>
 
             <section className="sec">
-              <div className="sec-h"><h2>המסע</h2></div>
+              <div className="sec-h"><h2>במוקד עכשיו</h2></div>
               <p className="small muted" style={{ margin: '0 0 2px' }}>
-                כל שלב נסגר בתנאי מדיד, ונבדק מול מה שנרשם ביומן. אין "בערך".
+                {FOCUS_COUNT} המטרות שעובדים עליהן השבוע, בסדר. כל שלב נסגר בתנאי
+                מדיד ונבדק מול מה שנרשם ביומן — אין "בערך". השאר לא נעלמות: הן
+                ממשיכות למטה, וההתקדמות הכוללת נספרת מכולן.
               </p>
-              {laddersInTier(FOCUS_TIER).map((lad) => (
+              {focusLadders().map((lad) => (
                 <SkillCard key={lad.id} lad={lad} />
               ))}
             </section>
@@ -85,8 +88,8 @@ export default function Workouts() {
             </section>
 
             <section className="sec">
-              <div className="sec-h"><h2>המטרות הגדולות</h2></div>
-              <FutureSkills />
+              <div className="sec-h"><h2>הבאות בתור</h2></div>
+              <NextGoals />
             </section>
 
             <section className="sec">
@@ -235,7 +238,7 @@ function TodayCard({ date, onOpen }: { date: string; onOpen: () => void }) {
 // ---------------------------------------------------------------------------
 function OverallCard() {
   const s = useApp()
-  const { pct, parts } = useMemo(() => fitnessProgress(s), [s.workouts, s.workoutPlan, s.skills])
+  const { pct, parts, focus } = useMemo(() => fitnessProgress(s), [s.workouts, s.workoutPlan, s.skills])
   const closed = parts.reduce((a, b) => a + b.stage, 0)
   const total = parts.reduce((a, b) => a + b.total, 0)
 
@@ -246,7 +249,7 @@ function OverallCard() {
           <div className="eyebrow">כושר — כל המטרות יחד</div>
           <div className="hero-num">{pct}%</div>
           <div className="tiny faint">
-            {closed} שלבים מתוך {total} · {parts.length} מטרות
+            {closed} שלבים מתוך {total} · {parts.length} מטרות, {focus.length} מהן במוקד
           </div>
         </div>
         <Ring value={pct} max={100} size={88} stroke={9}>
@@ -254,11 +257,14 @@ function OverallCard() {
         </Ring>
       </div>
       <div className="list">
-        {parts.map((p) => (
+        {parts.map((p, i) => (
           <div className="item" key={p.id} style={{ minHeight: 38 }}>
             <span style={{ width: 22, flex: '0 0 22px', fontSize: 15 }} aria-hidden="true">{p.emoji}</span>
             <div className="txt">
-              <div className="ttl">{p.name}</div>
+              <div className="ttl">
+                <span className="faint ltr">{i + 1}.</span> {p.name}
+                {p.focus && <span className="chip on" style={{ marginInlineStart: 6 }}>במוקד</span>}
+              </div>
               <div className="bar sm" style={{ marginTop: 5 }}>
                 <i style={{ width: `${Math.max(2, p.pct)}%` }} />
               </div>
@@ -270,7 +276,8 @@ function OverallCard() {
         ))}
       </div>
       <div className="tiny faint" style={{ padding: '0 13px 12px' }}>
-        היחידה היא שלב שנסגר, לא ק״ג. כל מטרה שוקלת אותו דבר, וכל שלב נבדק מול היומן.
+        היחידה היא שלב שנסגר, לא ק״ג. כל מטרה שוקלת אותו דבר, כל שלב נבדק מול
+        היומן, והמספר נספר מכל המטרות — גם מאלה שעוד לא בתוכנית.
       </div>
     </div>
   )
@@ -343,32 +350,28 @@ function ForecastCard() {
 }
 
 // ---------------------------------------------------------------------------
-// המטרות הגדולות — מה שלא בתוכנית עכשיו, מקובץ לפי מתי נוגעים בו.
+// הבאות בתור — כל שאר המטרות, ברצף אחד ובסדר שבו נוגעים בהן.
 //
-// זה לא קישוט: בלי לראות את הרשימה, סולם של שבעה שלבים מרגיש כמו עבודה בלי
-// סוף. עם הרשימה, כל שלב הוא צעד לכיוון משהו שרואים.
+// אין כאן קבוצות (20.9.2026): קבוצה אומרת "זה שלך וזה לא", והכל שלו. מה
+// שנשאר הוא סדר — ולכן רשימה אחת, מהבא בתור ועד הרחוק. הרשימה הזו לא קישוט:
+// בלי לראות אותה, סולם של שבעה שלבים מרגיש כמו עבודה בלי סוף.
 // ---------------------------------------------------------------------------
-function FutureSkills() {
-  const [tier, setTier] = useState(2)
-  const list = laddersInTier(tier)
+function NextGoals() {
+  const list = laddersInOrder().filter((lad) => !isFocusGoal(lad.id))
   return (
     <>
-      <div className="segs">
-        {[2, 3, 4].map((t) => (
-          <button key={t} className={tier === t ? 'on' : ''} onClick={() => setTier(t)}>
-            {SKILL_TIERS[t].name}
-          </button>
-        ))}
-      </div>
-      <div className="tiny faint" style={{ margin: '2px 2px 0' }}>{SKILL_TIERS[tier].note}</div>
-      {list.map((lad) => (
-        <GoalCard key={lad.id} lad={lad} />
+      <p className="small muted" style={{ margin: '0 0 2px' }}>
+        לפי הסדר שבו הן נכנסות. כולן נספרות בהתקדמות הכוללת כבר עכשיו — מה
+        שמפריד אותן מהמוקד הוא זמן, לא מעמד.
+      </p>
+      {list.map((lad, i) => (
+        <GoalCard key={lad.id} lad={lad} rank={FOCUS_COUNT + i + 1} />
       ))}
     </>
   )
 }
 
-function GoalCard({ lad }: { lad: SkillLadder }) {
+function GoalCard({ lad, rank }: { lad: SkillLadder; rank: number }) {
   const s = useApp()
   const [open, setOpen] = useState(false)
   const f = ladderFraction(s, lad)
@@ -382,7 +385,7 @@ function GoalCard({ lad }: { lad: SkillLadder }) {
       >
         <span className="goal-emoji" aria-hidden="true">{lad.emoji}</span>
         <div className="grow" style={{ minWidth: 0 }}>
-          <b>{lad.name}</b>
+          <b><span className="faint ltr">{rank}.</span> {lad.name}</b>
           <div className="tiny faint">{lad.goal}</div>
         </div>
         {f.stage > 0 && <span className="chip on">{f.stage}/{f.total}</span>}

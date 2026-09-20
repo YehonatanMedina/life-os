@@ -8,7 +8,9 @@ vi.hoisted(() => {
 
 import { blankState, freshStore, task, event, rule, day, week, workout, pin, tick, NOW, KEY, type StoreModule } from './helpers'
 import type { AppState } from '../../../src/types'
-import { FOCUS_TIER, SKILL_LADDERS, laddersInTier, matchesSkill } from '../../../src/skills'
+import {
+  FOCUS_COUNT, GOAL_ORDER, SKILL_LADDERS, focusLadders, isFocusGoal, laddersInOrder, matchesSkill,
+} from '../../../src/skills'
 
 let S: StoreModule
 const get = () => S.store.get()
@@ -927,7 +929,6 @@ describe('קטלוג המיומנויות', () => {
       const st = lad.stages.map((x) => x.id)
       expect(new Set(st).size, lad.id).toBe(st.length)
       expect(lad.stages.length, lad.id).toBeGreaterThanOrEqual(4)
-      expect([1, 2, 3, 4], lad.id).toContain(lad.tier)
       expect(lad.match.length, lad.id).toBeGreaterThan(0)
     }
   })
@@ -942,11 +943,31 @@ describe('קטלוג המיומנויות', () => {
     }
   })
 
-  it('laddersInTier מחזיר את הקבוצה, וקבוצה 1 היא זו שנמדדת', () => {
-    expect(laddersInTier(FOCUS_TIER).length).toBeGreaterThan(0)
-    expect(laddersInTier(FOCUS_TIER).every((x) => x.tier === 1)).toBe(true)
-    const sum = [1, 2, 3, 4].reduce((a, t) => a + laddersInTier(t).length, 0)
-    expect(sum).toBe(SKILL_LADDERS.length)
+  it('סדר המטרות מכסה כל סולם בדיוק פעם אחת, ועוד הריצה', () => {
+    expect(new Set(GOAL_ORDER).size).toBe(GOAL_ORDER.length)
+    expect(GOAL_ORDER).toContain('run')
+    expect(GOAL_ORDER.length).toBe(SKILL_LADDERS.length + 1)
+    for (const lad of SKILL_LADDERS) expect(GOAL_ORDER, lad.id).toContain(lad.id)
+    // laddersInOrder מחזיר את כולם, בסדר הזה
+    const ordered = laddersInOrder().map((x) => x.id)
+    expect(ordered).toHaveLength(SKILL_LADDERS.length)
+    expect(ordered).toEqual(GOAL_ORDER.filter((id) => id !== 'run'))
+  })
+
+  it('המוקד הוא ראש הרשימה, והריצה בו', () => {
+    expect(isFocusGoal('run')).toBe(true)
+    expect(focusLadders()).toHaveLength(FOCUS_COUNT - 1)
+    expect(focusLadders().every((x) => isFocusGoal(x.id))).toBe(true)
+    expect(isFocusGoal(GOAL_ORDER[FOCUS_COUNT])).toBe(false)
+  })
+
+  it('מיומנות שהיא תנאי לאחרת יושבת לפניה', () => {
+    const at = (id: string) => GOAL_ORDER.indexOf(id)
+    expect(at('sk-backlever')).toBeLessThan(at('sk-frontlever'))
+    expect(at('sk-dragonflag')).toBeLessThan(at('sk-frontlever'))
+    expect(at('sk-pullup')).toBeLessThan(at('sk-oapullup'))
+    expect(at('sk-handstand')).toBeLessThan(at('sk-hspu'))
+    expect(at('sk-lsit')).toBeLessThan(at('sk-vsit'))
   })
 })
 
@@ -962,9 +983,12 @@ describe('ההתקדמות הכוללת', () => {
     S = await freshStore(blankState({ workoutPlan: plan }))
     const f = S.fitnessProgress(get())
     expect(f.pct).toBe(0)
-    // חמשת הסולמות של קבוצה 1 ועוד הריצה
-    expect(f.parts).toHaveLength(laddersInTier(FOCUS_TIER).length + 1)
-    expect(f.parts.at(-1)!.id).toBe('run')
+    // כל המטרות נספרות, לא רק אלה שבתוכנית
+    expect(f.parts).toHaveLength(SKILL_LADDERS.length + 1)
+    expect(f.parts.map((p) => p.id)).toEqual(GOAL_ORDER)
+    // הריצה ראשונה, והמוקד בראש
+    expect(f.parts[0].id).toBe('run')
+    expect(f.focus).toHaveLength(FOCUS_COUNT)
   })
 
   it('שלב שנסגר מזיז את המחוון, ותוספת משקל לא', async () => {
