@@ -1774,7 +1774,9 @@ export function stageIndex(prog: SkillProgress | undefined, stageIds: string[]):
 export function longestRun(s: AppState): { km: number; date?: ISODate } {
   let out = { km: 0, date: undefined as ISODate | undefined }
   for (const w of s.workouts ?? []) {
-    if (w.deleted || w.kind !== 'run' || !w.km) continue
+    // ריצה שנמדדה ב-GPS נספרת גם כשהיום רשום כאימון אחר (חדר כושר בבוקר,
+    // ריצה בערב): האימון האחר לא נדרס, והריצה לא נעלמת.
+    if (w.deleted || (w.kind !== 'run' && !w.run) || !w.km) continue
     if (w.km > out.km) out = { km: w.km, date: w.date }
   }
   return out
@@ -1784,7 +1786,7 @@ export function longestRun(s: AppState): { km: number; date?: ISODate } {
 export function runWeeks(s: AppState): Array<[ISODate, number]> {
   const map = new Map<string, number>()
   for (const w of s.workouts ?? []) {
-    if (w.deleted || (w.kind !== 'run' && w.kind !== 'walk') || !w.km) continue
+    if (w.deleted || (w.kind !== 'run' && w.kind !== 'walk' && !w.run) || !w.km) continue
     const ws = weekStart(w.date)
     map.set(ws, (map.get(ws) ?? 0) + w.km)
   }

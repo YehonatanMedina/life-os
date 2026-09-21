@@ -79,7 +79,13 @@ export function isAudioFresh(sidecar, ed, hash, bytes) {
 /** כותב את שדה audio בגיליון של היום ובעותק שבארכיון. מחזיר את הקבצים שנגעו בהם. */
 export function stampEditions(url, date, dir = NEWS_DIR) {
   const touched = []
-  for (const p of [path.join(dir, 'latest.json'), path.join(dir, 'archive', `${date}.json`)]) {
+  // האם זה קובץ הארכיון נקבע כאן ולא מהנתיב: ב-Windows המפריד הוא לוכסן
+  // הפוך, ובדיקת מחרוזת על הנתיב פשוט לא תפסה — והארכיון נדרס.
+  const files = [
+    { p: path.join(dir, 'latest.json'), archive: false },
+    { p: path.join(dir, 'archive', `${date}.json`), archive: true },
+  ]
+  for (const { p, archive } of files) {
     let raw
     try {
       raw = fs.readFileSync(p, 'utf8')
@@ -90,7 +96,7 @@ export function stampEditions(url, date, dir = NEWS_DIR) {
     if (j.date !== date || j.audio === url) continue
     // מהדורה בארכיון ששמרו לה קובץ קריינות משלה — לא מחזירים אותה ל-latest.mp3,
     // שנדרס כל בוקר. זה מה שמאפשר להשמיע מהדורה ישנה כמו שהוקלטה.
-    if (/[\/]archive[\/]/.test(p) && typeof j.audio === 'string' && j.audio.includes('/archive/')) continue
+    if (archive && typeof j.audio === 'string' && j.audio.includes('/archive/')) continue
     j.audio = url
     let out = JSON.stringify(j, null, 2) + '\n'
     if (raw.includes('\r\n')) out = out.replace(/\n/g, '\r\n')
