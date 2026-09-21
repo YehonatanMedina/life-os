@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { normalizeEdition, type Edition, type Section, type Story } from '../news'
-import { plural } from '../dates'
+import React, { useEffect, useRef, useState } from 'react'
+
+import { archivedEdition, normalizeEdition, type Edition, type Section, type Story } from '../news'
+import { addDays, niceDate, plural } from '../dates'
 import { useToast, vibrate } from '../ui'
 import { actions, useApp } from '../store'
 import { queueNewsFeedback } from '../cloud'
@@ -12,6 +13,9 @@ import { queueNewsFeedback } from '../cloud'
 //   { key:'israel'|'tech'|'culture', title, stories:[{ headline, body }] } ] }
 // אם יש קובץ שמע (docs/news/latest.mp3) מנגנים אותו; אחרת קריינות מקומית
 // של הדפדפן (speechSynthesis) — עובדת גם בלי קובץ ובלי רשת.
+//
+// מהדורות קודמות נשמרות ב-docs/news/archive/YYYY-MM-DD.json ואפשר לפתוח אותן
+// מהכרטיס — בוקר שלא הספקת לשמוע לא הולך לאיבוד.
 // ---------------------------------------------------------------------------
 
 
@@ -32,6 +36,9 @@ function fullText(ed: Edition): string {
   return parts.join('\n\n')
 }
 
+/** כמה ימים אחורה מחפשים מהדורות בארכיון */
+const ARCHIVE_DAYS = 14
+
 export default function NewsCard() {
   const toast = useToast()
   const s = useApp()
@@ -40,6 +47,11 @@ export default function NewsCard() {
   const [openStory, setOpenStory] = useState<string | null>(null)
   const [noteOpen, setNoteOpen] = useState(false)
   const [note, setNote] = useState('')
+  // ארכיון: המהדורה שמוצגת במקום זו של היום, והרשימה שנטענת בלחיצה
+  const [arch, setArch] = useState<Edition | null>(null)
+  const [archOpen, setArchOpen] = useState(false)
+  const [archList, setArchList] = useState<Edition[] | null>(null)
+  const [archBusy, setArchBusy] = useState(false)
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem(READ_KEY) ?? ''
@@ -86,17 +98,21 @@ export default function NewsCard() {
   useEffect(() => () => window.speechSynthesis?.cancel(), [])
 
   // ההערה נטענת מהמצב השמור כשמזהים את המהדורה
-  const rating = ed ? (s.news ?? []).find((n) => n.date === ed.date && !n.deleted) : undefined
+  const shown = arch ?? ed
+  const rating = shown ? (s.news ?? []).find((n) => n.date === shown.date && !n.deleted) : undefined
   useEffect(() => {
     setNote(rating?.note ?? '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ed?.date])
+  }, [shown?.date])
 
   if (!ed || dismissed === ed.date) return null
 
+  // המהדורה המוצגת: של היום, או אחת מהארכיון
+  const view = arch ?? ed
+
   const voteCount = Object.keys(rating?.votes ?? {}).length
   const vote = (key: string, v: 1 | -1, headline: string, section: string) => {
-    actions.rateNewsStory(ed.date, key, v, { headline, section })
+    actions.rateNewsStory(view.date, key, v, { headline, section })
     vibrate()
     queueNewsFeedback()
   }
@@ -109,7 +125,7 @@ export default function NewsCard() {
       setSpeaking(false)
       return
     }
-    const u = new SpeechSynthesisUtterance(fullText(ed))
+    const u = new SpeechSynthesisUtterance(fullText(view))
     u.lang = 'he-IL'
     const voice = synth.getVoices().find((v) => v.lang.startsWith('he'))
     if (voice) u.voice = voice
@@ -122,41 +138,81 @@ export default function NewsCard() {
     setSpeaking(true)
   }
 
-  const totalStories = ed.sections.reduce((a, s) => a + s.stories.length, 0)
+  const totalStories = view.sections.reduce((a, s) => a + s.stories.length, 0)
+
+  // הארכיון נטען רק בלחיצה: מנסים את הימים שלפני המהדורה הנוכחית וקוראים את
+  // מה שקיים. אין קובץ אינדקס — מי שלא נמצא פשוט לא מופיע ברשימה.
+  const openArchive = async () => {
+    setArchOpen((v) => !v)
+    if (archList || archBusy) return
+    setArchBusy(true)
+    const dates = Array.from({ length: ARCHIVE_DAYS }, (_, i) => addDays(ed.date, -(i + 1)))
+    const found = await Promise.all(
+      dates.map(async (d) => {
+        try {
+          const r = await fetch(`./news/archive/${d}.json`, { cache: 'force-cache' })
+          if (!r.ok) return null
+          return archivedEdition(normalizeEdition(await r.json()))
+        } catch {
+          return null
+        }
+      }),
+    )
+    setArchList(found.filter((e): e is Edition => !!e))
+    setArchBusy(false)
+  }
+
+  // מעבר בין מהדורות: עוצרים קריינות ומאפסים את מצב נגן השמע
+  const show = (e: Edition | null) => {
+    window.speechSynthesis?.cancel()
+    setSpeaking(false)
+    setAudioOk(null)
+    setOpenStory(null)
+    setArch(e)
+    setArchOpen(false)
+  }
 
   return (
     <div className="card">
       <div className="card-h">
         <div className="grow" style={{ minWidth: 0 }}>
-          <b>{ed.title || 'חדשות הבוקר'}</b>
+          <b>{view.title || 'חדשות הבוקר'}</b>
           <div className="tiny faint">
+            {arch ? `${niceDate(view.date)} · ` : ''}
             {plural(totalStories, 'סיפור אחד', 'סיפורים')}
-            {ed.minutes ? ` · כ־${ed.minutes} דקות` : ''}
+            {view.minutes ? ` · כ־${view.minutes} דקות` : ''}
           </div>
         </div>
-        <button
-          className="btn ghost sm"
-          aria-label="סמן כנקרא וסגור להיום"
-          onClick={() => {
-            window.speechSynthesis?.cancel()
-            setDismissed(ed.date)
-            try {
-              localStorage.setItem(READ_KEY, ed.date)
-            } catch {
-              /* ignore */
-            }
-          }}
-        >
-          ✕
-        </button>
+        {arch ? (
+          <button className="btn ghost sm" onClick={() => show(null)}>
+            למהדורת היום
+          </button>
+        ) : (
+          <button
+            className="btn ghost sm"
+            aria-label="סמן כנקרא וסגור להיום"
+            onClick={() => {
+              window.speechSynthesis?.cancel()
+              setDismissed(ed.date)
+              try {
+                localStorage.setItem(READ_KEY, ed.date)
+              } catch {
+                /* ignore */
+              }
+            }}
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       <div style={{ padding: '0 13px 10px' }}>
-        {ed.audio && audioOk !== false ? (
+        {view.audio && audioOk !== false ? (
           <audio
             controls
             preload="none"
-            src={ed.audio}
+            key={view.date}
+            src={view.audio}
             style={{ width: '100%', height: 40 }}
             onPlay={() => window.speechSynthesis?.cancel()}
             onError={() => setAudioOk(false)}
@@ -168,14 +224,14 @@ export default function NewsCard() {
         )}
       </div>
 
-      {ed.intro && open && (
+      {view.intro && open && (
         <div className="small muted" style={{ padding: '0 13px 8px', whiteSpace: 'pre-wrap' }}>
-          {ed.intro}
+          {view.intro}
         </div>
       )}
 
       <div className="list">
-        {ed.sections.map((sec) => (
+        {view.sections.map((sec) => (
           <React.Fragment key={sec.key}>
             <div className="section-title" style={{ padding: '8px 13px 2px' }}>
               {sec.title}
@@ -237,12 +293,44 @@ export default function NewsCard() {
         <button className="btn sm ghost" onClick={() => setNoteOpen((v) => !v)}>
           {noteOpen ? 'סגור' : 'הערה למהדורה'}
         </button>
+        <button className="btn sm ghost" onClick={openArchive}>
+          {archOpen ? 'סגור ארכיון' : 'מהדורות קודמות'}
+        </button>
         {voteCount > 0 && (
           <span className="tiny faint">
             {voteCount === 1 ? 'סימון אחד' : `${voteCount} סימונים`} נשמרו
           </span>
         )}
       </div>
+
+      {archOpen && (
+        <div className="list">
+          {archBusy && !archList && <div className="item tiny faint">טוען…</div>}
+          {archList && !archList.length && (
+            <div className="item tiny faint">אין מהדורות שמורות מהשבועיים האחרונים.</div>
+          )}
+          {(archList ?? []).map((e) => (
+            <div key={e.date} className="item">
+              <div className="txt">
+                <button
+                  style={{ background: 'none', border: 0, padding: 0, textAlign: 'start', width: '100%' }}
+                  onClick={() => show(e)}
+                >
+                  <div className="ttl">{niceDate(e.date)}</div>
+                  <div className="tiny faint">
+                    {plural(
+                      e.sections.reduce((a, sec) => a + sec.stories.length, 0),
+                      'סיפור אחד',
+                      'סיפורים',
+                    )}
+                    {e.audio ? ' · עם קריינות' : ''}
+                  </div>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {noteOpen && (
         <div style={{ padding: '0 13px 12px' }}>
@@ -253,7 +341,7 @@ export default function NewsCard() {
             placeholder="מה לשפר במהדורה של מחר? אורך, נושאים, סגנון, כמה הסבר רקע…"
             onChange={(e) => setNote(e.target.value)}
             onBlur={() => {
-              actions.setNewsNote(ed.date, note.trim())
+              actions.setNewsNote(view.date, note.trim())
               queueNewsFeedback()
             }}
           />

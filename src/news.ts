@@ -50,3 +50,13 @@ export function normalizeEdition(input: unknown): Edition | null {
   const audio = typeof j.audio === 'string' && /[?&]v=[^&]/.test(j.audio) ? j.audio : undefined
   return { ...j, audio, sections } as Edition
 }
+
+/**
+ * מהדורה מהארכיון. הקריינות שלה תקפה רק אם נשמר לה קובץ משלה תחת
+ * `news/archive/` — `latest.mp3` נדרס בכל בוקר, ולכן מהדורה ישנה שמצביעה עליו
+ * תוקרא בקול הדפדפן במקום להשמיע את הקריינות של היום.
+ */
+export function archivedEdition(e: Edition | null): Edition | null {
+  if (!e) return null
+  return e.audio && !e.audio.includes('/archive/') ? { ...e, audio: undefined } : e
+}

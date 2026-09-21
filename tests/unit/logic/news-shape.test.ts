@@ -3,7 +3,7 @@
 // הכרטיס דחה את הקובץ בשקט, ולא היו חדשות. מאז שתי הצורות עובדות.
 // ---------------------------------------------------------------------------
 import { describe, expect, it } from 'vitest'
-import { normalizeEdition } from '../../../src/news'
+import { archivedEdition, normalizeEdition } from '../../../src/news'
 
 const story = (n: string) => ({ headline: 'כותרת ' + n, body: 'גוף ' + n })
 const base = { date: '2026-09-16', title: 'חדשות הבוקר', intro: 'בוקר טוב', outro: 'שיהיה יום טוב' }
@@ -73,5 +73,15 @@ describe('normalizeEdition', () => {
     expect(normalizeEdition(null)).toBeNull()
     expect(normalizeEdition({ sections: [] })).toBeNull()
     expect(normalizeEdition('לא מהדורה')).toBeNull()
+  })
+
+  it('מהדורה מהארכיון מנגנת רק קריינות ששמורה לה', () => {
+    const secs = [{ key: 'israel', title: 'ישראל', stories: [story('א')] }]
+    const ed = normalizeEdition({ ...base, sections: secs, audio: './news/latest.mp3?v=abc1234567' })!
+    // latest.mp3 מתחלף כל בוקר — מהדורה ישנה שמצביעה עליו תוקרא בקול הדפדפן
+    expect(archivedEdition(ed)!.audio).toBeUndefined()
+    const kept = normalizeEdition({ ...base, sections: secs, audio: './news/archive/2026-09-21.mp3?v=abc1234567' })!
+    expect(archivedEdition(kept)!.audio).toBe('./news/archive/2026-09-21.mp3?v=abc1234567')
+    expect(archivedEdition(null)).toBeNull()
   })
 })
