@@ -15,8 +15,8 @@
 // ---------------------------------------------------------------------------
 import { useSyncExternalStore } from 'react'
 import { actions, store } from './store'
-import { today } from './dates'
-import { LIMITS, type Fix, type RunState, addFix, emptyRun, encodePolyline, simplify } from './run'
+import { logicalDate } from './dates'
+import { LIMITS, type Fix, type RunState, addFix, emptyRun, encodePolyline, reanchor, simplify } from './run'
 import { routeById } from './runRoutes'
 
 const KEY = 'life-os-run-live'
@@ -24,6 +24,10 @@ const KEY = 'life-os-run-live'
 const RESUME_MAX_MS = 12 * 3600_000
 /** מעל זה בלי קליטה טובה — מציעים להתחיל בכל זאת */
 const ACQUIRE_PATIENCE_MS = 20_000
+/** כל כמה זמן נשמר המצב המקומי */
+const PERSIST_MS = 15_000
+/** בלי קריאה יותר מזה — המסך מודה שאין קליטה במקום להראות מספר ישן */
+export const STALE_FIX_MS = 15_000
 
 export type LiveStatus = 'off' | 'acquiring' | 'running' | 'paused' | 'saving'
 
@@ -41,10 +45,14 @@ export type Live = {
   error?: string
   /** האם התקבלה כבר קריאה טובה */
   gotFix: boolean
+  /** מתי הגיעה הקריאה האחרונה — מסך שמראה ±6 מ׳ ירוק בלי קליטה הוא שקר */
+  lastFixAt?: number
+  /** האם הדפדפן מונע כיבוי מסך. 'no' הוא אזהרה גלויה, לא שקט */
+  wake: 'unknown' | 'on' | 'no'
   startedAt: number
 }
 
-const OFF: Live = { status: 'off', run: emptyRun(0), hiddenSec: 0, gaps: 0, gotFix: false, startedAt: 0 }
+const OFF: Live = { status: 'off', run: emptyRun(0), hiddenSec: 0, gaps: 0, gotFix: false, wake: 'unknown', startedAt: 0 }
 
 let live: Live = OFF
 const listeners = new Set<() => void>()
@@ -82,10 +90,20 @@ export function setSplitHandler(fn: ((km: number) => void) | null) {
 
 function persist() {
   try {
-    if (live.status === 'off') localStorage.removeItem(KEY)
-    else localStorage.setItem(KEY, JSON.stringify({ ...live, run: { ...live.run, recent: [] } }))
+    if (live.status === 'off') {
+      localStorage.removeItem(KEY)
+      return
+    }
+    // המסלול נשמר מפושט: ריצה של שעה ב-1Hz היא 3600 נקודות וכ-150 קילובייט,
+    // וכתיבה כזו כל כמה שניות נתקעת במעבד של הטלפון דווקא בסוף ריצה ארוכה.
+    // פישוט לארבעה מטרים מוריד אותה לכמה קילובייטים ולא משנה שום מספר —
+    // המרחק, הזמנים והספליטים נשמרים כמו שהם.
+    const run = { ...live.run, recent: [], pts: simplify(live.run.pts, 4) }
+    localStorage.setItem(KEY, JSON.stringify({ ...live, run }))
   } catch {
-    /* אחסון מלא — הריצה ממשיכה בזיכרון */
+    // אחסון מלא: הריצה ממשיכה בזיכרון, אבל אסור שזה יקרה בשקט — אם הדף
+    // ייסגר עכשיו, מה שנרוץ מכאן ואילך יאבד.
+    if (!live.error) set({ error: 'אין מקום לשמור את הריצה במכשיר. אל תסגור את המסך עד הסיום.' })
   }
 }
 
@@ -97,7 +115,9 @@ export function savedRun(): Live | null {
     const v = JSON.parse(raw) as Live
     if (!v?.run || typeof v.startedAt !== 'number') return null
     if (Date.now() - v.startedAt > RESUME_MAX_MS) return null
-    return { ...v, run: { ...v.run, recent: [] } }
+    // ריצה שנשמרה תמיד ממשיכה כרצה, ומקטע חדש: מי שנשמר בזמן השהיה נשאר
+    // מושהה לנצח, והמסך היה מראה שעון שרץ עם מרחק קפוא.
+    return { ...v, run: reanchor({ ...v.run, recent: [], paused: false }) }
   } catch {
     return null
   }
@@ -115,9 +135,16 @@ export function dropSaved() {
 
 async function lockScreen() {
   try {
-    wakeLock = await (navigator as any).wakeLock?.request('screen')
+    const api = (navigator as any).wakeLock
+    if (!api?.request) {
+      if (live.status !== 'off') set({ wake: 'no' })
+      return
+    }
+    wakeLock = await api.request('screen')
+    if (live.status !== 'off') set({ wake: 'on' })
   } catch {
-    /* לא נתמך — המשתמש יראה אזהרה במסך */
+    // נדחה (חוסך סוללה, מסך שלא מלפנים) — זו אזהרה למסך, לא שקט
+    if (live.status !== 'off') set({ wake: 'no' })
   }
 }
 function releaseScreen() {
@@ -146,10 +173,16 @@ function onVisibility() {
 // -- ה-GPS -------------------------------------------------------------------------
 
 function onPosition(p: GeolocationPosition) {
+  // קואורדינטה פגומה מגיעה לפעמים ממכשירים שמדמים מיקום, והיא מרעילה כל
+  // חשבון שאחריה (NaN משתיק כל השוואה)
+  if (!Number.isFinite(p.coords?.latitude) || !Number.isFinite(p.coords?.longitude)) return
+
+  // זמן ההגעה, ולא חותמת המכשיר: חותמת אחת שקפצה לעתיד הרעילה את השעון,
+  // וכל הקריאות אחריה נדחו כ"אחורה" — הריצה נראתה תקינה ולא זזה יותר.
   const fix: Fix = {
     lat: p.coords.latitude,
     lon: p.coords.longitude,
-    t: p.timestamp || Date.now(),
+    t: Date.now(),
     acc: p.coords.accuracy,
     alt: p.coords.altitude ?? undefined,
     spd: p.coords.speed ?? undefined,
@@ -158,11 +191,17 @@ function onPosition(p: GeolocationPosition) {
   if (live.status === 'acquiring') {
     const good = fix.acc !== undefined && fix.acc <= LIMITS.maxAccuracy
     const patient = Date.now() - acquireAt > ACQUIRE_PATIENCE_MS
-    set({ acc: fix.acc, gotFix: live.gotFix || good })
+    set({ acc: fix.acc, gotFix: live.gotFix || good, lastFixAt: fix.t })
     if (!good && !patient) return
     // הקריאה הזו היא נקודת ההתחלה
     const started = Date.now()
-    set({ status: 'running', startedAt: started, run: addFix(emptyRun(started), { ...fix, t: started }), error: undefined })
+    set({
+      status: 'running',
+      startedAt: started,
+      run: addFix(emptyRun(started), { ...fix, t: started }),
+      lastFixAt: started,
+      error: undefined,
+    })
     persist()
     return
   }
@@ -170,7 +209,8 @@ function onPosition(p: GeolocationPosition) {
   if (live.status !== 'running' && live.status !== 'paused') return
   const before = live.run.splits.length
   const run = addFix(live.run, fix)
-  set({ run, acc: fix.acc })
+  // קליטה חזרה — השגיאה הקודמת כבר לא נכונה, ולא נשארת על המסך עד הסוף
+  set({ run, acc: fix.acc, lastFixAt: fix.t, error: undefined })
   if (run.splits.length > before) onSplit?.(run.splits.length)
 }
 
@@ -199,28 +239,88 @@ function stopWatch() {
 
 // -- הפעולות ----------------------------------------------------------------------
 
-export function startRun(routeId?: string) {
-  if (!navigator.geolocation) {
-    set({ ...OFF, status: 'off', error: 'הדפדפן הזה לא יודע לאתר מיקום.' })
-    return
+/**
+ * שתי הגנות על ריצה שרצה: מחווה של "חזור" (הדבר הקל ביותר ללחוץ בטעות
+ * ביד אחת) לא יוצאת מהמסך, וסגירה או רענון שואלים קודם. בלי זה, הנעילה
+ * שמונעת נגיעה בטעות לא שווה כלום — המחווה עוברת מסביבה.
+ */
+function onPop() {
+  if (live.status === 'off') return
+  try {
+    history.pushState({ run: 1 }, '')
+  } catch {
+    /* ignore */
   }
+  set({ error: 'כדי לצאת מהריצה — לחיצה ארוכה על "סיום", או "מחיקת הריצה" בהשהיה.' })
+}
+function onUnload(e: BeforeUnloadEvent) {
+  if (live.status === 'off') return
+  e.preventDefault()
+  e.returnValue = ''
+}
+function guard(on: boolean) {
+  if (on) {
+    try {
+      history.pushState({ run: 1 }, '')
+    } catch {
+      /* ignore */
+    }
+    window.addEventListener('popstate', onPop)
+    window.addEventListener('beforeunload', onUnload)
+  } else {
+    window.removeEventListener('popstate', onPop)
+    window.removeEventListener('beforeunload', onUnload)
+  }
+}
+
+function teardown() {
+  stopWatch()
+  releaseScreen()
+  document.removeEventListener('visibilitychange', onVisibility)
+  guard(false)
+  if (saveTimer) window.clearInterval(saveTimer)
+  saveTimer = undefined
+}
+
+export function startRun(routeId?: string) {
+  // הפעלה כפולה (לחיצה כפולה, או מסך שנפתח פעמיים) לא תשאיר מאזין וטיימר יתומים
+  teardown()
   acquireAt = Date.now()
   live = { ...OFF, status: 'acquiring', routeId, startedAt: Date.now(), run: emptyRun(Date.now()) }
+  if (!navigator.geolocation) {
+    // המסך נפתח בכל זאת עם ההסבר. קודם זה נשמר על status: 'off', כלומר
+    // הכפתור פשוט לא עשה כלום.
+    live = { ...live, error: 'הדפדפן הזה לא יודע לאתר מיקום.' }
+    emit()
+    return
+  }
   emit()
   startWatch()
   void lockScreen()
   document.addEventListener('visibilitychange', onVisibility)
-  saveTimer = window.setInterval(persist, 5000)
+  guard(true)
+  saveTimer = window.setInterval(persist, PERSIST_MS)
 }
 
 /** ממשיכים ריצה שנשמרה (קריסה, רענון, סגירה בטעות) */
 export function resumeSaved(saved: Live) {
-  live = { ...saved, status: 'running', error: undefined }
+  teardown()
+  live = { ...saved, status: 'running', run: reanchor({ ...saved.run, paused: false }), error: undefined }
   emit()
   startWatch()
   void lockScreen()
   document.addEventListener('visibilitychange', onVisibility)
-  saveTimer = window.setInterval(persist, 5000)
+  guard(true)
+  saveTimer = window.setInterval(persist, PERSIST_MS)
+}
+
+/**
+ * מתחיל למדוד עם הקליטה שיש עכשיו. קיים כי לפעמים אין קליטה טובה ואי
+ * אפשר לחכות — עדיף להתחיל עם דיוק בינוני מאשר לא לצאת לרוץ.
+ */
+export function startAnyway() {
+  if (live.status !== 'acquiring') return
+  acquireAt = 0
 }
 
 export function pauseRun() {
@@ -231,16 +331,10 @@ export function pauseRun() {
 
 export function resumeRun() {
   if (live.status !== 'paused') return
-  set({ status: 'running', run: { ...live.run, paused: false } })
+  // עיגון מחדש: מי שעצר, נסע והמשיך לא יקבל את הדרך במכונית כמרחק ריצה
+  // גם אם לא הגיעה שום קריאה בזמן ההשהיה.
+  set({ status: 'running', run: reanchor({ ...live.run, paused: false }) })
   persist()
-}
-
-function teardown() {
-  stopWatch()
-  releaseScreen()
-  document.removeEventListener('visibilitychange', onVisibility)
-  if (saveTimer) window.clearInterval(saveTimer)
-  saveTimer = undefined
 }
 
 /** זורק את הריצה בלי לשמור */
@@ -261,6 +355,8 @@ export type RunSummary = {
   routeId?: string
   gaps: number
   startedAt: number
+  est?: { meters: number; sec: number }
+  rejected?: RunState['rejected']
 }
 
 export function summarize(l: Live = live): RunSummary {
@@ -275,6 +371,8 @@ export function summarize(l: Live = live): RunSummary {
     routeId: l.routeId,
     gaps: l.gaps,
     startedAt: l.startedAt,
+    est: r.est?.meters ? { meters: Math.round(r.est.meters), sec: Math.round(r.est.sec) } : undefined,
+    rejected: r.rejected,
   }
 }
 
@@ -282,19 +380,31 @@ export function summarize(l: Live = live): RunSummary {
  * מסיים ושומר את הריצה כאימון של היום. משתמש בפעולה הקיימת, ולכן הכל —
  * הסטטיסטיקה השבועית, ההשוואה ליעד, הסנכרון — עובד בלי שינוי.
  */
+/** מתחת לזה זו לא ריצה — התחלה בטעות, או יציאה לפני שזזת */
+const MIN_SAVE_METERS = 100
+
 export function finishRun(): RunSummary | null {
   if (live.status === 'off') return null
+  // ריצה של עשרה מטרים לא תיכנס ליומן כאימון ותשבש את הסטטיסטיקה השבועית
+  if (live.run.meters < MIN_SAVE_METERS) {
+    discardRun()
+    return null
+  }
   const sum = summarize()
-  const date = today()
+  // התאריך הוא של **תחילת** הריצה, לפי היום הלוגי: ריצה שיצאה ב-03:00
+  // נרשמה קודם למחרת, ודרסה את האימון של אותו יום.
+  const date = logicalDate(live.startedAt)
   const s = store.get()
   const existing = (s.workouts ?? []).find((w) => w.date === date && !w.deleted)
   const route = routeById(live.routeId)
-  const title = existing?.title || route?.name || 'ריצה'
+  const other = existing && existing.kind !== 'run' && existing.kind !== 'walk'
   actions.patchWorkout(date, {
-    title,
-    kind: existing && existing.kind !== 'run' ? existing.kind : 'run',
+    title: existing?.title || route?.name || 'ריצה',
+    // אימון אחר שנרשם באותו יום לא נדרס: הכותרת, הסוג והדקות שלו נשארות,
+    // והריצה מתווספת עם המרחק והמסלול שלה. קודם 72 דקות חדר כושר נמחקו.
+    kind: other ? existing!.kind : 'run',
+    ...(other ? {} : { minutes: sum.minutes }),
     km: sum.km,
-    minutes: sum.minutes,
     run: sum,
     finishedAt: Date.now(),
   })

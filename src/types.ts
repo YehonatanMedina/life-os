@@ -338,6 +338,10 @@ export interface TrackedRun {
   /** כמה פעמים המסך יצא מקדמת הבמה — שם המסלול חסר */
   gaps: number
   startedAt: number
+  /** מה שהוערך בקו ישר כשלא הייתה קליטה — מרחק ושניות */
+  est?: { meters: number; sec: number }
+  /** כמה קריאות נדחו ולמה — כדי שאפשר יהיה לדעת כמה הריצה הזו אמינה */
+  rejected?: { weak: number; jump: number; tiny: number; back: number }
 }
 
 /**

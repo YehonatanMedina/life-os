@@ -552,7 +552,9 @@ export function describeSyncError(err: string, retry = 0): string {
 export function safeToReload(): boolean {
   const s = store.get()
   // גיליון/זרימה/מצב מיקוד פתוחים — יש טקסט שעלול ללכת לאיבוד; טיימר רץ — לא קוטעים
-  const busy = typeof document !== 'undefined' && !!document.querySelector('.scrim, .flow, .focus, .lock-overlay')
+  // .runlive ברשימה: רענון באמצע ריצה הורג את המעקב, את נעילת המסך ואת
+  // כל מה שלא נשמר בחמש השניות האחרונות — וזורק את הרץ למסך "היום".
+  const busy = typeof document !== 'undefined' && !!document.querySelector('.scrim, .flow, .focus, .lock-overlay, .runlive')
   if (busy || s.timer?.running) return false
   // בלי ענן אין מה לדחוף — השמירה המקומית נכתבת לפני היציאה
   if (status === 'off') return true

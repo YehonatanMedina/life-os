@@ -51,7 +51,17 @@ export default function RunCard({ date, target }: { date: string; target?: RunTa
               <button className="btn sm primary grow" onClick={() => { resumeSaved(resume); setResume(null) }}>
                 המשך אותה
               </button>
-              <button className="btn sm grow" onClick={() => { dropSaved(); setResume(null); toast('הריצה נמחקה') }}>
+              <button
+                className="btn sm grow"
+                onClick={() => {
+                  // מחיקה בלתי הפיכה של ריצה שכבר רצת — לא בלחיצה אחת ליד
+                  // הכפתור שממשיך אותה.
+                  if (!confirm('למחוק את הריצה שלא נסגרה? אי אפשר לשחזר אותה.')) return
+                  dropSaved()
+                  setResume(null)
+                  toast('הריצה נמחקה')
+                }}
+              >
                 מחיקה
               </button>
             </div>
@@ -77,7 +87,8 @@ export default function RunCard({ date, target }: { date: string; target?: RunTa
               </button>
             </div>
             <div className="tiny faint" style={{ marginTop: 8 }}>
-              המסך נשאר דלוק לאורך הריצה — דפדפן לא עוקב אחרי מיקום ברקע. אל תסגור את האפליקציה תוך כדי.
+              המסך צריך להישאר דלוק וקדמי לאורך הריצה — דפדפן לא עוקב אחרי מיקום ברקע. האפליקציה מבקשת מהמערכת
+              להשאיר אותו דלוק, ואם המערכת לא מרשה — תופיע אזהרה במסך הריצה.
             </div>
           </>
         )}
@@ -106,7 +117,7 @@ function LastRun({ log }: { log: WorkoutLog }) {
   const route = routeById(run.routeId)
   return (
     <div className="card route-card">
-      {poly.length > 1 && <RunMap track={poly} height={150} />}
+      {poly.length > 1 && <RunMap track={poly} height={150} preview />}
       <div className="pad">
         <div className="spread">
           <b>{route?.name ?? 'הריצה האחרונה'}</b>
@@ -150,6 +161,12 @@ export function RunSummaryView({ sum }: { sum: RunSummary }) {
           <span>קצב ממוצע</span>
         </div>
       </div>
+      {/* הזמן שהיה על המסך כל הריצה הוא הזמן המוחלט, ולכן הוא מופיע כאן
+          ולא נעלם לטובת הזמן נטו */}
+      <div className="tiny faint center">
+        זמן מוחלט <span className="ltr">{fmtClock(sum.elapsedSec)}</span>
+        {sum.elapsedSec > sum.movingSec + 30 ? ` · מתוכו ${fmtClock(sum.elapsedSec - sum.movingSec)} עצירות` : ''}
+      </div>
 
       {!!sum.splits.length && (
         <div className="card pad">
@@ -187,6 +204,19 @@ export function RunSummaryView({ sum }: { sum: RunSummary }) {
       {sum.gaps > 0 && (
         <div className="run-warn">
           המסך יצא מקדמת הבמה {sum.gaps} פעמים בזמן הריצה, ולכן חלק מהמסלול חסר והמרחק עשוי להיות נמוך מהאמת.
+        </div>
+      )}
+      {/* כמה מהמרחק הוא מדידה וכמה הערכה — מי שקורא את המספר צריך לדעת */}
+      {!!sum.est?.meters && sum.est.meters > 50 && (
+        <div className="run-warn">
+          <b className="ltr">{sum.est.meters}</b> מטר מתוך המרחק הוערכו בקו ישר, כי לא הייתה קליטה במשך{' '}
+          {fmtClock(sum.est.sec)}. הדרך האמיתית שם הייתה ארוכה מזה או שווה לה.
+        </div>
+      )}
+      {!!sum.rejected && sum.rejected.weak > sum.splits.length * 20 && (
+        <div className="tiny faint">
+          הקליטה הייתה חלשה בחלק מהריצה (<span className="ltr">{sum.rejected.weak}</span> קריאות נדחו), והמרחק
+          עשוי להיות נמוך מהאמת.
         </div>
       )}
       <div className="tiny faint">נשמר כאימון של היום. אפשר לערוך אותו במסך האימון.</div>

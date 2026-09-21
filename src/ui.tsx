@@ -493,11 +493,13 @@ export function ding() {
   }
 }
 
-export function vibrate(pattern: number | number[] = 12) {
+export function vibrate(pattern: number | number[] = 12): boolean {
   try {
-    navigator.vibrate?.(pattern)
+    // מחזיר אם המכשיר באמת ריטט: ב-iOS אין ויברציה בדפדפן, ומי שסומך
+    // עליה לבד (למשל סגירת קילומטר בריצה) נשאר בלי שום משוב.
+    return navigator.vibrate?.(pattern) ?? false
   } catch {
-    /* ignore */
+    return false
   }
 }
 

@@ -63,6 +63,8 @@ export type RunState = {
   last?: Fix
   /** גובה אחרון שנספר לצבירה */
   lastAlt?: number
+  /** הגובה המוחלק — הגובה הגולמי רועש מדי מכדי לצבור ממנו עלייה */
+  altEma?: number
   /** מטרים בתוך הקילומטר הנוכחי */
   kmMeters: number
   /** שניות בתוך הקילומטר הנוכחי */
@@ -70,7 +72,13 @@ export type RunState = {
   /** עלייה בתוך הקילומטר הנוכחי */
   kmGain: number
   /** כמה קריאות נדחו, לפי סיבה — לאבחון בסיום */
-  rejected: { weak: number; jump: number; tiny: number }
+  rejected: { weak: number; jump: number; tiny: number; back: number }
+  /**
+   * מה שהוערך בקו ישר: כשה-GPS נעלם לזמן ארוך אי אפשר לדעת איזו דרך עשית,
+   * והמרחק בין הנקודה שלפני לנקודה שאחרי הוא ההערכה הטובה ביותר — אבל הוא
+   * הערכה, ולכן נשמר בנפרד ומוצג בסיכום.
+   */
+  est: { meters: number; sec: number }
   /** הקריאות האחרונות (חלון קצר) — לזיהוי תנועה אמיתית מול רעש */
   recent: Fix[]
   /**
@@ -81,6 +89,8 @@ export type RunState = {
   lastCounted?: Fix
   /** המיקום המוחלק — עליו נעשים כל החישובים */
   smooth?: { lat: number; lon: number; t: number }
+  /** כמה קריאות "אחורה" ברצף — לריפוי עצמי משעון שקפץ */
+  backRun?: number
 }
 
 export type Limits = {
@@ -92,6 +102,10 @@ export type Limits = {
   minStep: number
   /** מתחת למהירות הזו נחשבים עומדים */
   stillSpeed: number
+  /** מתחת לזו, כשהמכשיר מדווח מהירות דופלר, נחשבים עומדים */
+  dopplerStill: number
+  /** קו ישר על פער בקליטה מהיר מזה הוא רכב, לא ריצה */
+  bridgeSpeed: number
   /** שינוי גובה קטן מזה לא נצבר */
   altStep: number
 }
@@ -107,11 +121,36 @@ export const LIMITS: Limits = {
    */
   minStep: 5,
   stillSpeed: 0.6,
-  altStep: 3,
+  // מהירות דופלר של הליכה איטית היא כ-1.2 מ׳/ש׳, ושל עמידה כמעט אפס. 0.8
+  // מפריד ביניהן בבירור — ולכן הליכה נמדדת כהליכה ולא כעמידה.
+  dopplerStill: 0.8,
+  // 5.5 מ׳/ש׳ הוא קצב של 3:02 לקילומטר. פער שנסגר מהר מזה נעשה ברכב.
+  bridgeSpeed: 5.5,
+  // הגובה מ-GPS רועש בסיגמא של 5–10 מטר. חמישה מטרים על גובה **מוחלק**
+  // מסנן את הרעש; שלושה על הגובה הגולמי היו מחגר שהמציא מאות מטרי עלייה.
+  altStep: 5,
 }
 
-/** קבוע הזמן של החלקת המיקום, בשניות */
+/**
+ * קבוע הזמן של החלקת המיקום, בשניות. ההחלקה קיימת כדי לבטל רעש, ולכן היא
+ * נגזרת ממנו: כשהדיוק המדווח טוב היא קצרה, ופינות חדות (הקפה בפארק, פניית
+ * פרסה בטיילת, סרפנטינה בעלייה) נשמרות במקום להיחתך.
+ */
 const EMA_TAU = 2
+const emaTau = (acc?: number) => (acc === undefined ? EMA_TAU : Math.min(3, Math.max(1.2, acc / 4)))
+/** קבוע הזמן של החלקת הגובה — ארוך בהרבה, כי הרעש האנכי גדול פי כמה */
+const ALT_TAU = 20
+/**
+ * פער בין קריאות שגדול מזה לא נשפט על חלון. חלון שהתרוקן מכיל קריאה אחת,
+ * ו"תנועה" על קריאה אחת היא תמיד שקר — לכן פער נשפט לפי המהירות המשתמעת.
+ * בלי זה, פער של חצי דקה מחק את כל המרחק שנרוץ בו.
+ */
+const GAP_MS = 8_000
+/**
+ * פער ארוך מזה לא מגושר כלל. אין שום ידיעה על עשרים דקות — אולי רצת, אולי
+ * נסעת, אולי ישבת בבית קפה — וקו ישר ביניהן הוא המצאה. מתחילים קטע חדש.
+ */
+const REANCHOR_MS = 10 * 60_000
 
 /**
  * תנועה נמדדת על חלון ולא על צעד בודד. בעמידה ברמזור ה-GPS מקפץ 3–5 מטר
@@ -164,19 +203,21 @@ export function emptyRun(startedAt: number): RunState {
     kmMeters: 0,
     kmSec: 0,
     kmGain: 0,
-    rejected: { weak: 0, jump: 0, tiny: 0 },
+    rejected: { weak: 0, jump: 0, tiny: 0, back: 0 },
+    est: { meters: 0, sec: 0 },
     recent: [],
   }
 }
-
-/** פער ארוך מזה לא מגושר — GPS שנעלם לדקה לא מייצר קו ישר מומצא */
-const BRIDGE_MAX_MS = 30_000
 
 /**
  * החלקה מעריכית עם קבוע זמן: משקל הקריאה החדשה תלוי בזמן שעבר, ולכן היא
  * עובדת גם כשהקריאות מגיעות בקצב לא אחיד (וזה המצב בדפדפן).
  */
-export function smoothFix(prev: { lat: number; lon: number; t: number } | undefined, fix: Fix, tau = EMA_TAU): { lat: number; lon: number; t: number } {
+export function smoothFix(
+  prev: { lat: number; lon: number; t: number } | undefined,
+  fix: Fix,
+  tau = emaTau(fix.acc),
+): { lat: number; lon: number; t: number } {
   if (!prev) return { lat: fix.lat, lon: fix.lon, t: fix.t }
   const dt = Math.max(0, (fix.t - prev.t) / 1000)
   const a = 1 - Math.exp(-dt / tau)
@@ -219,8 +260,29 @@ export function judgeFix(state: RunState, fix: Fix, lim: Limits = LIMITS): FixVe
   if (dt <= 0) return 'back'
   const raw = metersBetween(prev.lat, prev.lon, fix.lat, fix.lon)
   if (raw / dt > lim.maxSpeed) return 'jump'
-  const recent = trimWindow([...state.recent, fix])
-  if (!windowMoving(recent, lim)) return 'still'
+
+  // פער בקליטה: החלון ריק, ולכן מכריעים לפי המהירות המשתמעת מהנקודה
+  // האחרונה שנספרה. זה מה שמציל את המרחק במנהרה, בטלפון בכיס, ובקצב
+  // קריאות שהמערכת האטה לחסוך סוללה.
+  if (dt * 1000 >= GAP_MS) {
+    const from0 = state.lastCounted ?? prev
+    const gap = (fix.t - from0.t) / 1000
+    if (gap <= 0) return 'back'
+    const s0 = smoothFix(state.smooth, fix)
+    const line = metersBetween(from0.lat, from0.lon, s0.lat, s0.lon)
+    const v = line / gap
+    if (v > lim.bridgeSpeed) return 'jump'
+    if (v < lim.stillSpeed) return 'still'
+    return line < lim.minStep ? 'tiny' : 'ok'
+  }
+
+  // מהירות מהדופלר של ה-GPS אמינה בהרבה מהפרש מיקומים: היא לא מתבלבלת
+  // מהליכה איטית ולא מפניות חדות. החלון נשאר לגיבוי כשאין מהירות.
+  if (fix.spd !== undefined && Number.isFinite(fix.spd) && fix.spd >= 0) {
+    if (fix.spd < lim.dopplerStill) return 'still'
+  } else if (!windowMoving(trimWindow([...state.recent, fix]), lim)) {
+    return 'still'
+  }
   // המרחק נמדד על המיקום המוחלק ומהנקודה האחרונה שנספרה — כך שער של חמישה
   // מטרים מסנן רעש בלי לחתוך ריצה איטית
   const s = smoothFix(state.smooth, fix)
@@ -239,11 +301,29 @@ function trimWindow(xs: Fix[]): Fix[] {
  * יוכל להסתמך על השוואת הפניות, ושהבדיקות יוכלו להריץ מסלול שלם בשורה אחת.
  */
 export function addFix(state: RunState, fix: Fix, lim: Limits = LIMITS): RunState {
+  const anchorT = state.lastCounted?.t ?? state.last?.t
+  if (anchorT !== undefined && fix.t - anchorT > REANCHOR_MS) {
+    // הטלפון היה סגור, או שהייתה נסיעה. מה שנמדד עד כאן נשמר; מכאן קטע חדש.
+    return addFix(reanchor(state), fix, lim)
+  }
+
   const verdict = judgeFix(state, fix, lim)
   if (verdict === 'weak' || verdict === 'jump' || verdict === 'back') {
+    // חשוב שהקריאה הדחויה לא נשמרת כ-last: קריאה אחת עם חותמת זמן מהעתיד
+    // הייתה מרעילה את השעון, וכל מה שבא אחריה נדחה כ"אחורה" — הריצה
+    // נראתה תקינה על המסך ולא זזה יותר.
     const rejected = { ...state.rejected }
     if (verdict === 'weak') rejected.weak++
     if (verdict === 'jump') rejected.jump++
+    if (verdict === 'back') rejected.back++
+    if (verdict === 'back') {
+      // שלוש קריאות רצופות "אחורה" אומרות שהחותמת **השמורה** היא הפגומה,
+      // ולא אלו שמגיעות. בלי הריפוי הזה קריאה אחת שקפצה קדימה הקפיאה את
+      // הריצה עד הסוף, בזמן שהמסך המשיך להראות שעון רץ.
+      const backRun = (state.backRun ?? 0) + 1
+      if (backRun >= 3) return addFix(reanchor({ ...state, rejected }), fix, lim)
+      return { ...state, rejected, backRun }
+    }
     return { ...state, rejected }
   }
 
@@ -257,12 +337,14 @@ export function addFix(state: RunState, fix: Fix, lim: Limits = LIMITS): RunStat
     return {
       ...state,
       last: fix,
+      backRun: 0,
       lastCounted: fix,
       smooth,
       lastAlt: fix.alt,
       elapsedSec,
       recent,
-      pts: [[round6(fix.lat), round6(fix.lon), elapsedSec, fix.alt === undefined ? undefined : Math.round(fix.alt)]],
+      altEma: fix.alt,
+      pts: [...state.pts, [round6(fix.lat), round6(fix.lon), elapsedSec, fix.alt === undefined ? undefined : Math.round(fix.alt)]],
     }
   }
 
@@ -273,6 +355,7 @@ export function addFix(state: RunState, fix: Fix, lim: Limits = LIMITS): RunStat
     return {
       ...state,
       last: fix,
+      backRun: 0,
       lastCounted: state.paused ? fix : state.lastCounted,
       smooth: state.paused ? { lat: fix.lat, lon: fix.lon, t: fix.t } : smooth,
       elapsedSec,
@@ -285,30 +368,44 @@ export function addFix(state: RunState, fix: Fix, lim: Limits = LIMITS): RunStat
     // כשהשער ייפתח, מהנקודה האחרונה שנספרה. אחרת אותן שניות נספרות פעמיים,
     // והקצב נראה איטי בחצי.
     const t = { ...state.rejected, tiny: state.rejected.tiny + 1 }
-    return { ...state, last: fix, smooth, elapsedSec, recent, still: false, rejected: t }
+    return { ...state, last: fix, backRun: 0, smooth, elapsedSec, recent, still: false, rejected: t }
   }
 
   const prev = state.last!
   const from = state.lastCounted ?? prev
-  // גישור: המרחק מהנקודה האחרונה שנספרה, אלא אם עבר יותר מדי זמן (GPS שנעלם)
-  const bridged = fix.t - from.t <= BRIDGE_MAX_MS
-  const d = bridged
-    ? metersBetween(from.lat, from.lon, smooth.lat, smooth.lon)
-    : metersBetween(state.smooth?.lat ?? prev.lat, state.smooth?.lon ?? prev.lon, smooth.lat, smooth.lon)
-  // כמה זמן לזקוף לזמן נטו: אם הפער שגושר נעשה בתנועה (תחילת ריצה, או
-  // חלון שהתלבט) — כל הפער. אם הוא היה עמידה אמיתית (רמזור) — רק הצעד
-  // האחרון, אחרת דקה בצומת הייתה נכנסת לקצב.
+  // המרחק נמדד תמיד מהנקודה האחרונה שנספרה — גם אחרי פער ארוך. הקו הישר
+  // הוא הערכה, אבל הוא ההערכה הטובה ביותר; הקוד הקודם זרק אותה, ואיתה את
+  // כל המרחק שנרוץ בפער.
   const gapSec = (fix.t - from.t) / 1000
-  const useSec = bridged && gapSec > 0 && d / gapSec >= lim.stillSpeed ? gapSec : sec
+  const d = metersBetween(from.lat, from.lon, smooth.lat, smooth.lon)
+  // כמה זמן לזקוף לזמן נטו: פער שנעשה בתנועה — כולו. פער שהיה עמידה
+  // אמיתית (רמזור) — רק הצעד האחרון, אחרת דקה בצומת נכנסת לקצב. פער ארוך
+  // מ-BRIDGE_MAX_MS — גם הוא רק הצעד האחרון, כי אין לדעת מה קרה בתוכו.
+  // פער שנעשה בתנועה נספר במלואו — גם המרחק וגם הזמן. לספור מרחק בלי זמן
+  // היה מייפה את הקצב, וזו הטעות שהכי קשה להבחין בה בדיעבד.
+  const moved = gapSec > 0 && d / gapSec >= lim.stillSpeed
+  const useSec = moved ? gapSec : sec
+  // מה שהוערך: כל מה שנספר על פער גדול, כדי שהסיכום יוכל להגיד את זה
+  const est =
+    gapSec * 1000 >= GAP_MS
+      ? { meters: (state.est?.meters ?? 0) + d, sec: (state.est?.sec ?? 0) + gapSec }
+      : state.est ?? { meters: 0, sec: 0 }
+
+  // הגובה: קודם החלקה (קבוע זמן של 20 שניות), ורק אחריה המחגר. בלי ההחלקה
+  // כל רעש אנכי של שני מטרים הצטבר לעלייה — נמדדו 580 מטרי "עלייה" על
+  // שישה קילומטרים שטוחים לגמרי.
   let gain = 0
   let lastAlt = state.lastAlt
+  let altEma = state.altEma
   if (fix.alt !== undefined) {
-    if (lastAlt === undefined) lastAlt = fix.alt
-    else if (fix.alt - lastAlt >= lim.altStep) {
-      gain = fix.alt - lastAlt
-      lastAlt = fix.alt
-    } else if (lastAlt - fix.alt >= lim.altStep) {
-      lastAlt = fix.alt
+    const a = 1 - Math.exp(-Math.max(0.001, gapSec) / ALT_TAU)
+    altEma = altEma === undefined ? fix.alt : altEma + (fix.alt - altEma) * a
+    if (lastAlt === undefined) lastAlt = altEma
+    else if (altEma - lastAlt >= lim.altStep) {
+      gain = altEma - lastAlt
+      lastAlt = altEma
+    } else if (lastAlt - altEma >= lim.altStep) {
+      lastAlt = altEma
     }
   }
 
@@ -334,10 +431,13 @@ export function addFix(state: RunState, fix: Fix, lim: Limits = LIMITS): RunStat
   return {
     ...state,
     last: fix,
+    backRun: 0,
     // נקודת הספירה היא המיקום המוחלק, כדי שהשער הבא יימדד מאותו מרחב
     lastCounted: { lat: smooth.lat, lon: smooth.lon, t: fix.t, acc: fix.acc, alt: fix.alt },
     smooth,
     lastAlt,
+    altEma,
+    est,
     elapsedSec,
     recent,
     still: false,
@@ -353,6 +453,15 @@ export function addFix(state: RunState, fix: Fix, lim: Limits = LIMITS): RunStat
 }
 
 const round6 = (n: number) => Math.round(n * 1e6) / 1e6
+
+/**
+ * מתחיל קטע חדש בלי לאבד את מה שנמדד: הקריאה הבאה לא תגשר על מה שקרה
+ * באמצע. זה מה שמונע מנסיעה בזמן השהיה ("עצרתי, נסעתי, המשכתי") להיכנס
+ * כמרחק ריצה, וגם ממשיך נכון ריצה שנשמרה לפני חצי שעה.
+ */
+export function reanchor(state: RunState): RunState {
+  return { ...state, last: undefined, lastCounted: undefined, smooth: undefined, recent: [], still: false }
+}
 
 // -- קצב ותצוגה ------------------------------------------------------------------
 
@@ -413,6 +522,11 @@ export function fmtKm(meters: number): string {
  * (וגם האחסון בטלפון) לא מתנפחים עם כל ריצה.
  */
 export function simplify(pts: Pt[], toleranceM = 8): Pt[] {
+  // קריאה פגומה (NaN) הופכת כל השוואה ל-false, והפישוט היה מחזיר שתי נקודות
+  // בלבד — כלומר משטח מסלול שלם לקו ישר. עדיף לסנן אותה.
+  if (pts.some((p) => !Number.isFinite(p[0]) || !Number.isFinite(p[1]))) {
+    pts = pts.filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]))
+  }
   if (pts.length <= 2) return pts.slice()
   const keep = new Array(pts.length).fill(false)
   keep[0] = true
@@ -537,6 +651,7 @@ export function decodePolyline(str: string, precision = 5): Array<[number, numbe
       result |= (b & 0x1f) << shift
       shift += 5
     } while (b >= 0x20)
+    if (i > str.length) break
     lat += result & 1 ? ~(result >> 1) : result >> 1
     shift = 0
     result = 0
@@ -545,6 +660,8 @@ export function decodePolyline(str: string, precision = 5): Array<[number, numbe
       result |= (b & 0x1f) << shift
       shift += 5
     } while (b >= 0x20)
+    // מחרוזת שנותקה באמצע מספר — בלי הבדיקה הייתה נולדת כאן נקודה מומצאת
+    if (i > str.length) break
     lon += result & 1 ? ~(result >> 1) : result >> 1
     out.push([lat / f, lon / f])
   }

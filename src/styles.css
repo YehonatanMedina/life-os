@@ -1718,6 +1718,8 @@ label.field > span, .field > span {
   cursor: grab;
 }
 .runmap.dragging { cursor: grabbing; }
+/* כרטיס ברשימה: גלילה אנכית שייכת לרשימה, לא למפה שמתחת לאצבע */
+.runmap.preview { touch-action: pan-y; cursor: default; }
 .runmap img { pointer-events: none; }
 .runmap-line { position: absolute; inset: 0; pointer-events: none; }
 .rm-route-halo { fill: none; stroke: #ffffff; stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; opacity: .85; }
@@ -1729,15 +1731,16 @@ label.field > span, .field > span {
 .rm-here-halo { fill: var(--brand-1); opacity: .22; }
 .runmap-zoom {
   position: absolute;
-  inset-inline-end: 8px;
+  /* בעברית זה הצד הימני — שם האגודל, כשמחזיקים ביד אחת */
+  inset-inline-start: 8px;
   top: 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 .runmap-zoom button {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   border-radius: 9px;
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
@@ -1745,11 +1748,23 @@ label.field > span, .field > span {
   font-size: 17px;
   line-height: 1;
 }
+.runmap-back {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
 .runmap-credit {
   position: absolute;
   inset-inline-start: 6px;
   bottom: 4px;
-  font-size: 10px;
+  font-size: 10.5px;
   color: var(--text-faint);
   background: color-mix(in srgb, var(--bg-elev) 75%, transparent);
   border-radius: 4px;
@@ -1796,19 +1811,55 @@ label.field > span, .field > span {
 .run-pace b.in { color: var(--good-text); }
 .run-pace span { font-size: 11px; color: var(--text-faint); }
 
-.run-map { flex: 0 0 auto; }
-.run-splits { display: flex; gap: 6px; overflow-x: auto; }
+/* המפה סופגת את מה שנשאר, כדי שכפתור הסיום לא ייפול מתחת לקפל במסך קטן */
+.run-map { flex: 1 1 auto; min-height: 120px; }
+.run-splits { display: flex; gap: 6px; overflow-x: auto; flex: 0 0 auto; }
 .run-split { flex: 0 0 auto; background: var(--bg-sunk); border-radius: 9px; padding: 5px 9px; text-align: center; }
-.run-split span { display: block; font-size: 10px; color: var(--text-faint); }
+.run-split span { display: block; font-size: 10.5px; color: var(--text-faint); }
 .run-split b { font-family: var(--font-num); font-size: 14px; }
 
 .run-warn { background: var(--warn-soft); color: var(--warn-text); border-radius: var(--r); padding: 8px 10px; font-size: 12.5px; }
+/* מושהה חייב להיראות מרחוק: לפני זה ההבדל היחיד בין ריצה להשהיה היה
+   המילה על הכפתור, והשעון המשיך לרוץ — אפשר היה לרוץ ארבעה קילומטרים
+   בלי לדעת שהמרחק לא נספר. */
+.run-paused {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+  border-radius: var(--r);
+  padding: 9px 10px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+.run-nums.dim { opacity: .45; }
 .run-err { background: var(--bad-soft); color: var(--bad-text); border-radius: var(--r); padding: 8px 10px; font-size: 12.5px; }
 
-.run-actions { margin-top: auto; display: flex; gap: 10px; padding-top: 6px; }
+.run-actions {
+  margin-top: auto;
+  display: flex;
+  gap: 10px;
+  padding-top: 8px;
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(to top, var(--bg) 72%, transparent);
+}
 .run-actions .btn { min-height: 54px; font-size: 16px; font-weight: 700; }
+/* לחיצה ארוכה באנדרואיד מסמנת טקסט ופותחת תפריט — לא כאן */
+.nosel { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+.run-discard-open { align-self: center; color: var(--text-faint); }
+.run-discard { display: flex; align-items: center; gap: 8px; justify-content: center; font-size: 12.5px; color: var(--bad-text); }
 .run-finish { position: relative; overflow: hidden; }
-.run-finish i { position: absolute; inset-inline-start: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--bad) 35%, transparent); }
+.run-finish i {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: color-mix(in srgb, var(--bad) 35%, transparent);
+  transition: width 0s linear;
+}
+.run-finish i.on { width: 100%; transition-timing-function: linear; }
+@media (prefers-reduced-motion: reduce) { .run-finish i { transition-duration: 0s !important; } }
 
 .run-acquire { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .run-radar {
@@ -1827,14 +1878,28 @@ label.field > span, .field > span {
   position: fixed;
   inset: 0;
   z-index: 410;
-  background: color-mix(in srgb, var(--bg) 96%, transparent);
+  touch-action: none;
+  /* אטום לגמרי: ב-96% כל המסך שמתחת נראה מבעד, וזה בדיוק מה שהנעילה
+     אמורה להסתיר */
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 18px;
 }
-.run-lock-nums { text-align: center; font-family: var(--font-num); font-size: 34px; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.run-lock .run-finish { min-height: 54px; min-width: 240px; }
+.run-lock-nums {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  font-family: var(--font-num);
+  font-size: 34px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
 .run-lock-nums .small { font-size: 18px; color: var(--text-faint); }
 
 /* רשימת המסלולים */

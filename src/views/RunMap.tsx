@@ -15,7 +15,7 @@
 // זכויות: הנתונים הם של OpenStreetMap ותורמיו, והקרדיט מוצג על המפה.
 // ---------------------------------------------------------------------------
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { bounds, type Pt } from '../run'
+import { bounds, simplify, type Pt } from '../run'
 
 const TILE = 256
 const MIN_Z = 11
@@ -39,44 +39,70 @@ type Props = {
   height?: number
   /** להצמיד את המרכז לנקודה האחרונה — במצב ריצה */
   follow?: boolean
+  /**
+   * תמונה ולא מפה: ברשימת המסלולים יש עשר מפות, וכל אחת מהן תופסת חצי
+   * מגובה הכרטיס. בלי זה, גלילה ברשימה מזיזה את המפה שמתחת לאצבע במקום
+   * לגלול — וגם נטענות עשרות משבצות שאיש לא ביקש.
+   */
+  preview?: boolean
   className?: string
 }
 
-export default function RunMap({ route, track, here, height = 220, follow = false, className }: Props) {
+function RunMapInner({ route, track, here, height = 220, follow = false, preview = false, className }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: height })
   const [view, setView] = useState<{ z: number; cx: number; cy: number } | null>(null)
   const [drag, setDrag] = useState(false)
 
-  const pts: LatLon[] = useMemo(() => {
-    const t = (track ?? []).map((p) => [p[0], p[1]] as LatLon)
-    return [...(route ?? []), ...t, ...(here ? [here] : [])]
-  }, [route, track, here])
+  // ריצה של שעה היא כ-3600 נקודות, והמסך מתרנדר כל שנייה. פישוט לארבעה
+  // מטרים לא נראה על מפה של 190 פיקסלים (שם פיקסל הוא כשני מטרים), אבל
+  // חוסך פי שישה־עשר עבודה. עמוד השדרה נבנה כל שמונה קריאות בלבד, והזנב
+  // אחריו גולמי — כך שקצה הקו תמיד מדויק.
+  const raw = track ?? []
+  const spineEnd = Math.floor(raw.length / 8) * 8
+  const spine = useMemo(
+    () => (spineEnd > 2 ? simplify(raw.slice(0, spineEnd) as Pt[], 4) : raw.slice(0, spineEnd)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [spineEnd],
+  )
+  const trackPts: LatLon[] = useMemo(
+    () => [...spine, ...raw.slice(spineEnd)].map((p) => [p[0], p[1]] as LatLon),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [spine, raw.length],
+  )
+
+  const pts: LatLon[] = useMemo(
+    () => [...(route ?? []), ...trackPts, ...(here ? [here] : [])],
+    [route, trackPts, here],
+  )
 
   // מודדים את הרוחב האמיתי — התאמת התיבה תלויה בו
   useEffect(() => {
     const el = box.current
     if (!el) return
-    const measure = () => setSize({ w: el.clientWidth, h: height })
+    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight || height })
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
   }, [height])
 
+  /** הזזה ידנית עוצרת את המעקב, כדי שאפשר יהיה להסתכל קדימה על המסלול */
+  const [free, setFree] = useState(false)
+
   // התאמה ראשונה (ובמעקב — הצמדה לנקודה האחרונה)
   useEffect(() => {
     if (!size.w || !pts.length) return
-    if (follow && here) {
+    if (follow && here && !free) {
       setView((v) => {
         const z = v?.z ?? 16
         return { z, cx: lon2x(here[1], z), cy: lat2y(here[0], z) }
       })
       return
     }
-    setView((v) => (v && !follow ? v : fit(pts, size.w, size.h)))
+    setView((v) => (v && (!follow || free) ? v : fit(pts, size.w, size.h)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size.w, size.h, follow, here?.[0], here?.[1], pts.length === 0])
+  }, [size.w, size.h, follow, free, here?.[0], here?.[1], pts.length === 0])
 
   // התאמה מחדש כשהמסלול עצמו מתחלף (בחירת מסלול אחר ברשימה)
   const routeKey = route?.length ? `${route.length}:${route[0][0]}:${route[0][1]}` : ''
@@ -87,13 +113,18 @@ export default function RunMap({ route, track, here, height = 220, follow = fals
   }, [routeKey])
 
   // מחוות: גרירה וזום בשתי אצבעות. touch-action: none כדי שהדף לא יזוז מתחת.
+  const [broken, setBroken] = useState<Record<string, boolean>>({})
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const pinch = useRef<{ dist: number; z: number } | null>(null)
 
   const onDown = (e: React.PointerEvent) => {
+    if (preview) return
+    // לחיצה על כפתורי הזום היא לחיצה, לא תחילת הזזה
+    if ((e.target as Element).closest?.('.runmap-zoom')) return
     ;(e.target as Element).setPointerCapture?.(e.pointerId)
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (pointers.current.size === 1) setDrag(true)
+    if (follow) setFree(true)
   }
   const onMove = (e: React.PointerEvent) => {
     const prev = pointers.current.get(e.pointerId)
@@ -120,7 +151,8 @@ export default function RunMap({ route, track, here, height = 220, follow = fals
     if (pointers.current.size === 0) setDrag(false)
   }
 
-  if (!view || !size.w) return <div ref={box} className={`runmap${className ? ' ' + className : ''}`} style={{ height }} />
+  if (!view || !size.w)
+    return <div ref={box} className={`runmap${preview ? ' preview' : ''}${className ? ' ' + className : ''}`} style={{ height }} />
 
   const { z, cx, cy } = view
   const scale = Math.pow(2, z)
@@ -147,12 +179,13 @@ export default function RunMap({ route, track, here, height = 220, follow = fals
   }
 
   const line = (ps: LatLon[]) => ps.map(project).map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
-  const trackPts: LatLon[] = (track ?? []).map((p) => [p[0], p[1]] as LatLon)
+  const routeLine = route && route.length > 1 ? line(route) : ''
+  const trackLine = trackPts.length > 1 ? line(trackPts) : ''
 
   return (
     <div
       ref={box}
-      className={`runmap${drag ? ' dragging' : ''}${className ? ' ' + className : ''}`}
+      className={`runmap${drag ? ' dragging' : ''}${preview ? ' preview' : ''}${className ? ' ' + className : ''}`}
       style={{ height }}
       onPointerDown={onDown}
       onPointerMove={onMove}
@@ -168,22 +201,30 @@ export default function RunMap({ route, track, here, height = 220, follow = fals
           draggable={false}
           width={TILE}
           height={TILE}
-          style={{ position: 'absolute', left: t.left, top: t.top, width: TILE, height: TILE }}
-          onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
+          style={{
+            position: 'absolute',
+            left: t.left,
+            top: t.top,
+            width: TILE,
+            height: TILE,
+            visibility: broken[t.key] ? 'hidden' : 'visible',
+          }}
+          onError={() => setBroken((b) => (b[t.key] ? b : { ...b, [t.key]: true }))}
+          onLoad={() => setBroken((b) => (b[t.key] ? { ...b, [t.key]: false } : b))}
         />
       ))}
 
       <svg className="runmap-line" width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} aria-hidden>
-        {route && route.length > 1 && (
+        {routeLine && (
           <>
-            <polyline points={line(route)} className="rm-route-halo" />
-            <polyline points={line(route)} className="rm-route" />
+            <polyline points={routeLine} className="rm-route-halo" />
+            <polyline points={routeLine} className="rm-route" />
           </>
         )}
-        {trackPts.length > 1 && (
+        {trackLine && (
           <>
-            <polyline points={line(trackPts)} className="rm-track-halo" />
-            <polyline points={line(trackPts)} className="rm-track" />
+            <polyline points={trackLine} className="rm-track-halo" />
+            <polyline points={trackLine} className="rm-track" />
           </>
         )}
         {route && route.length > 1 && !trackPts.length && (
@@ -197,6 +238,7 @@ export default function RunMap({ route, track, here, height = 220, follow = fals
         )}
       </svg>
 
+      {!preview && (
       <div className="runmap-zoom">
         <button type="button" aria-label="התקרבות" onClick={() => setView((v) => (v ? reZoom(v, Math.min(MAX_Z, v.z + 1)) : v))}>
           +
@@ -204,16 +246,36 @@ export default function RunMap({ route, track, here, height = 220, follow = fals
         <button type="button" aria-label="התרחקות" onClick={() => setView((v) => (v ? reZoom(v, Math.max(MIN_Z, v.z - 1)) : v))}>
           −
         </button>
-        <button type="button" aria-label="התאמת המסלול למסך" onClick={() => setView(fit(pts, size.w, size.h))}>
+        <button
+          type="button"
+          aria-label="התאמת המסלול למסך"
+          onClick={() => {
+            setFree(false)
+            setView(fit(pts, size.w, size.h))
+          }}
+        >
           ⤢
         </button>
       </div>
+      )}
+      {follow && free && (
+        <button className="runmap-back" type="button" onClick={() => setFree(false)}>
+          חזרה למיקום
+        </button>
+      )}
       <a className="runmap-credit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
         © OpenStreetMap
       </a>
     </div>
   )
 }
+
+/**
+ * המסך החי מתרנדר כל שנייה (השעון), והמפה לא צריכה להתרנדר איתו: אם
+ * המסלול, הקו והנקודה לא זזו — אין מה לצייר מחדש.
+ */
+const RunMap = React.memo(RunMapInner)
+export default RunMap
 
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n))
 

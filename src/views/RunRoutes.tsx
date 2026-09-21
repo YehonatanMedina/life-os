@@ -58,7 +58,7 @@ export default function RunRoutes({ onStart, targetKm }: { onStart: (routeId: st
 
       {list.map((r) => (
         <div key={r.id} className="card route-card">
-          <RunMap route={r.poly} height={168} />
+          <RunMap route={r.poly} height={168} preview />
           <div className="pad">
             <div className="spread" style={{ alignItems: 'flex-start' }}>
               <div style={{ minWidth: 0 }}>
@@ -77,7 +77,7 @@ export default function RunRoutes({ onStart, targetKm }: { onStart: (routeId: st
                 עלייה <b className="ltr">{r.gainM}</b> מ׳
               </span>
               <span>{SURFACE_LABEL[r.surface]}</span>
-              <span>{r.loop ? 'לולאה' : 'חד־כיווני'}</span>
+              <span>{r.loop ? 'לולאה' : `חד־כיווני · הלוך-חזור ${(r.km * 2).toFixed(1)}`}</span>
               <span>
                 <b className="ltr">{r.minAlt}–{r.maxAlt}</b> מ׳ גובה
               </span>
