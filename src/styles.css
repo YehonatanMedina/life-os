@@ -1701,3 +1701,145 @@ label.field > span, .field > span {
   background: var(--bg-sunk);
   font-size: 17px;
 }
+
+/* =========================================================================
+   ריצה — המפה, המסך החי, ורשימת המסלולים
+   ========================================================================= */
+
+/* המפה: משבצות של OpenStreetMap ומעליהן הקו. touch-action כדי שהדף לא יזוז
+   מתחת לאצבע בזמן הזזת המפה. */
+.runmap {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r);
+  background: var(--bg-sunk);
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+.runmap.dragging { cursor: grabbing; }
+.runmap img { pointer-events: none; }
+.runmap-line { position: absolute; inset: 0; pointer-events: none; }
+.rm-route-halo { fill: none; stroke: #ffffff; stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; opacity: .85; }
+.rm-route { fill: none; stroke: var(--brand-1); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
+.rm-track-halo { fill: none; stroke: #ffffff; stroke-width: 8; stroke-linejoin: round; stroke-linecap: round; opacity: .9; }
+.rm-track { fill: none; stroke: var(--brand-3); stroke-width: 4.5; stroke-linejoin: round; stroke-linecap: round; }
+.rm-start { fill: var(--good); stroke: #fff; stroke-width: 2; }
+.rm-here { fill: var(--brand-1); stroke: #fff; stroke-width: 2.5; }
+.rm-here-halo { fill: var(--brand-1); opacity: .22; }
+.runmap-zoom {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.runmap-zoom button {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1;
+}
+.runmap-credit {
+  position: absolute;
+  inset-inline-start: 6px;
+  bottom: 4px;
+  font-size: 10px;
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--bg-elev) 75%, transparent);
+  border-radius: 4px;
+  padding: 1px 4px;
+  text-decoration: none;
+}
+
+/* המסך החי */
+.runlive {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: calc(12px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+}
+.run-top { display: flex; align-items: center; gap: 8px; }
+.run-top .tiny { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-gps { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--bg-sunk); color: var(--text-faint); }
+.run-gps.good { background: var(--good-soft); color: var(--good-text); }
+.run-gps.ok { background: var(--warn-soft); color: var(--warn-text); }
+.run-gps.bad { background: var(--bad-soft); color: var(--bad-text); }
+
+.run-nums { display: flex; gap: 10px; }
+.run-num { flex: 1; text-align: center; }
+.run-val {
+  font-family: var(--font-num);
+  font-size: clamp(42px, 15vw, 86px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -.04em;
+  font-variant-numeric: tabular-nums;
+}
+.run-cap { font-size: 12px; color: var(--text-faint); margin-top: 3px; }
+
+.run-pace { display: flex; gap: 8px; }
+.run-pace > div { flex: 1; text-align: center; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 4px; }
+.run-pace b { display: block; font-family: var(--font-num); font-size: 22px; font-variant-numeric: tabular-nums; }
+.run-pace b.fast { color: var(--bad-text); }
+.run-pace b.slow { color: var(--warn-text); }
+.run-pace b.in { color: var(--good-text); }
+.run-pace span { font-size: 11px; color: var(--text-faint); }
+
+.run-map { flex: 0 0 auto; }
+.run-splits { display: flex; gap: 6px; overflow-x: auto; }
+.run-split { flex: 0 0 auto; background: var(--bg-sunk); border-radius: 9px; padding: 5px 9px; text-align: center; }
+.run-split span { display: block; font-size: 10px; color: var(--text-faint); }
+.run-split b { font-family: var(--font-num); font-size: 14px; }
+
+.run-warn { background: var(--warn-soft); color: var(--warn-text); border-radius: var(--r); padding: 8px 10px; font-size: 12.5px; }
+.run-err { background: var(--bad-soft); color: var(--bad-text); border-radius: var(--r); padding: 8px 10px; font-size: 12.5px; }
+
+.run-actions { margin-top: auto; display: flex; gap: 10px; padding-top: 6px; }
+.run-actions .btn { min-height: 54px; font-size: 16px; font-weight: 700; }
+.run-finish { position: relative; overflow: hidden; }
+.run-finish i { position: absolute; inset-inline-start: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--bad) 35%, transparent); }
+
+.run-acquire { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.run-radar {
+  width: 64px; height: 64px; border-radius: 999px; margin-bottom: 8px;
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  animation: run-ping 1.6s ease-out infinite;
+}
+@keyframes run-ping {
+  70% { box-shadow: 0 0 0 26px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .run-radar { animation: none; } }
+
+.run-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 410;
+  background: color-mix(in srgb, var(--bg) 96%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+.run-lock-nums { text-align: center; font-family: var(--font-num); font-size: 34px; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.run-lock-nums .small { font-size: 18px; color: var(--text-faint); }
+
+/* רשימת המסלולים */
+.route-card { display: flex; flex-direction: column; gap: 0; overflow: hidden; }
+.route-facts { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-faint); }
+.route-facts b { color: var(--text); font-family: var(--font-num); }
+.route-filters { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.route-filters .btn { flex: 0 0 auto; }

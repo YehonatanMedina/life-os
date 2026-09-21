@@ -1,7 +1,10 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { actions, getPersistError, subscribePersistError, useApp, weekLog } from './store'
 import { addDays, clock, isAfterMidnight, today as todayISO, weekStart, niceDate } from './dates'
-import { ToastHost, setFocusMode, useTick } from './ui'
+import { Sheet, ToastHost, setFocusMode, useTick } from './ui'
+import { useLiveRun, type RunSummary } from './runLive'
+import RunLive from './views/RunLive'
+import { RunSummaryView } from './views/RunCard'
 import Today from './views/Today'
 import CalendarView from './views/CalendarView'
 import Projects from './views/Projects'
@@ -108,8 +111,28 @@ export default function App() {
 function AppInner() {
   return (
     <ToastHost>
+      <RunOverlay />
       <Shell />
     </ToastHost>
+  )
+}
+
+/**
+ * מסך הריצה חי מעל כל האפליקציה, ולא בתוך עמוד האימונים: מעבר ללשונית
+ * אחרת באמצע ריצה לא אמור להוריד אותו מהמסך — ובטלפון, מסך שיורד פירושו
+ * ריצה שנעצרת, כי הדפדפן לא עוקב אחרי מיקום ברקע.
+ */
+function RunOverlay() {
+  const live = useLiveRun()
+  const [sum, setSum] = useState<RunSummary | null>(null)
+  if (live.status === 'off' && !sum) return null
+  return (
+    <>
+      {live.status !== 'off' && <RunLive onDone={setSum} />}
+      <Sheet open={!!sum} onClose={() => setSum(null)} title="הריצה נשמרה">
+        {sum && <RunSummaryView sum={sum} />}
+      </Sheet>
+    </>
   )
 }
 

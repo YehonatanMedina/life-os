@@ -314,6 +314,30 @@ export interface WorkoutLog extends Rec {
   minutes?: number
   note?: string
   finishedAt?: number
+  /** ריצה שנמדדה ב-GPS: המסלול, הספליטים והזמנים */
+  run?: TrackedRun
+}
+
+/**
+ * ריצה שנמדדה. המסלול נשמר מקודד ומפושט (~12 מטר) — ריצה של שעה יורדת
+ * מכמה מאות קילובייטים לכמה קילובייטים, וזה מה שמאפשר לשמור אותו בתוך
+ * המצב המסונכרן בלי לנפח אותו.
+ */
+export interface TrackedRun {
+  /** מרחק בק״מ */
+  km: number
+  /** זמן נטו בדקות — מה שנרשם כאימון */
+  minutes: number
+  movingSec: number
+  elapsedSec: number
+  splits: Array<{ km: number; sec: number; gainM?: number }>
+  /** המסלול, מקודד באלגוריתם הפוליליין */
+  poly: string
+  /** המסלול המתוכנן שנבחר, אם נבחר */
+  routeId?: string
+  /** כמה פעמים המסך יצא מקדמת הבמה — שם המסלול חסר */
+  gaps: number
+  startedAt: number
 }
 
 /**

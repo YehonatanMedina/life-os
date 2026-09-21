@@ -8,3 +8,6 @@ test-results/
 playwright-report/
 tests/reports/
 test-results*/
+
+# מטמון של סקריפטים (מסלולי ריצה, בנדלים זמניים)
+.cache/

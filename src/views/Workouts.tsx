@@ -8,7 +8,8 @@ import {
   HE_DAYS, HE_DAYS_SHORT, dow, minutesToHM, plural, shortDate, today as todayISO,
   weekDates, weekStart,
 } from '../dates'
-import { Ring } from '../ui'
+import { Ring, Sheet } from '../ui'
+import RunCard from './RunCard'
 import { PlanSheet, ProgressSheet, WorkoutSheet, KIND_EMOJI, setText, targetText } from './Workout'
 import {
   FOCUS_COUNT, RUN_MILESTONES, RUN_WEEKLY_GROWTH, focusLadders, isFocusGoal, laddersInOrder,
@@ -35,6 +36,7 @@ export default function Workouts() {
   const [log, setLog] = useState(false)
   const [plan, setPlan] = useState(false)
   const [prog, setProg] = useState(false)
+  const day = workoutDayOn(s, date)
 
   const hasPlan = alive(s.workoutPlan ?? []).length > 0
 
@@ -56,6 +58,12 @@ export default function Workouts() {
             <section className="sec">
               <div className="sec-h"><h2>היום</h2></div>
               <TodayCard date={date} onOpen={() => setLog(true)} />
+            </section>
+
+            {/* ריצה: כפתור ההתחלה, המסלולים, והריצה האחרונה שנמדדה */}
+            <section className="sec">
+              <div className="sec-h"><h2>ריצה</h2></div>
+              <RunCard date={date} target={day?.kind === 'run' || day?.kind === 'walk' ? day.target : undefined} />
             </section>
 
             <section className="sec">
