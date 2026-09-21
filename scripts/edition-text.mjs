@@ -88,6 +88,9 @@ export function stampEditions(url, date, dir = NEWS_DIR) {
     }
     const j = JSON.parse(raw)
     if (j.date !== date || j.audio === url) continue
+    // מהדורה בארכיון ששמרו לה קובץ קריינות משלה — לא מחזירים אותה ל-latest.mp3,
+    // שנדרס כל בוקר. זה מה שמאפשר להשמיע מהדורה ישנה כמו שהוקלטה.
+    if (/[\/]archive[\/]/.test(p) && typeof j.audio === 'string' && j.audio.includes('/archive/')) continue
     j.audio = url
     let out = JSON.stringify(j, null, 2) + '\n'
     if (raw.includes('\r\n')) out = out.replace(/\n/g, '\r\n')

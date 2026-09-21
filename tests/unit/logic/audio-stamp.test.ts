@@ -116,6 +116,17 @@ describe('החתמת הגיליון', () => {
     expect(stampEditions(url, ed.date, d)).toEqual([])
   })
 
+  it('קריינות ששמורה בארכיון לא מוחלפת ב-latest.mp3', () => {
+    const d = tmpDir()
+    const kept = './news/archive/2026-09-16.mp3?v=0123456789'
+    fs.writeFileSync(path.join(d, 'latest.json'), JSON.stringify(ed, null, 2) + '\n')
+    fs.writeFileSync(path.join(d, 'archive', '2026-09-16.json'), JSON.stringify({ ...ed, audio: kept }, null, 2) + '\n')
+
+    const url = audioUrl('abc1234567')
+    expect(stampEditions(url, ed.date, d)).toEqual([path.join(d, 'latest.json')])
+    expect(JSON.parse(fs.readFileSync(path.join(d, 'archive', '2026-09-16.json'), 'utf8')).audio).toBe(kept)
+  })
+
   it('גיליון שלא קיים או שהתאריך בו אחר — לא נוגעים', () => {
     const d = tmpDir()
     fs.writeFileSync(path.join(d, 'latest.json'), JSON.stringify({ ...ed, date: '2026-09-15' }, null, 2) + '\n')
