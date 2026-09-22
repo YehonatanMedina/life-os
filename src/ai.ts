@@ -131,6 +131,11 @@ export function buildAtlasContext(s: AppState) {
       // הוא מחליף אותו בתאום הביתי.
       gymDays: s.settings.gymDays ?? [0, 1, 2, 3, 4],
       gymOff: (s.settings.gymOff ?? []).filter((d) => d >= t),
+      // שלושת הנתונים שהשבוע נגזר מהם. הם נשמרים, ולכן אטלס יכול לשנות
+      // אותם — ומה שנשמר הוא ההחלטה, לא ההנחה.
+      runsPerWeek: s.settings.runsPerWeek ?? 3,
+      capMinutes: s.settings.capMinutes ?? 45,
+      capRuns: !!s.settings.capRuns,
     },
     tracks: alive(s.tracks)
       .sort((a, b) => a.order - b.order)

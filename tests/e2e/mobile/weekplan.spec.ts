@@ -55,6 +55,10 @@ test('השבוע נגזר, מוחל, ונשמר בלי לאבד היסטוריה
   // ימי חדר הכושר הם קלט, ולא הנחה
   await expect(card).toContainText('באילו ימים יש חדר כושר')
 
+  // שלוש ריצות, וזו תקרה שנשמרת בהגדרות
+  await expect(card).toContainText('כמה ריצות בשבוע')
+  await expect(card).toContainText('אין תקרת זמן על ריצה')
+
   // ההחלפה מבקשת אישור
   await card.getByRole('button', { name: 'החל את התוכנית' }).click()
   await expect(card).toContainText('להחליף את התוכנית השבועית?')
@@ -73,7 +77,9 @@ test('השבוע נגזר, מוחל, ונשמר בלי לאבד היסטוריה
 
   // ולכל יום חדר כושר נבנה תאום ביתי משלו, שלא מופיע במסך התוכנית אבל קיים
   const twins = live.filter((d: any) => d.kind === 'home' && d.title.startsWith('בבית — '))
-  expect(twins.length).toBe(2)
+  // תאום ביתי לכל יום חדר כושר — ארבעה בתצורת שלוש הריצות
+  expect(twins.length).toBe(live.filter((d: any) => d.kind === 'gym').length)
+  expect(twins.length).toBeGreaterThanOrEqual(3)
   for (const t of twins) expect(live.filter((d: any) => d.dow === t.dow).length).toBeGreaterThan(1)
 
   // שבת הפכה לריצה ארוכה, ושישי לריצה קלה

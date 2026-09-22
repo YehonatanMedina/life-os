@@ -161,6 +161,11 @@ export const DEFAULT_SETTINGS: Settings = {
   // כל שבוע אלא נתון שהשבוע נבנה ממנו.
   gymDays: [0, 1, 2, 3, 4],
   gymOff: [],
+  // שלוש ריצות בשבוע, וזו תקרה. תקרת 45 הדקות חלה על אימוני כוח בלבד —
+  // ריצה מוגבלת בזמן שיש לה, ולא במספר שנקבע מראש.
+  runsPerWeek: 3,
+  capMinutes: 45,
+  capRuns: false,
 }
 
 export function newDeviceId(): string {

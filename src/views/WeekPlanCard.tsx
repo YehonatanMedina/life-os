@@ -24,8 +24,9 @@ import { today as todayISO } from '../dates'
 import { alive } from '../store'
 import { fieldVdot } from '../adapt'
 import {
-  DEFAULT_GYM_DAYS, HALF_ANCHORS, HOME_TWIN, baseWeeklyKm, blockType, checkWeek, paces, planWeek,
-  programFor, qualityRuns, staleDays, volumeRamp, weekChanges, weekKinds, type CurrentDay,
+  DEFAULT_GYM_DAYS, DEFAULT_RUNS_PER_WEEK, HALF_ANCHORS, HOME_TWIN, baseWeeklyKm, blockType,
+  checkWeek, paces, planWeek, splitWeek, staleDays, volumeRamp, weekChanges, weekKinds,
+  type CurrentDay,
 } from '../training'
 
 export default function WeekPlanCard() {
@@ -36,7 +37,10 @@ export default function WeekPlanCard() {
   /** התוכנית שהייתה לפני ההחלה — כדי שאפשר יהיה לבטל בלחיצה */
   const [undo, setUndo] = useState<WorkoutDay[] | null>(null)
 
+  // שלושת הנתונים שהשבוע נגזר מהם. הם נשמרים, ולכן שינוי בהם משנה את
+  // התוכנית בלי לכתוב אותה מחדש.
   const gymDays = s.settings.gymDays ?? DEFAULT_GYM_DAYS
+  const runsPerWeek = s.settings.runsPerWeek ?? DEFAULT_RUNS_PER_WEEK
 
   const view = useMemo(() => {
     const f = runForecast(s)
@@ -52,7 +56,7 @@ export default function WeekPlanCard() {
     // מבחן ולכן היא מזלזלת ביכולת — כלומר הטווח הקל שיוצא ממנה שמרני,
     // וזה הכיוון הנכון לטעות בו.
     const v = fieldVdot(s, todayISO())
-    const days = planWeek({ weekKm: now.km, week: 1, weeks, gymDays, paces: v ? paces(v) : undefined })
+    const days = planWeek({ weekKm: now.km, week: 1, weeks, gymDays, runsPerWeek, paces: v ? paces(v) : undefined })
 
     const current: CurrentDay[] = alive(s.workoutPlan ?? []).map((d) => ({
       dow: d.dow,
@@ -68,13 +72,21 @@ export default function WeekPlanCard() {
     const broken = checkWeek(weekKinds(days))
 
     // ימים שנשארו בתוכנית מגרסאות קודמות (`staleDays` ב-training.ts)
-    const stale = staleDays(alive(s.workoutPlan ?? []), days, (dow) => HOME_TWIN[dow]?.title)
+    const twinTitle = (dow: number) => {
+      const d = days.find((x) => x.dow === dow)
+      return d?.kind === 'gym' && d.role ? HOME_TWIN[d.role].title : undefined
+    }
+    const stale = staleDays(alive(s.workoutPlan ?? []), days, twinTitle)
 
     return {
       weeks, startKm, ramp, now, days, changes, fixes, peak, broken, stale,
-      quality: qualityRuns(now.km), block: blockType(1),
+      // מספר האיכויות **בפועל**, ולא מה שהנפח היה מאפשר: בשלוש ריצות
+      // תמיד אחת, כי בלי ריצה קלה אחת לפחות חלוקת העצימות מתמוטטת.
+      quality: splitWeek(now.km, runsPerWeek).qualityDays,
+      runs: runsPerWeek,
+      block: blockType(1),
     }
-  }, [s.workouts, s.workoutPlan, gymDays])
+  }, [s.workouts, s.workoutPlan, gymDays, runsPerWeek])
 
   /** מה שנשלח לחנות: שבעת הימים, ואחריהם התאומים הביתיים של ימי הכושר */
   const toPlan = () => {
@@ -84,17 +96,17 @@ export default function WeekPlanCard() {
       title: d.title,
       focus: d.focus,
       target: d.km || d.minutes ? { km: d.km, minutes: d.minutes, pace: d.pace, how: d.how } : undefined,
-      exercises: programFor(d.dow),
+      exercises: d.exercises,
     }))
     const twins = view.days
-      .filter((d) => d.kind === 'gym' && HOME_TWIN[d.dow])
+      .filter((d) => d.kind === 'gym' && d.role)
       .map((d) => ({
         dow: d.dow,
         kind: 'home' as const,
-        title: HOME_TWIN[d.dow].title,
+        title: HOME_TWIN[d.role!].title,
         focus: 'הגרסה הביתית של היום הזה — אותם דפוסים בלי מכונות',
         target: undefined,
-        exercises: HOME_TWIN[d.dow].exercises,
+        exercises: HOME_TWIN[d.role!].exercises,
         // מזהה את עצמו לפי הכותרת בלבד — כדי שלא יבלע יום גיבוי קיים
         exact: true,
       }))
@@ -132,9 +144,9 @@ export default function WeekPlanCard() {
 
       {view.quality === 1 && (
         <div className="tiny faint">
-          האימון האיכותי השני נכנס מ-<span className="ltr">{HALF_ANCHORS.weeklyKm}</span> ק״מ בשבוע: תקרת עבודת
-          הסף היא 10% מהנפח, ומתחת לזה אין ממה לבנות שני אימונים. עד אז יום חמישי הוא קל עם ספרינטי עלייה —
-          גירוי מכני שכמעט לא עולה התאוששות.
+          {view.runs <= 3
+            ? 'בשלוש ריצות יש אימון איכות אחד: ארוכה · איכות · קלה. אימון איכות שני דורש ארבע ריצות ומעלה — בלי ריצה קלה אחת לפחות, רוב הנפח מפסיק להיות קל וחלוקת העצימות מתמוטטת.'
+            : `האימון האיכותי השני נכנס מ-${HALF_ANCHORS.weeklyKm} ק״מ בשבוע: תקרת עבודת הסף היא 10% מהנפח, ומתחת לזה אין ממה לבנות שני אימונים.`}
         </div>
       )}
 
@@ -157,15 +169,33 @@ export default function WeekPlanCard() {
               </button>
             ))}
           </div>
+          <div className="section-title" style={{ margin: '12px 0 4px' }}>כמה ריצות בשבוע</div>
+          <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+            {[2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                className={`btn xs${runsPerWeek === n ? ' primary' : ''}`}
+                aria-pressed={runsPerWeek === n}
+                onClick={() => actions.setSettings({ runsPerWeek: n })}
+              >
+                <span className="ltr">{n}</span>
+              </button>
+            ))}
+          </div>
           <div className="tiny faint" style={{ marginTop: 4 }}>
+            זו <b>תקרה</b>, ומה שנשאר הולך לכוח. אין תקרת זמן על ריצה — שלוש ריצות בלי תקרה נושאות יותר
+            נפח מחמש ריצות חסומות ב-45 דקות, וזה גם המבנה של FIRST (שלוש ריצות + אימוני כוח).
+          </div>
+
+          <div className="tiny faint" style={{ marginTop: 8 }}>
             יום שסגור מקבל את הגרסה הביתית של האימון — לא מחיקה. לתאריך בודד שבו הוא סגור אפשר לומר לאטלס,
             והוא יסמן אותו.
           </div>
 
           <div className="stack" style={{ gap: 6, marginTop: 12 }}>
             {view.days.map((d) => {
-              const home = programFor(d.dow).filter((e) => e.home)
-              const main = programFor(d.dow).filter((e) => !e.home)
+              const home = d.exercises.filter((e) => e.home)
+              const main = d.exercises.filter((e) => !e.home)
               return (
                 <div key={d.dow} className="item" style={{ alignItems: 'flex-start' }}>
                   <div style={{ minWidth: 52 }}>
@@ -197,9 +227,9 @@ export default function WeekPlanCard() {
           </div>
 
           <div className="tiny faint" style={{ marginTop: 8 }}>
-            <b>ימי ריצה רצופים הם מתוכננים.</b> האיסור הוא על שני ימים <b>קשים</b> ברצף — לא על שתי ריצות.
-            חמש ריצות בשבוע עם שני ימי כושר מחייבות רצף, וזו בדיוק הדרך שבה תדירות מעלה נפח מתחת לתקרה של
-            45 דקות: רביעי קל, חמישי איכות, שישי קל, שבת ארוכה — שני ימים קשים בלבד, ו-48 שעות ביניהם.
+            <b>שני ימים קשים בלבד בשבוע</b> — ריצת האיכות והארוכה — ויום רגליים כבד. ימי ריצה רצופים,
+            כשיש כאלה, הם תמיד קל אחרי קשה או קל לפני ארוך: האיסור הוא על שני ימים <b>קשים</b> ברצף,
+            לא על שתי ריצות.
           </div>
 
           {!!view.broken.length && (

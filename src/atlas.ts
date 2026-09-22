@@ -939,15 +939,17 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
     }
     case 'setSettings': {
       const patch = strip(c.patch)
-      const allowed = ['wakeTime', 'bedTime', 'dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'name', 'reviewDow', 'gymDays', 'gymOff']
-      const NUM = ['dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'reviewDow']
+      const allowed = ['wakeTime', 'bedTime', 'dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'name', 'reviewDow', 'gymDays', 'gymOff', 'runsPerWeek', 'capMinutes', 'capRuns']
+      const NUM = ['dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'reviewDow', 'runsPerWeek', 'capMinutes']
       // רק מפתחות מותרים, ורק מהטיפוס הנכון — "6" או NaN היו הופכים את הקיבולת ל-NaN
-      const RANGE: Record<string, [number, number]> = { dailyTokenGoal: [1, 24], weeklyTokenGoal: [1, 168], tokenMinutes: [10, 240], reviewDow: [0, 6] }
+      const RANGE: Record<string, [number, number]> = { dailyTokenGoal: [1, 24], weeklyTokenGoal: [1, 168], tokenMinutes: [10, 240], reviewDow: [0, 6], runsPerWeek: [1, 6], capMinutes: [20, 180] }
       // זמינות חדר הכושר: ימים בשבוע, ותאריכים בודדים שבהם הוא סגור. שתיהן
       // רשימות, ולכן הבדיקה היא על כל איבר — רשימה עם איבר אחד פסול הייתה
       // מייצרת שבוע שנבנה סביב יום שלא קיים.
       const okVal = (k: string, v: unknown) =>
-        k === 'gymDays'
+        k === 'capRuns'
+          ? typeof v === 'boolean'
+          : k === 'gymDays'
           ? Array.isArray(v) && v.length > 0 && v.every((x) => int(x, 0, 6)) && new Set(v).size === v.length
           : k === 'gymOff'
             ? Array.isArray(v) && v.every((x) => isDate(x))
