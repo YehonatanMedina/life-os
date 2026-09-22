@@ -719,6 +719,26 @@ export const DEFAULT_GYM_DAYS = [0, 1, 2, 3, 4]
 export const DEFAULT_RUNS_PER_WEEK = 3
 
 /**
+ * באילו ימים רצים, לפי כמה ריצות יש. הארוכה בשבת תמיד — היא היחידה בלי
+ * תקרת זמן, ושבת הוא היום עם הזמן — והשאר מתפזרות **הכי שווה שאפשר**
+ * סביבה.
+ *
+ * למה זה כתוב כטבלה ולא כנוסחה: 7 חלקי n אף פעם לא יוצא שלם, ולכל מספר
+ * ריצות יש פשרה אחרת שכדאי שתהיה גלויה. בשלוש ריצות אפשר פיזור מושלם
+ * (2·2·3 ימים); בארבע חייבים צמד אחד, והוא הושם **אחרי** הארוכה (שבת
+ * ארוכה, ראשון קלה) כי ריצה קלה אחרי ארוכה היא בדיוק מה שצריך שם, ולא
+ * לפניה; בחמש ושש כבר אין ברירה והצמדים מתרבים.
+ */
+export const RUN_PATTERN: Record<number, number[]> = {
+  1: [6],
+  2: [6, 3],
+  3: [6, 4, 1],
+  4: [6, 4, 2, 0],
+  5: [6, 4, 3, 1, 0],
+  6: [6, 5, 4, 3, 1, 0],
+}
+
+/**
  * תפקיד של יום כוח. השבוע מקצה תפקידים לימים, ולא ימים לתרגילים —
  * ככה אותה תוכנית עובדת גם עם ארבעה ימי כושר וגם עם שניים, בלי שכפול.
  */
@@ -806,12 +826,13 @@ export function planWeek(opts: {
   // כושר לא הופך לריצה נוספת — הוא הופך לאימון ביתי. אחרת הגדרה של שלוש
   // ריצות הייתה מתפוצצת לחמש בכל שבוע שבו חדר הכושר סגור.
   //
-  // סדר הבחירה, וכל שלב בו הוא אילוץ:
-  //   שבת   — הארוכה. היא היחידה בלי תקרת זמן, ושבת הוא היום עם הזמן.
-  //   שני   — האיכות. 48 שעות אחרי הארוכה, המרחק המינימלי בין קשים.
-  //   שישי  — קלה. אין בו חדר כושר, והוא חייב להיות קל כי מחר הארוכה.
-  //   רביעי, חמישי, ראשון — כשמבקשים יותר ריצות.
-  const runDow = [6, 1, 5, 3, 4, 0].slice(0, Math.max(1, runs))
+  // והפיזור עצמו הוא **הכי שווה שאפשר סביב הארוכה**, ולא "מה שנשאר אחרי
+  // שממלאים את הימים בלי חדר כושר". זה נראה כמו פרט קטן וזה לא: שלוש
+  // ריצות שיוצאות שישי-שבת-ואז ארבעה ימים בלי כלום הן אותו נפח בפיזור
+  // גרוע — הריצה הקלה הופכת לעייפות מיותרת לפני הארוכה, ובשאר השבוע
+  // הרגל לא נוגעת בקרקע. (נתפס 22.9.2026, כשהסדר נשאר מתקופת חמש
+  // הריצות — שם שישי **חייב** היה להיות ריצה כי אין בו חדר כושר.)
+  const runDow = RUN_PATTERN[Math.max(1, Math.min(6, runs))]
   const isRun = (d: number) => runDow.includes(d)
 
   // -- אילו ריצות הן איכות ---------------------------------------------------
@@ -837,12 +858,37 @@ export function planWeek(opts: {
     ? strengthDow.find((d) => !hardRun((d + 1) % 7)) ?? strengthDow[strengthDow.length - 1]
     : -1
 
-  const order: Array<{ dow: number; role: Role }> = []
-  const rest = roles.filter((r) => r !== 'legs')
-  for (const d of strengthDow) {
-    if (d === legsDow) order.push({ dow: d, role: 'legs' })
-    else order.push({ dow: d, role: rest.shift() ?? 'pull' })
+  // **שני ימי ה-Front Lever חייבים להיות 48 שעות זה מזה**, ולכן התפקידים
+  // לא מחולקים לפי סדר הימים אלא לפי מרחק: 'pull' ו-'statics' הם שני
+  // הימים הרחוקים ביותר זה מזה, ו-'push' (שלא נוגע בגיד) ממלא את מה
+  // שנשאר — והוא גם הנכון ליום ביתי, כי הוא זה שדורש הכי פחות ציוד.
+  const free = strengthDow.filter((d) => d !== legsDow)
+  const gap = (a: number, b: number) => Math.min(Math.abs(a - b), 7 - Math.abs(a - b))
+  const assigned = new Map<number, Role>()
+  if (legsDow >= 0) assigned.set(legsDow, 'legs')
+
+  if (roles.includes('pull')) {
+    // יום ה-Front Lever הכבד מעדיף חדר כושר
+    const pullDow = free.find((d) => gym.includes(d)) ?? free[0]
+    if (pullDow !== undefined) {
+      assigned.set(pullDow, 'pull')
+      if (roles.includes('statics')) {
+        const far = free
+          .filter((d) => !assigned.has(d) && gap(d, pullDow) >= 2)
+          .sort((a, b) => gap(b, pullDow) - gap(a, pullDow))[0]
+        if (far !== undefined) assigned.set(far, 'statics')
+      }
+    }
   }
+  const leftovers = roles.filter((r) => {
+    const used = [...assigned.values()]
+    return !used.includes(r)
+  })
+  for (const d of strengthDow) {
+    if (assigned.has(d)) continue
+    assigned.set(d, leftovers.shift() ?? 'push')
+  }
+  const order = strengthDow.map((d) => ({ dow: d, role: assigned.get(d)! }))
 
   // -- הרכבה ------------------------------------------------------------------
   const qualityLeft = { n: s.qualityDays }
@@ -905,10 +951,10 @@ export function planWeek(opts: {
     // פעמיים בשבוע לכל דפוס הוא רצפה ולא העדפה, ו-Front Lever פעם אחת
     // בשבוע הוא תחזוקה ולא בנייה. יום הדחיפה הוא הנכון לזה כי הוא
     // ממילא לא נוגע בגיד — וכך שתי החשיפות נשארות 48 שעות זו מזו.
-    const exercises =
-      role === 'push' && !roles.includes('statics')
-        ? [...b.exercises.filter((e) => e.home), SECOND_LEVER, ...b.exercises.filter((e) => !e.home)]
-        : b.exercises
+    const carriesLever = role === 'push' && !roles.includes('statics')
+    const withLever = (list: ProposedExercise[]) =>
+      carriesLever ? [...list.filter((e) => e.home), SECOND_LEVER, ...list.filter((e) => !e.home)] : list
+    const exercises = withLever(b.exercises)
     days.push(
       gym.includes(d)
         ? {
@@ -929,7 +975,7 @@ export function planWeek(opts: {
             how: b.how,
             hard: false,
             role,
-            exercises: HOME_TWIN[role].exercises,
+            exercises: withLever(HOME_TWIN[role].exercises),
           },
     )
   }

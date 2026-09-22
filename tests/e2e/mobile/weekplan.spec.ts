@@ -76,11 +76,14 @@ test('השבוע נגזר, מוחל, ונשמר בלי לאבד היסטוריה
   expect(live.some((d: any) => d.id === 'wd-0b' && d.title === 'דחיפה בבית — משקל גוף')).toBe(true)
 
   // ולכל יום חדר כושר נבנה תאום ביתי משלו, שלא מופיע במסך התוכנית אבל קיים
-  const twins = live.filter((d: any) => d.kind === 'home' && d.title.startsWith('בבית — '))
-  // תאום ביתי לכל יום חדר כושר — ארבעה בתצורת שלוש הריצות
-  expect(twins.length).toBe(live.filter((d: any) => d.kind === 'gym').length)
-  expect(twins.length).toBeGreaterThanOrEqual(3)
-  for (const t of twins) expect(live.filter((d: any) => d.dow === t.dow).length).toBeGreaterThan(1)
+  // לכל יום חדר כושר יש תאום ביתי באותו יום בשבוע — יום סגור מחליף אימון
+  // ולא מוחק אותו
+  const gymDays = live.filter((d: any) => d.kind === 'gym')
+  expect(gymDays.length).toBeGreaterThanOrEqual(3)
+  for (const g of gymDays) {
+    const twin = live.find((d: any) => d.dow === g.dow && d.kind === 'home' && d.title.startsWith('בבית — '))
+    expect(twin, `אין תאום ליום ${g.dow} (${g.title})`).toBeTruthy()
+  }
 
   // שבת הפכה לריצה ארוכה, ושישי לריצה קלה
   const sat = live.find((d: any) => d.dow === 6 && d.kind === 'run')

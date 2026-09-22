@@ -211,14 +211,21 @@ describe('הכרטיס בודק את עצמו', () => {
 
 describe('השבוע שהחוקים מייצרים', () => {
   const week = planWeek({ weekKm: 15, week: 1, weeks: 20 })
-  const gym = week.filter((d) => d.kind === 'gym')
+  const strength = week.filter((d) => d.kind === 'gym' || d.kind === 'home')
   const runs = week.filter((d) => d.kind === 'run')
 
   it('ברירת המחדל: שלוש ריצות וארבעה ימי כוח', () => {
     expect(DEFAULT_RUNS_PER_WEEK).toBe(3)
     expect(runs.length).toBe(3)
-    expect(gym.length).toBe(4)
+    expect(strength.length).toBe(4)
     expect(week.length).toBe(7)
+  })
+
+  it('שלוש הריצות מפוזרות, ואין שתיים ברצף', () => {
+    const d = runs.map((r) => r.dow).sort((a, b) => a - b)
+    for (let i = 1; i < d.length; i++) expect(d[i] - d[i - 1], d.join(',')).toBeGreaterThanOrEqual(2)
+    // וגם במעבר השבוע: שבת ← ראשון
+    expect(!(d.includes(6) && d.includes(0)), d.join(',')).toBe(true)
   })
 
   it('שלוש הריצות הן ארוכה, איכות וקלה — ואין רביעית', () => {
@@ -249,17 +256,20 @@ describe('השבוע שהחוקים מייצרים', () => {
   })
 
   it('ארבעה תפקידים שונים, וסטטיים לא בימים עוקבים', () => {
-    expect(gym.map((d) => d.role)).toEqual(['pull', 'legs', 'statics', 'push'])
+    expect(strength.map((d) => d.role)).toEqual(['pull', 'legs', 'statics', 'push'])
     const statics = week.filter((d) => d.role === 'pull' || d.role === 'statics').map((d) => d.dow)
     expect(statics.length).toBe(2)
     expect(Math.abs(statics[1] - statics[0])).toBeGreaterThanOrEqual(2)
   })
 
-  it('פחות ימי כושר — פחות תפקידים, והחשובים נשארים', () => {
-    const three = planWeek({ weekKm: 15, week: 1, weeks: 20, runsPerWeek: 4 })
-    expect(three.filter((d) => d.kind === 'gym').map((d) => d.role)).toEqual(['pull', 'legs', 'push'])
-    const two = planWeek({ weekKm: 15, week: 1, weeks: 20, runsPerWeek: 5 })
-    expect(two.filter((d) => d.kind === 'gym').map((d) => d.role)).toEqual(['pull', 'legs'])
+  it('פחות ימי כוח — פחות תפקידים, והחשובים נשארים', () => {
+    const roles = (runsPerWeek: number) =>
+      planWeek({ weekKm: 15, week: 1, weeks: 20, runsPerWeek })
+        .filter((d) => d.kind === 'gym' || d.kind === 'home')
+        .map((d) => d.role)
+        .sort()
+    expect(roles(4)).toEqual(['legs', 'pull', 'push'])
+    expect(roles(5)).toEqual(['legs', 'pull'])
   })
 
   it('יום סגור מקבל את הגרסה הביתית ולא נמחק', () => {
@@ -332,7 +342,7 @@ describe('תקציב הגיד ומינון הסקילים', () => {
         0,
       )
     const pull = sets(/Front Lever|מתח \(Pull|חתירה/)
-    const push = sets(/פסאודו|מקבילים|לחיצת כתפיים|שכיבות סמיכה בעמידת ידיים/)
+    const push = sets(/פסאודו|מקבילים|לחיצת כתפיים|שכיבות סמיכה/)
     expect(pull).toBeGreaterThanOrEqual(WEEKLY_SETS.pull[0])
     expect(pull).toBeLessThanOrEqual(WEEKLY_SETS.pull[1])
     expect(push).toBeGreaterThanOrEqual(WEEKLY_SETS.push[0])
