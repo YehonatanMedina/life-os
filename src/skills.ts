@@ -409,21 +409,24 @@ export const SKILL_LADDERS: SkillLadder[] = [
         search: 'advanced tuck front lever',
       },
       {
-        id: 'one-leg',
-        name: 'רגל אחת ישרה',
-        what: 'רגל אחת נפרשת, השנייה נשארת מכופפת. מחליפים צד.',
-        criteria: '3 סטים של 10 שניות לכל צד',
-        target: { metric: 'time', value: 10, sets: 3 },
-        search: 'one leg front lever progression',
-      },
-      {
         id: 'straddle',
         name: 'Straddle Front Lever',
         what: 'שתי רגליים ישרות ופתוחות לצדדים.',
         criteria: '3 סטים של 10 שניות',
         target: { metric: 'time', value: 10, sets: 3 },
         tip: 'ככל שהרגליים פתוחות יותר, המנוף קצר יותר. סוגרים אותן בהדרגה.',
+        // סדר תוקן: בטבלאות של Overcoming Gravity (נגזרות מספר הנקודות של
+        // ההתעמלות) Straddle מדורג שלב אחד **קל יותר** מרגל אחת ישרה,
+        // כי הפישוק מקצר את המנוף בשתי הרגליים במקביל.
         search: 'straddle front lever progression',
+      },
+      {
+        id: 'one-leg',
+        name: 'רגל אחת ישרה',
+        what: 'רגל אחת נפרשת, השנייה נשארת מכופפת. מחליפים צד.',
+        criteria: '3 סטים של 10 שניות לכל צד',
+        target: { metric: 'time', value: 10, sets: 3 },
+        search: 'one leg front lever progression',
       },
       {
         id: 'full',
