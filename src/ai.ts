@@ -11,6 +11,7 @@
 //   docs/insights/latest.json — הניתוח השבועי שחוזר, מוצפן באותו מפתח
 // ---------------------------------------------------------------------------
 import { alive, dayCapacity, dayLog, eventsOn, plannedOn, sessionsOn, store, trackById, weekLog } from './store'
+import { TRAINING_DOCTRINE } from './training'
 import { addDays, logicalDate, today, weekStart } from './dates'
 import { buildWeekStats } from './insights'
 import { fitnessForecast, runForecast } from './forecast'
@@ -107,6 +108,9 @@ export function buildAtlasContext(s: AppState) {
 
   return {
     about: 'התמונה המלאה של מערכת ניהול הזמן של יהונתן, לאטלס.',
+    // תורת האימון נשלחת עם ההקשר: העורך הלילי משנה את התוכנית לפי
+    // החוקים האלה, ולא לפי מה שנשמע נכון. המקור של כל מספר כתוב לידו.
+    training: TRAINING_DOCTRINE,
     generatedAt: new Date().toISOString(),
     today: t,
     settings: {

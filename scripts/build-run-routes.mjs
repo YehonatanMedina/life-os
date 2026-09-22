@@ -55,12 +55,35 @@ const P = {
   carmelBeach: [32.805687, 34.955176],
   hecht: [32.817864, 34.955424],
   batGalim: [32.832853, 34.974069],
+
+  // ירושלים — אותו אימות מול Nominatim
+  firstStation: [31.766333, 35.224783],
+  germanColony: [31.764391, 35.220551],
+  bakaPark: [31.761155, 35.218176],
+  mesilaPark: [31.753356, 35.209562],
+  teddy: [31.75112, 35.190833],
+  sacher: [31.779868, 35.207583],
+  valleyOfCross: [31.772064, 35.208245],
+  israelMuseum: [31.771888, 35.203387],
+  givatRam: [31.77294, 35.197995],
+  gazelleValley: [31.760217, 35.195491],
+  libertyBell: [31.768881, 35.223546],
+  sultanPool: [31.771786, 35.226254],
+  jaffaGate: [31.776562, 35.227271],
+  haasPromenade: [31.754977, 35.228745],
+  goldmanPromenade: [31.755806, 35.237189],
+  mountHerzl: [31.772361, 35.181634],
+  yadVashem: [31.774069, 35.174915],
+  einKerem: [31.767637, 35.163903],
+  katamonim: [31.749557, 35.199842],
+  biblicalZoo: [31.746483, 35.176464],
 }
 
 const ROUTES = [
   {
     id: 'technion-campus',
     name: 'הקפת קמפוס הטכניון',
+    city: 'haifa',
     area: 'technion',
     surface: 'mixed',
     loop: true,
@@ -73,6 +96,7 @@ const ROUTES = [
   {
     id: 'neve-shaanan-loop',
     name: 'נווה שאנן — הקפת השכונה',
+    city: 'haifa',
     area: 'city',
     surface: 'road',
     loop: true,
@@ -85,6 +109,7 @@ const ROUTES = [
   {
     id: 'ramot-remez-loop',
     name: 'רמות רמז וקיר העורבים',
+    city: 'haifa',
     area: 'city',
     surface: 'road',
     loop: true,
@@ -97,6 +122,7 @@ const ROUTES = [
   {
     id: 'technion-university-climb',
     name: 'העלייה מהטכניון לאוניברסיטה',
+    city: 'haifa',
     area: 'carmel',
     surface: 'mixed',
     loop: false,
@@ -109,6 +135,7 @@ const ROUTES = [
   {
     id: 'carmel-ridge',
     name: 'רכס הכרמל — אוניברסיטה עד אחוזה',
+    city: 'haifa',
     area: 'carmel',
     surface: 'road',
     loop: false,
@@ -121,6 +148,7 @@ const ROUTES = [
   {
     id: 'carmel-center-ridge',
     name: 'מרכז הכרמל: גן האם, טיילת לואי וסטלה מאריס',
+    city: 'haifa',
     area: 'carmel',
     surface: 'mixed',
     loop: false,
@@ -133,6 +161,7 @@ const ROUTES = [
   {
     id: 'coast-dado-batgalim',
     name: 'רצף הטיילות: דדו עד בת גלים',
+    city: 'haifa',
     area: 'coast',
     surface: 'promenade',
     loop: false,
@@ -145,6 +174,7 @@ const ROUTES = [
   {
     id: 'hecht-carmel-beach',
     name: 'פארק הכט וחוף הכרמל',
+    city: 'haifa',
     area: 'coast',
     surface: 'promenade',
     loop: false,
@@ -157,6 +187,7 @@ const ROUTES = [
   {
     id: 'technion-to-sea',
     name: 'מהטכניון אל הים',
+    city: 'haifa',
     area: 'coast',
     surface: 'road',
     loop: false,
@@ -169,6 +200,7 @@ const ROUTES = [
   {
     id: 'ganhaem-to-sea',
     name: 'מגן האם אל הים',
+    city: 'haifa',
     area: 'carmel',
     surface: 'mixed',
     loop: false,
@@ -181,6 +213,7 @@ const ROUTES = [
   {
     id: 'carmel-long-loop',
     name: 'הלולאה הארוכה: נווה שאנן, רמת גולדה ודניה',
+    city: 'haifa',
     area: 'carmel',
     surface: 'mixed',
     loop: true,
@@ -189,6 +222,99 @@ const ROUTES = [
     expectKm: 14.0,
     expectGain: 408,
     waypoints: [P.neveShaanan, P.ramatAlon, P.ramatGolda, P.denya, P.ahuza],
+  },
+
+  // -- ירושלים ---------------------------------------------------------------
+  {
+    id: 'jer-mesila-full',
+    name: 'פארק המסילה — מהתחנה ועד גן החיות',
+    city: 'jerusalem',
+    area: 'mesila',
+    surface: 'promenade',
+    loop: false,
+    start: 'התחנה הראשונה',
+    notes: 'פארק המסילה במלואו, שבעה וחצי קילומטרים מהתחנה הראשונה ועד גן החיות התנ״כי: מסילת רכבת ישנה שהפכה לטיילת רצופה, מוארת בלילה ובלי רמזור אחד. זו הקרקע הטובה בירושלים לריצה ארוכה בקצב אחיד — המקבילה המקומית לטיילת החוף בחיפה.',
+    expectKm: 7.5,
+    expectGain: 53,
+    waypoints: [P.firstStation, P.germanColony, P.bakaPark, P.mesilaPark, P.katamonim, P.teddy, P.biblicalZoo],
+  },
+  {
+    id: 'jer-mesila-short',
+    name: 'המסילה: מהתחנה הראשונה למקור חיים',
+    city: 'jerusalem',
+    area: 'mesila',
+    surface: 'promenade',
+    loop: false,
+    start: 'התחנה הראשונה',
+    notes: 'הקטע הצפוני של המסילה, דרך המושבה הגרמנית ובקע. שניים וחצי קילומטרים כמעט מישוריים לגמרי, קרוב למרכז ומלא אנשים בערב — טוב לחימום, להאצות ולריצה קצרה.',
+    expectKm: 2.6,
+    expectGain: 5,
+    waypoints: [P.firstStation, P.germanColony, P.bakaPark, P.mesilaPark],
+  },
+  {
+    id: 'jer-parks-loop',
+    name: 'הקפת הפארקים: סאקר, המצלבה וגבעת רם',
+    city: 'jerusalem',
+    area: 'jer-city',
+    surface: 'mixed',
+    loop: true,
+    start: 'גן סאקר',
+    notes: 'חמישה קילומטרים דרך גן סאקר, עמק המצלבה, מוזיאון ישראל וגבעת רם. ירוק ומוצל יחסית, עם כ-90 מטר עלייה מצטברת בגבעות קצרות.',
+    expectKm: 5.1,
+    expectGain: 87,
+    waypoints: [P.sacher, P.valleyOfCross, P.israelMuseum, P.givatRam],
+  },
+  {
+    id: 'jer-gazelle-mesila',
+    name: 'עמק הצבאים והמסילה',
+    city: 'jerusalem',
+    area: 'mesila',
+    surface: 'mixed',
+    loop: true,
+    start: 'עמק הצבאים',
+    notes: 'שישה וחצי קילומטרים שמחברים את שמורת עמק הצבאים למסילה: שבילי עפר רכים לרגליים בתוך העיר, ו-140 מטר עלייה בדרך חזרה למעלה. טוב לימים שבהם האספלט מתחיל להרגיש.',
+    expectKm: 6.5,
+    expectGain: 142,
+    waypoints: [P.gazelleValley, P.mesilaPark, P.bakaPark],
+  },
+  {
+    id: 'jer-promenade',
+    name: 'טיילת ארמון הנציב וטיילת גולדמן',
+    city: 'jerusalem',
+    area: 'jer-city',
+    surface: 'promenade',
+    loop: false,
+    start: 'טיילת ארמון הנציב',
+    notes: 'קילומטר אחד של טיילת רחבה ומרוצפת עם הנוף הכי טוב בעיר. קצרה מדי לריצה שלמה — הלוך-חזור זה שני קילומטרים, והיא מצוינת לחימום, להאצות, או כסיום של ריצה ארוכה יותר.',
+    expectKm: 0.9,
+    expectGain: 4,
+    waypoints: [P.haasPromenade, P.goldmanPromenade],
+  },
+  {
+    id: 'jer-old-city-walls',
+    name: 'סביב חומות העיר העתיקה',
+    city: 'jerusalem',
+    area: 'jer-city',
+    surface: 'road',
+    loop: true,
+    start: 'התחנה הראשונה',
+    notes: 'שלושה וחצי קילומטרים מהתחנה הראשונה דרך בריכת הסולטן, שער יפו וגן הפעמון וחזרה. ירושלמי מאוד, ועם מדרגות ועיקולים שמפריעים לקצב — זו ריצה שרצים בשביל הריצה, לא בשביל השעון.',
+    expectKm: 3.5,
+    expectGain: 44,
+    waypoints: [P.firstStation, P.sultanPool, P.jaffaGate, P.libertyBell],
+  },
+  {
+    id: 'jer-herzl-einkerem',
+    name: 'מהר הרצל לעין כרם',
+    city: 'jerusalem',
+    area: 'jer-hills',
+    surface: 'mixed',
+    loop: false,
+    start: 'הר הרצל',
+    notes: 'ארבעה קילומטרים במורד, מהר הרצל דרך יד ושם אל עין כרם — ירידה של כ-180 מטר בשוליים של יער ירושלים. היפה בעיר, ובחזרה זו אותה ירידה כעלייה, אז עדיף לתכנן הסעה.',
+    expectKm: 4.0,
+    expectGain: 33,
+    waypoints: [P.mountHerzl, P.yadVashem, P.einKerem],
   },
 ]
 
@@ -332,7 +458,8 @@ for (const route of ROUTES) {
 }
 
 const ts = `// ---------------------------------------------------------------------------
-// מסלולי ריצה בחיפה — נוצר על ידי scripts/build-run-routes.mjs, אל תערוך ביד.
+// מסלולי ריצה בחיפה ובירושלים — נוצר על ידי scripts/build-run-routes.mjs.
+// אל תערוך ביד.
 //
 // כל קו כאן עבר דרך מנוע ניתוב רגלי של OpenStreetMap, כלומר הוא רץ על
 // המדרכות, השבילים והטיילות שקיימים בשטח. המרחק חושב מהקו עצמו, והעלייה
@@ -341,12 +468,14 @@ const ts = `// -----------------------------------------------------------------
 // נבנה: ${new Date().toISOString().slice(0, 10)}
 // ---------------------------------------------------------------------------
 
-export type RunArea = 'technion' | 'city' | 'carmel' | 'coast'
+export type RunCity = 'haifa' | 'jerusalem'
+export type RunArea = 'technion' | 'city' | 'carmel' | 'coast' | 'mesila' | 'jer-city' | 'jer-hills'
 export type RunSurface = 'road' | 'trail' | 'promenade' | 'mixed'
 
 export type RunRoute = {
   id: string
   name: string
+  city: RunCity
   area: RunArea
   surface: RunSurface
   /** אורך בקילומטרים, מהקו עצמו */
@@ -367,6 +496,7 @@ export const RUN_ROUTES: RunRoute[] = ${JSON.stringify(
   built.map((b) => ({
     id: b.id,
     name: b.name,
+    city: b.city,
     area: b.area,
     surface: b.surface,
     km: b.km,
@@ -382,11 +512,25 @@ export const RUN_ROUTES: RunRoute[] = ${JSON.stringify(
   0,
 )}
 
+export const CITY_LABEL: Record<RunCity, string> = {
+  haifa: 'חיפה',
+  jerusalem: 'ירושלים',
+}
+
 export const AREA_LABEL: Record<RunArea, string> = {
   technion: 'הטכניון והסביבה',
   city: 'העיר',
   carmel: 'הכרמל',
   coast: 'החוף',
+  mesila: 'פארק המסילה',
+  'jer-city': 'העיר והטיילות',
+  'jer-hills': 'הרי ירושלים',
+}
+
+/** אילו אזורים שייכים לאיזו עיר — לסינון שלא מציג אזור ריק */
+export const CITY_AREAS: Record<RunCity, RunArea[]> = {
+  haifa: ['technion', 'city', 'carmel', 'coast'],
+  jerusalem: ['mesila', 'jer-city', 'jer-hills'],
 }
 
 export const SURFACE_LABEL: Record<RunSurface, string> = {

@@ -32,8 +32,11 @@ test('שני מכשירים שולחים הודעות מהירות באותו ר
   expect(th.filter((m) => m.from === 'user').map((m) => m.text).sort()).toEqual(['הודעה מ-A', 'הודעה מ-B'])
   expect(th.filter((m) => m.from === 'atlas').map((m) => m.text).sort()).toEqual(['תשובה ל-A.', 'תשובה ל-B.'])
 
-  // כל מכשיר ממשיך לראות את השיחה שלו מיד, ואת של השני אחרי משיכה (כניסה מחדש למסך)
-  await expect(bubbles(A.page)).toHaveCount(2)
+  // כל מכשיר ממשיך לראות את השיחה שלו, ואת של השני אחרי משיכה (כניסה מחדש למסך).
+  // לא נדרש שהשניים של השני **לא** יופיעו עדיין: אם הסנכרון הספיק לרוץ
+  // לפני הבדיקה זו תוצאה טובה יותר, והדרישה לבדיק בדיוק שתיים היא מרוץ בין הבדיקה למשיכה.
+  expect(await bubbles(A.page).count()).toBeGreaterThanOrEqual(2)
+  await expect(A.page.getByText('הודעה מ-A')).toBeVisible()
   await A.page.getByRole('button', { name: 'היום', exact: true }).filter({ visible: true }).first().click()
   await openAtlas(A.page)
   await expect(bubbles(A.page)).toHaveCount(4, { timeout: 15_000 })
