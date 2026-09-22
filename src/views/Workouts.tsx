@@ -5,7 +5,7 @@ import {
   homeMinutes, workoutMinutes, workoutOn,
 } from '../store'
 import {
-  HE_DAYS, HE_DAYS_SHORT, dow, minutesToHM, plural, shortDate, today as todayISO,
+  HE_DAYS, HE_DAYS_SHORT, diffDays, dow, minutesToHM, plural, shortDate, today as todayISO,
   weekDates, weekStart,
 } from '../dates'
 import { Ring, Sheet } from '../ui'
@@ -14,9 +14,10 @@ import WeekPlanCard from './WeekPlanCard'
 import CoachCard from './CoachCard'
 import { PlanSheet, ProgressSheet, WorkoutSheet, KIND_EMOJI, setText, targetText } from './Workout'
 import {
-  FOCUS_COUNT, RUN_MILESTONES, RUN_WEEKLY_GROWTH, focusLadders, isFocusGoal, laddersInOrder,
+  FOCUS_COUNT, RUN_MILESTONES, focusLadders, isFocusGoal, laddersInOrder,
   tutorial,
 } from '../skills'
+import { sessionCapKm } from '../training'
 import type { SkillLadder, SkillStage } from '../skills'
 import { basisText, etaText, fitnessForecast, runForecast, skillForecast } from '../forecast'
 import type { ID, WorkoutLog } from '../types'
@@ -632,8 +633,27 @@ function RunJourney() {
   const next = nextIdx === -1 ? undefined : RUN_MILESTONES[nextIdx]
   const goal = RUN_MILESTONES[RUN_MILESTONES.length - 1]
   const pct = Math.min(100, Math.round((best.km / goal.km) * 100))
-  // התקרה של השבוע הבא — 10% מעל השבוע שנסגר, וזה הכלל שמונע פציעות
-  const cap = lastWeek ? Number((lastWeek * (1 + RUN_WEEKLY_GROWTH)).toFixed(1)) : 0
+  // התקרה שמוצגת היא זו שנמדדה, ולא זו שמספרים עליה.
+  //
+  // **כלל ה-10% ירד מכאן בכוונה:** הניסוי המבוקר היחיד שבדק אותו מצא
+  // 20.8% פציעות מול 20.3% (p=0.90). להציג אותו באדום כ"ככה נשברות
+  // שוקיים" זה להפחיד ממספר שלא ניבא כלום. מה שכן נמדד, ומה שמוצג כאן:
+  //   * אימון בודד שחורג מ-110% מהארוך ביותר ב-30 הימים האחרונים —
+  //     10–30% חריגה = סיכון ×1.64, מעל 100% = ×2.28, על 5,205 רצים.
+  //   * עלייה של מעל 30% בנפח על פני שבועיים, על 874 רצים.
+  const longest30 = useMemo(() => {
+    let km = 0
+    for (const w of s.workouts ?? []) {
+      if (w.deleted || (w.kind !== 'run' && !w.run) || !w.km) continue
+      if (diffDays(w.date, todayISO()) > 30) continue
+      km = Math.max(km, w.km)
+    }
+    return km
+  }, [s.workouts])
+  const sessionCap = longest30 ? sessionCapKm(longest30) : 0
+  // שתי נקודות אחורה — זה החלון שנמדד
+  const twoBack = weeks[weeks.length - (weeks[weeks.length - 1]?.[0] === weekStart(todayISO()) ? 4 : 3)]?.[1] ?? 0
+  const jumped = twoBack > 0 && thisWeek > twoBack * 1.3
   const chart = weeks.slice(-14)
   const max = Math.max(1, ...chart.map((w) => w[1]))
 
@@ -667,10 +687,17 @@ function RunJourney() {
           <div className="tiny faint" style={{ marginTop: 6 }}>
             נפח שבועי שמחזיק אותו: כ-{next.weekKm} ק״מ · השבוע נרשמו {Number(thisWeek.toFixed(1))}
           </div>
-          {cap > 0 && (
-            <div className="tiny" style={{ marginTop: 6, color: thisWeek > cap ? 'var(--bad)' : 'var(--text-dim)' }}>
-              תקרת השבוע לפי כלל 10%: {cap} ק״מ
-              {thisWeek > cap ? ' — עברת אותה, זה בדיוק איך שנשברות שוקיים.' : ''}
+          {sessionCap > 0 && (
+            <div className="tiny faint" style={{ marginTop: 6 }}>
+              תקרת האימון הבודד: <span className="ltr">{sessionCap}</span> ק״מ — 110% מהארוך ביותר בחודש. זה הכלל
+              היחיד שיש לו דוז-רספונס שנמדד, והוא על ריצה אחת ולא על השבוע.
+            </div>
+          )}
+          {jumped && (
+            <div className="tiny" style={{ marginTop: 6, color: 'var(--warn-text)' }}>
+              הנפח עלה מ-<span className="ltr">{Number(twoBack.toFixed(1))}</span> ל-
+              <span className="ltr">{Number(thisWeek.toFixed(1))}</span> ק״מ בשבועיים — מעל 30%, וזה הסף שנמדד
+              על 874 רצים.
             </div>
           )}
         </div>

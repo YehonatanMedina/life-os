@@ -111,26 +111,7 @@ function halfPaceFromVdot(v: number): number {
   return Math.round((half / 60 / 21.0975) * 100) / 100
 }
 
-/**
- * מהירות קריטית משני מאמצים. **רק המודל הליניארי מרחק-זמן** — בסקירה של
- * 124 מחקרים השגיאה שלו היא 1–2.8%, ואילו המודל ההיפרבולי בן שלושת
- * הפרמטרים נותן 16.9–70.9% ולא שמיש.
- * pmc.ncbi.nlm.nih.gov/articles/PMC13388421/
- */
-export function criticalSpeed(d1: number, t1: number, d2: number, t2: number): { cs: number; dPrime: number } | null {
-  if (t2 === t1 || d1 <= 0 || d2 <= 0) return null
-  const cs = (d2 - d1) / (t2 - t1)
-  if (!Number.isFinite(cs) || cs <= 0) return null
-  return { cs, dPrime: d1 - cs * t1 }
-}
-
-/**
- * השינוי הקטן ביותר במבחן שאפשר להאמין לו: MDC95 = 1.96·√2·שגיאת מדידה.
- * מתחת לזה — זה רעש, ואסור לעדכן קצבים בגללו.
- *   מבחן 5 ק״מ: שגיאה ~1.5% → 4.2%.  מהירות קריטית משני מאמצים: 0.4% → 1.1%.
- * pubmed.ncbi.nlm.nih.gov/11286357/ · pubmed.ncbi.nlm.nih.gov/24622815/
- */
-export const MDC95 = { timeTrial5k: 0.0416, criticalSpeed: 0.0111, threeMinTest: 0.0485 }
+export const MDC95 = { timeTrial5k: 0.0416 }
 
 /** האם מבחן חדש באמת שונה מהקודם, או שזה רעש */
 export function testChanged(prev: number, now: number, mdc: number): boolean {
@@ -386,89 +367,17 @@ export function blockType(week: number): 'pyramidal' | 'polarized' {
  * ב-2.0% (p=0.001), והמשתנה היחיד שתאם את השיפור היה **הרמות עקבים**
  * (r=−0.477, p=0.046). pubmed.ncbi.nlm.nih.gov/39523854/
  */
-export const RUNNER_LEG_WORK = [
-  {
-    name: 'לחיצת רגליים במכונה',
-    sets: '4×4–6',
-    load: '80–85% ממקסימום, ירידה מבוקרת ודחיפה מהירה',
-    why: 'עמוד השדרה של כל פרוטוקול שנמדד בלי מוט. גם מגדל את הישבן ב-15.4%.',
-    src: 'pubmed.ncbi.nlm.nih.gov/18460997/',
-  },
-  {
-    name: 'הרמות עקבים בעמידה',
-    sets: '4×6–8',
-    load: 'כבד, טווח מלא',
-    why: 'המשתנה היחיד שתאם עם שיפור עלות החמצן. גם המבחן שמנטר אכילס.',
-    src: 'pubmed.ncbi.nlm.nih.gov/39523854/',
-  },
-  {
-    name: 'הרמות עקבים בישיבה',
-    sets: '3–4×8–12',
-    load: 'בינוני-כבד',
-    why: 'ברך כפופה ב-90 מעלות מכוונת לסוליאוס — השריר הדומיננטי בריצה.',
-    src: 'pubmed.ncbi.nlm.nih.gov/12173959/',
-  },
-  {
-    name: 'כפיפות ברכיים במכונה',
-    sets: '3×8–12',
-    load: 'בינוני-כבד, ירידה איטית',
-    why: 'עבודה אקסצנטרית להמסטרינג בלי תרגיל שנראה חריג בחדר כושר.',
-    src: 'pubmed.ncbi.nlm.nih.gov/39523854/',
-  },
-  {
-    name: 'קפיצות פוגו',
-    sets: '4×10 (40 נגיעות)',
-    load: 'משקל גוף, קרקע רכה',
-    why: 'חמש דקות ביום, שישה שבועות — כלכלת ריצה השתפרה ב-12 ו-14 קמ״ש. בבית, בלי ציוד.',
-    src: 'pubmed.ncbi.nlm.nih.gov/36914662/',
-  },
-]
-
 /**
- * התאמת משקל לפי הסט העליון — APRE-6, הכלל האוטורגולטורי היחיד שנבדק
- * בניסוי מבוקר (23 ספורטאי ליגה, שישה שבועות, עלה על פריודיזציה ליניארית).
- * pubmed.ncbi.nlm.nih.gov/20543732/
+ * איך נראה סט כבד: טווח החזרות, כמה רחוק מכישלון, וכמה לנוח.
  *
- * שימו לב שהוא **סימטרי**: הוא מעלה משקל על ביצוע טוב באותה אגרסיביות
- * שהוא מוריד על ביצוע גרוע. תוכנית שרק יודעת להוריד היא תוכנית שנשחקת.
- */
-export function apre6(reps: number): { deltaKg: [number, number]; text: string } {
-  if (reps <= 2) return { deltaKg: [-5, -2.5], text: 'להוריד 2.5–5 ק״ג' }
-  if (reps <= 4) return { deltaKg: [-2.5, 0], text: 'להוריד עד 2.5 ק״ג' }
-  if (reps <= 7) return { deltaKg: [0, 0], text: 'להישאר באותו משקל' }
-  if (reps <= 12) return { deltaKg: [2.5, 5], text: 'להעלות 2.5–5 ק״ג' }
-  return { deltaKg: [5, 10], text: 'להעלות 5–10 ק״ג' }
-}
-
-/**
- * סטים שבועיים לכל דפוס תנועה. כל סט שבועי נוסף שווה ES 0.023 (כ-0.37%),
- * עם תשואה פוחתת שחדה יותר לכוח מאשר להיפרטרופיה.
- * pubmed.ncbi.nlm.nih.gov/27433992/ · pubmed.ncbi.nlm.nih.gov/41343037/
- * ורצפת התחזוקה בשבוע כבד של ריצה: 3–6 סטים קשים לתרגיל.
+ * **כמה סטים לכל דפוס תנועה בשבוע נמצא ב-`WEEKLY_SETS` בלבד.** היה כאן
+ * טווח שני (6–10), והוא סתר אותו — שני מספרים לאותה שאלה הם שתי תשובות,
+ * וכל מי שקורא בוחר את זו שנוחה לו.
+ *
+ * רצפת התחזוקה בשבוע כבד של ריצה: 3–6 סטים קשים לתרגיל.
  * pubmed.ncbi.nlm.nih.gov/34527944/
  */
-export const STRENGTH_DOSE = { setsPerPatternPerWeek: [6, 10], maintenanceSets: [3, 6], reps: [3, 6], rir: [1, 2], restSec: 120 }
-
-/**
- * עבודה איזומטרית (פרונט לבר, L-Sit): אחיזה בעבודה היא 67–70% מהאחיזה
- * המקסימלית, והזמן תחת מתח לכל תרגיל 45–70 שניות. מעל אחיזה מקסימלית של
- * 30 שניות — עוברים לגרסה קשה יותר במקום להוסיף זמן.
- * stevenlow.org/prilepin-tables-for-bodyweight-strength-isometric-and-eccentric-exercises/
- * (קונצנזוס אימון; מתכתב היטב עם מינון איזומטרי שפיט:
- * pubmed.ncbi.nlm.nih.gov/30943568/)
- *
- * **מה שלא מיישמים:** כלל של "ירידה של X% בזמן האחיזה → לעצור". מהימנות
- * המדידה הזו היא ICC 0.64 — הנמוכה מבין 29 מדדים נוירו-שריריים שנבדקו
- * (pubmed.ncbi.nlm.nih.gov/16427317/), וסף באחוזים היה נורה על רעש.
- * הסימן לעצור הוא **התנוחה שנשברת**, לא השעון.
- */
-export function isoHold(maxSec: number): { holdSec: number; sets: number; note: string } {
-  if (maxSec <= 0) return { holdSec: 0, sets: 0, note: 'צריך קודם למדוד אחיזה מקסימלית' }
-  if (maxSec >= 30) return { holdSec: 20, sets: 3, note: 'מעל 30 שניות — הגיע הזמן לעבור לשלב הבא, לא להוסיף זמן' }
-  const hold = Math.max(3, Math.round(maxSec * 0.68))
-  const sets = Math.max(3, Math.min(7, Math.round(56 / hold)))
-  return { holdSec: hold, sets, note: 'עוצרים כשהתנוחה נשברת, לא כשהשעון מגיע' }
-}
+export const STRENGTH_DOSE = { maintenanceSets: [3, 6], reps: [3, 6], rir: [1, 2], restSec: 120 }
 
 // -- סקילים: תדירות, סדר, ותקציב הגיד ------------------------------------------
 
@@ -565,70 +474,12 @@ export const holdToReps = (sec: number) => sec / 2
  * מזווגים נותנים כוח והיפרטרופיה זהים בכ-30–50% פחות זמן.
  * pubmed.ncbi.nlm.nih.gov/20733520/
  * הזוגות: Front Lever מול פסאודו-פלאנש (משיכה ישרה מול דחיפה ישרה),
- * מתח מול מקבילים, לחיצה מול חתירה.
+ * ומתח מול מקבילים.
  */
 export const PAIRS: Array<[string, string]> = [
   ['Front Lever', 'שכיבות סמיכה פסאודו-פלאנש'],
   ['מתח (Pull-ups)', 'מקבילים (Dips)'],
-  ['לחיצת כתפיים', 'חתירה'],
 ]
-
-// -- אוטורגולציה: מה משתנה אחרי אימון ------------------------------------------
-
-export type Wellness = {
-  /** 1 (גרוע) עד 5 (מצוין) */
-  sleep: number
-  fatigue: number
-  soreness: number
-  motivation: number
-}
-
-export type Readiness = {
-  action: 'go' | 'modify' | 'downgrade'
-  reasons: string[]
-  score: number
-}
-
-/**
- * החלטת המוכנוּת היומית.
- *
- * למה דיווח עצמי ולא שעון: בסקירה של 56 מחקרים, מדדים סובייקטיביים שיקפו
- * עומס אימון **ברגישות ובעקביות טובות יותר** ממדדים אובייקטיביים, והם
- * בדרך כלל לא מתואמים זה לזה. pmc.ncbi.nlm.nih.gov/articles/PMC4789708/
- * ובהשוואה ישירה בשלוש זרועות על רצים חובבים, הנחיה לפי שאלון מתח עצמי
- * ניצחה גם הנחיה לפי HRV וגם תוכנית קבועה (5 ק״מ: −12.8% מול −8.3%).
- * pubmed.ncbi.nlm.nih.gov/36940300/
- *
- * ושלוש מגבלות שנבנו לתוך הכלל:
- *   * **לא פועלים על נקודה בודדת.** דורשים שתי דרישות, או יומיים ברצף.
- *   * **אף פעם לא מעלים עומס בגלל אות טוב.** מערכת שמגיבה לכל אות טוב
- *     מנפחת נפח; היתרון של אימון מונחה-מוכנות על תוכנית קבועה הוא
- *     SMD 0.20 ולא מובהק. pubmed.ncbi.nlm.nih.gov/34639599/
- *   * **ציון מוכנוּת לא מוצג לפני האימון**, כדי שלא ייצור את מה שהוא
- *     מנבא (אפקט ציפייה).
- */
-export function readiness(today: Wellness, history: Wellness[]): Readiness {
-  const sum = (w: Wellness) => w.sleep + w.fatigue + w.soreness + w.motivation
-  const score = sum(today)
-  const reasons: string[] = []
-
-  // דגלים קשים — כל אחד לבדו מוריד את היום
-  if (today.sleep <= 1) reasons.push('שינה קצרה מאוד')
-  if (today.soreness <= 1) reasons.push('כאבי שרירים חזקים')
-
-  if (history.length >= 5) {
-    const xs = history.map(sum)
-    const mean = xs.reduce((a, b) => a + b, 0) / xs.length
-    const sd = Math.sqrt(xs.reduce((a, b) => a + (b - mean) * (b - mean), 0) / xs.length)
-    // חצי סטיית תקן מתחת לממוצע — הסף שבו השתמשו הניסויים המונחים
-    if (sd > 0 && score < mean - 0.5 * sd) reasons.push('מתחת לממוצע שלך בשבוע האחרון')
-  }
-
-  if (reasons.some((r) => r.includes('שינה') || r.includes('כאבי'))) return { action: 'downgrade', reasons, score }
-  if (reasons.length >= 2) return { action: 'downgrade', reasons, score }
-  if (reasons.length === 1) return { action: 'modify', reasons, score }
-  return { action: 'go', reasons, score }
-}
 
 /**
  * מה עושים עם אימון שלא התקיים. **מוחקים אותו, לא דוחפים את השבוע קדימה.**
@@ -703,8 +554,6 @@ export function checkWeek(days: DayKind[][]): string[] {
   return bad
 }
 
-export const WALK_TO_RUN_RATIO = 0.46
-
 // -- מה שנשלח לאטלס -----------------------------------------------------------
 
 /**
@@ -726,6 +575,7 @@ export const TRAINING_DOCTRINE = {
     'אין ריצה קשה ב-24 השעות שאחרי רגליים כבדות — כלכלת ריצה יורדת 5.6–10% — pubmed.ncbi.nlm.nih.gov/23724883/',
     'כוח פלג גוף עליון וריצה יכולים לחלוק יום — ההפרעה מקומית לשריר — pubmed.ncbi.nlm.nih.gov/39921365/',
     'הריצה הארוכה לבד ביום שלה, ולפחות 70 דקות — מתחת לזה היא לא קונה עמידוּת — pubmed.ncbi.nlm.nih.gov/40878015/',
+    'ימי ריצה רצופים הם תקינים ומתוכננים. האיסור הוא על שני ימים **קשים** ברצף, לא על שתי ריצות: חמש ריצות בשבוע עם שני ימי כושר מחייבות רצף, וזו בדיוק הדרך שבה תדירות מעלה נפח מתחת לתקרת זמן.',
     '75–85% מדקות הריצה קלות. חלוקה פירמידלית, לא פולריזציה דוגמטית — בחובבים אין הבדל — pubmed.ncbi.nlm.nih.gov/39888556/',
     'שני ימי סטטיים לא ברצף: 48 שעות בין אימוני זרוע ישרה, כי הגיד מסתגל לאט מהשריר — pmc.ncbi.nlm.nih.gov/articles/PMC4532714/',
     'שני ימי כוח בשבוע ולא שלושה: שלושה פגעו בסף האירובי (SMD −0.45) בעוד ששניים שיפרו אותו (+0.32) — journals.humankinetics.com/view/journals/ijspp/13/1/article-p57.xml',
@@ -760,7 +610,7 @@ export const TRAINING_DOCTRINE = {
     'אימון כוח מוריד פציעות יתר לכ-53% (RR 0.527, I²=0), ומתיחות לא עושות כלום (RR 0.963) — bjsm.bmj.com/content/48/11/871',
   ],
   adapt: [
-    'מחליטים לפי דיווח עצמי ולא לפי שעון — הוא נמדד כרגיש ועקבי יותר — pmc.ncbi.nlm.nih.gov/articles/PMC4789708/',
+    'מה שמניע החלטה הוא מה שנרשם: סטים, קצב, והערה חופשית. אין ציון מוכנוּת, כי אין מסך שאוסף אותו — ומדד שאי אפשר להזין הוא הבטחה ריקה.',
     'לא פועלים על נקודה בודדת: שתי דרישות, או יומיים ברצף. שגיאת הדיווח של RIR היא ±1.45 חזרות.',
     'א-סימטריה: מהירים להוריד, איטיים להעלות. הורדה שגויה עולה אימון אחד; העלאה שגויה עולה חודש.',
     'לעולם לא מוסיפים עומס בגלל אות טוב. מותר להוריד, לשמור, או לחזור לתוכנית.',
@@ -782,10 +632,11 @@ export const TRAINING_DOCTRINE = {
     'הבטחה ש-VO2max יעלה מאימוני כוח — אף מטא-אנליזה לא מצאה את זה.',
   ],
   gymConstraints: [
-    'בלי סקוואט, דדליפט ומכרעים עם מוט בחדר כושר. התחליף שנמדד: לחיצת רגליים, כפיפות ברכיים והרמות עקבים — עלות החמצן ירדה 2.0% — pubmed.ncbi.nlm.nih.gov/39523854/',
+    'בלי סקוואט, דדליפט ומכרעים בחדר כושר. **גם Split Squat ובולגרי נחשבים מכרע** ואסורים שם — נקבע 22.9.2026. התחליף שנמדד: לחיצת רגליים והרמות עקבים — עלות החמצן ירדה 2.0% — pubmed.ncbi.nlm.nih.gov/39523854/',
+    'גשר ירך במוט (Hip Thrust) — מותר בחדר כושר, ונקבע 22.9.2026. הוא דפוס ה-Hinge היחיד בתוכנית: הכוח הגבוה ביותר על יישור הירך בלי שום עומס על עמוד השדרה.',
+    'מכרעים במשקל גוף בבית — מותרים, אבל בלי משקל הם תחזוקה ולא בנייה: העומס שמשפר כלכלת ריצה הוא ≥80% ממקסימום, ועומס של 40–79% לא משפר אותה כלל.',
     'דדליפט רומני — לא בחדר כושר. בבית זה בסדר.',
     'תרגיל שנראה חריג בחדר כושר עובר לבלוק הביתי של עשר הדקות לפני האימון — וזה גם מה שהמחקר רוצה בשביל עמידת ידיים.',
-    'מכרעים במשקל גוף בבית — מותרים.',
     'אין חדר כושר בשישי ובשבת. יום סגור לא מוחק אימון אלא מחליף אותו בתאום הביתי (settings.gymDays, settings.gymOff).',
   ],
 } as const
@@ -911,8 +762,8 @@ export function planWeek(opts: {
   return [
     strength(
       0,
-      'משיכה וסטטיים',
-      'היום של Front Lever — סטטי כשהזרוע טרייה, ואז המשיכה הכבדה',
+      'משיכה, דחיפה וסטטיים',
+      'היום של Front Lever — סטטי כשהזרוע טרייה, ואז המשיכה והדחיפה הכבדות',
       'הסטטי לפני המתח ולא אחריו: תרגול תחת עייפות מקודד זיכרון מוטורי גרוע.',
       false,
     ),
@@ -928,9 +779,9 @@ export function planWeek(opts: {
     },
     strength(
       2,
-      'דחיפה ורגליים',
+      'רגליים ושוקיים',
       'היום היחיד עם רגליים כבדות, כי למחרת יש רק ריצה קלה',
-      'לחיצת רגליים כבדה (4×4–6) והרמות עקבים. בלי סקוואט, דדליפט או מכרעים.',
+      'לחיצת רגליים, גשר ירך והרמות עקבים. בלי סקוואט, דדליפט, מכרע או Split Squat.',
       true,
     ),
     {
@@ -992,6 +843,54 @@ export function planWeek(opts: {
 
 /** השם הישן, כדי שקוד קיים לא יישבר */
 export const proposeWeek = planWeek
+
+/**
+ * ימים בתוכנית שנשארו מגרסה קודמת.
+ *
+ * מה נחשב מיותר: **לא** היום הראשון של כל יום-בשבוע — זה היום שהאפליקציה
+ * מציגה, וההחלה מחליפה אותו ולא מוחקת. מיותר הוא יום **נוסף** באותו יום
+ * בשבוע שאינו אחד משבעת הימים ואינו התאום הביתי של יום כושר.
+ *
+ * למה זה שווה כפתור: יום כזה לא מופיע במסך התוכנית, אבל כן ברשימת
+ * "עשיתי אימון אחר" — ולכן הוא מבלבל בשקט, וגם שורד כל החלה.
+ */
+export function staleDays<T extends { id: string; dow: number; title: string }>(
+  plan: T[],
+  proposed: ProposedDay[],
+  twinTitle: (dow: number) => string | undefined,
+): T[] {
+  const wanted = new Set<string>()
+  for (const d of proposed) {
+    wanted.add(`${d.dow}|${d.title}`)
+    const twin = d.kind === 'gym' ? twinTitle(d.dow) : undefined
+    if (twin) wanted.add(`${d.dow}|${twin}`)
+  }
+  const seen = new Set<number>()
+  return plan.filter((d) => {
+    const first = !seen.has(d.dow)
+    seen.add(d.dow)
+    return !first && !wanted.has(`${d.dow}|${d.title}`)
+  })
+}
+
+/**
+ * תרגום השבוע שנבנה לשפה ש-`checkWeek` מדבר, כדי שהכרטיס יוכל **לבדוק את
+ * ההצעה של עצמו** מול החוקים ולהציג את מה שנשבר. מחולל שלא נבדק מול
+ * הכללים שלו הוא רק עוד דעה.
+ */
+export function weekKinds(days: ProposedDay[]): DayKind[][] {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = days.find((x) => x.dow === i)
+    if (!d) return ['rest'] as DayKind[]
+    if (d.kind === 'gym' || d.kind === 'home') {
+      return (/רגליים/.test(d.title) ? ['legs', 'skills'] : ['upper', 'skills']) as DayKind[]
+    }
+    if (d.kind === 'walk') return ['walk'] as DayKind[]
+    if (/ארוכה/.test(d.title)) return ['long-run'] as DayKind[]
+    if (/איכות/.test(d.title)) return ['quality-run'] as DayKind[]
+    return ['easy-run'] as DayKind[]
+  })
+}
 
 export type CurrentDay = { dow: number; kind: string; title: string; km?: number }
 
@@ -1200,7 +1099,15 @@ export const PROGRAM: Record<number, { exercises: ProposedExercise[] }> = {
         why: 'המדד המרכזי: מתח בתוספת 40–50% ממשקל הגוף הוא גם השער ל-Front Lever וגם למאסל־אפ.',
       },
       { name: 'מקבילים (Dips)', sets: 3, reps: '5-8', metric: 'bodyweight', rest: 90, note: 'בזוג עם מתח. הדחיפה של המאסל־אפ היא בדיוק מקבילים.' },
-      { name: 'חתירה במשקולות בודדות או במכונה', sets: 3, reps: '8-10 לכל יד', metric: 'weight', rest: 75, note: 'משיכה אופקית — הווקטור שגם המתח וגם ה-Front Lever מפספסים.' },
+      {
+        name: 'לחיצת כתפיים בישיבה (משקולות)',
+        sets: 3,
+        reps: '6-8',
+        metric: 'weight',
+        rest: 75,
+        note: 'הדחיפה מעל הראש — המדד שהכי קרוב לעמידת ידיים, והאיזון של כל המשיכה שלפניו.',
+        why: 'יחס משיכה־דחיפה של יותר מ-1.5:1 הוא ההכנה הקלאסית לכאב כתף בקליסטניקס. כאן היחס הוא 13:10.',
+      },
     ],
   },
   // שני — ריצת איכות. הבלוק הביתי בלבד.
@@ -1222,7 +1129,16 @@ export const PROGRAM: Record<number, { exercises: ProposedExercise[] }> = {
         note: 'היום השני בשבוע, סאב-מקסימלי (כ-60%). 48 שעות מהיום הראשון — זה מה שהגיד צריך.',
         why: 'פעמיים בשבוע לכל דפוס עדיף על פעם אחת בנפח זהה; שני ימים ברצף הם עומס בלי הסתגלות.',
       },
-      { name: 'לחיצת כתפיים בישיבה (משקולות)', sets: 3, reps: '6-8', metric: 'weight', rest: 75, note: 'הדחיפה מעל הראש — המדד שהכי קרוב לעמידת ידיים.' },
+      {
+        name: 'גשר ירך במוט (Hip Thrust)',
+        sets: 3,
+        reps: '6-10',
+        metric: 'weight',
+        rest: 90,
+        cues: 'סנטר לחזה, צלעות סגורות, עצירה של שנייה למעלה.',
+        note: 'כבד. זה דפוס ה-Hinge היחיד בתוכנית — ולכן הוא לא אקססורי.',
+        why: 'הכוח הגבוה ביותר שאפשר להפעיל על יישור הירך בלי שום עומס על עמוד השדרה — והדרך היחידה לאמן המסטרינג וישבן בלי סקוואט, דדליפט או מכרע.',
+      },
       {
         name: 'לחיצת רגליים במכונה (Leg Press)',
         sets: 4,
@@ -1277,7 +1193,7 @@ export function programFor(dow: number): ProposedExercise[] {
  */
 export const HOME_TWIN: Record<number, { title: string; exercises: ProposedExercise[] }> = {
   0: {
-    title: 'בבית — משיכה וסטטיים',
+    title: 'בבית — משיכה, דחיפה וסטטיים',
     exercises: [
       handstand(4),
       wrists(),
@@ -1288,13 +1204,20 @@ export const HOME_TWIN: Record<number, { title: string; exercises: ProposedExerc
     ],
   },
   2: {
-    title: 'בבית — דחיפה ורגליים',
+    title: 'בבית — רגליים',
     exercises: [
       handstand(3),
       pogo(),
       { name: 'Front Lever — Tuck', sets: 4, reps: '8 שניות', metric: 'time', rest: 60 },
       { name: 'שכיבות סמיכה בעמידת ידיים על הקיר', sets: 3, reps: '4-8', metric: 'reps', rest: 90, note: 'התחליף הביתי ללחיצת הכתפיים.' },
-      { name: 'מכרעים (Lunges) במשקל גוף', sets: 4, reps: '12-15 לכל רגל', metric: 'reps', rest: 75, note: 'התחליף הביתי ללחיצת הרגליים. בבית זה מותר.' },
+      {
+        name: 'מכרעים (Lunges) במשקל גוף',
+        sets: 4,
+        reps: '12-15 לכל רגל',
+        metric: 'reps',
+        rest: 75,
+        note: 'בבית זה מותר, אבל בלי משקל — ולכן זו תחזוקה ולא בנייה. העומס שמשפר כלכלת ריצה הוא ≥80% ממקסימום, ואי אפשר להגיע לשם במשקל גוף.',
+      },
       { name: 'גשר ירך על רגל אחת', sets: 3, reps: '12-15 לכל רגל', metric: 'reps', rest: 60, note: 'המסטרינג וישבן, בלי מכונה.' },
     ],
   },

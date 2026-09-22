@@ -15,27 +15,27 @@ import {
   LONG_RUN_MIN_MINUTES,
   MDC95,
   RUN_SESSIONS,
-  STRENGTH_DOSE,
   WEEK_FLOOR,
-  apre6,
   checkWeek,
-  criticalSpeed,
-  isoHold,
   longShare,
   paces,
-  readiness,
   riegel,
   sessionCapKm,
   testChanged,
   vdot,
   volumeRamp,
+  staleDays,
+  weekKinds,
+  TRAINING_DOCTRINE,
+  STRENGTH_DOSE,
   programFor,
   proposeWeek,
   splitWeek,
   weekChanges,
   type DayKind,
-  type Wellness,
 } from '../../../src/training'
+
+const STRENGTH_DOSE_KEYS = Object.keys(STRENGTH_DOSE)
 
 describe('VDOT וקצבים', () => {
   it('מתאים לטבלה המפורסמת בנקודות ידועות', () => {
@@ -74,30 +74,10 @@ describe('VDOT וקצבים', () => {
   })
 })
 
-describe('מהירות קריטית', () => {
-  it('המודל הליניארי מחזיר מהירות והון אנאירובי הגיוניים', () => {
-    // רץ שעושה 1,200 מ׳ ב-4:00 ו-5,000 מ׳ ב-20:00
-    const r = criticalSpeed(1200, 240, 5000, 1200)!
-    expect(r.cs).toBeCloseTo((5000 - 1200) / (1200 - 240), 3)
-    expect(r.cs).toBeGreaterThan(3)
-    expect(r.cs).toBeLessThan(5)
-    expect(r.dPrime).toBeGreaterThan(0)
-  })
-
-  it('שני מאמצים באותו זמן לא מייצרים מספר מומצא', () => {
-    expect(criticalSpeed(1200, 240, 5000, 240)).toBeNull()
-  })
-})
-
 describe('שינוי אמיתי מול רעש', () => {
   it('שיפור של 2% במבחן 5 ק״מ הוא רעש, של 6% הוא אמיתי', () => {
     expect(testChanged(1200, 1176, MDC95.timeTrial5k)).toBe(false) // 2%
     expect(testChanged(1200, 1128, MDC95.timeTrial5k)).toBe(true) // 6%
-  })
-
-  it('מבחן מהירות קריטית רגיש בהרבה — 1.5% כבר נחשב', () => {
-    expect(testChanged(4.0, 4.06, MDC95.criticalSpeed)).toBe(true)
-    expect(testChanged(4.0, 4.02, MDC95.criticalSpeed)).toBe(false)
   })
 })
 
@@ -195,63 +175,82 @@ describe('אימונים שנכנסים ל-45 דקות', () => {
   })
 })
 
-describe('כוח', () => {
-  it('APRE-6 סימטרי: מעלה על ביצוע טוב כמו שמוריד על גרוע', () => {
-    expect(apre6(1).deltaKg[1]).toBeLessThan(0)
-    expect(apre6(4).deltaKg[0]).toBeLessThan(0)
-    expect(apre6(6).deltaKg).toEqual([0, 0])
-    expect(apre6(10).deltaKg[0]).toBeGreaterThan(0)
-    expect(apre6(15).deltaKg[0]).toBeGreaterThan(apre6(10).deltaKg[0])
+describe('מה שהוסר, ולמה אסור שיחזור', () => {
+  it('כלל ה-10% לא מוצג כאמצעי בטיחות בשום מקום בדוקטרינה', () => {
+    const all = JSON.stringify(TRAINING_DOCTRINE)
+    // הוא מותר כקצב תכנון, ואסור כהבטחת בטיחות
+    expect(TRAINING_DOCTRINE.forbidden.some((x) => x.includes('כלל ה-10%'))).toBe(true)
+    expect(all).not.toContain('הכלל שמונע פציעות')
   })
 
-  it('המינון השבועי בטווח שנמדד, ולא "כמה שיותר"', () => {
-    expect(STRENGTH_DOSE.setsPerPatternPerWeek[0]).toBeGreaterThanOrEqual(6)
-    expect(STRENGTH_DOSE.setsPerPatternPerWeek[1]).toBeLessThanOrEqual(12)
-    expect(STRENGTH_DOSE.rir[0]).toBeGreaterThanOrEqual(1)
+  it('יש תשובה אחת לשאלה "כמה סטים לדפוס תנועה בשבוע"', () => {
+    expect((STRENGTH_DOSE_KEYS as readonly string[]).includes('setsPerPatternPerWeek')).toBe(false)
+    expect(WEEKLY_SETS.pull.length).toBe(2)
   })
 
-  it('אחיזה איזומטרית: 67–70% מהמקסימום, וזמן תחת מתח 45–70 שניות', () => {
-    const h = isoHold(15)
-    expect(h.holdSec / 15).toBeGreaterThan(0.6)
-    expect(h.holdSec / 15).toBeLessThan(0.75)
-    const tut = h.holdSec * h.sets
-    expect(tut).toBeGreaterThanOrEqual(40)
-    expect(tut).toBeLessThanOrEqual(75)
-  })
-
-  it('מעל 30 שניות — עוברים שלב, לא מוסיפים זמן', () => {
-    expect(isoHold(35).note).toContain('לעבור לשלב הבא')
+  it('הדוקטרינה מסבירה ימי ריצה רצופים — זו השאלה הראשונה שכל אחד שואל', () => {
+    expect(TRAINING_DOCTRINE.week.some((x) => x.includes('רצופים'))).toBe(true)
   })
 })
 
-describe('מוכנוּת', () => {
-  const ok: Wellness = { sleep: 4, fatigue: 4, soreness: 4, motivation: 4 }
-  const hist = Array.from({ length: 7 }, () => ok)
-
-  it('יום רגיל — ממשיכים', () => {
-    expect(readiness(ok, hist).action).toBe('go')
+describe('הכרטיס בודק את עצמו', () => {
+  it('השבוע שנבנה עובר את checkWeek בכל נפח ובכל זמינות חדר כושר', () => {
+    for (const km of [10, 16, 24, 31.9, 32, 40, 55]) {
+      for (const gym of [[0, 1, 2, 3, 4], [0, 1, 3, 4], [3], [0, 2]]) {
+        for (const week of [1, 9]) {
+          const w = planWeek({ weekKm: km, week, weeks: 20, gymDays: gym })
+          expect(checkWeek(weekKinds(w)), `${km} ק״מ · כושר ${gym.join(',')} · שבוע ${week}`).toEqual([])
+        }
+      }
+    }
   })
 
-  it('שינה גרועה מאוד לבדה מורידה את היום', () => {
-    expect(readiness({ ...ok, sleep: 1 }, hist).action).toBe('downgrade')
+  it('ימי ריצה רצופים קיימים בשבוע — וזה תקין', () => {
+    const w = planWeek({ weekKm: 36, week: 1, weeks: 20 })
+    const runs = w.filter((d) => d.kind === 'run').map((d) => d.dow).sort((a, b) => a - b)
+    const consecutive = runs.some((d, i) => i > 0 && d === runs[i - 1] + 1)
+    expect(consecutive).toBe(true)
+    // ומה שאסור — שני ימים קשים ברצף — לא קיים
+    expect(checkWeek(weekKinds(w))).toEqual([])
+  })
+})
+
+describe('ימים שנשארו מגרסה קודמת', () => {
+  const days = planWeek({ weekKm: 24, week: 1, weeks: 20 })
+  const twin = (dow: number) => (dow === 0 ? 'בבית — משיכה, דחיפה וסטטיים' : dow === 2 ? 'בבית — רגליים' : undefined)
+
+  it('היום הראשון של כל יום-בשבוע לעולם לא נחשב מיותר — הוא יוחלף', () => {
+    const plan = [
+      { id: 'a', dow: 0, title: 'משהו ישן לגמרי' },
+      { id: 'b', dow: 6, title: 'בית — סקילים' },
+    ]
+    expect(staleDays(plan, days, twin)).toEqual([])
   })
 
-  it('ירידה קלה מתחת לממוצע — משנים, לא מורידים', () => {
-    const varied: Wellness[] = [ok, { ...ok, fatigue: 3 }, ok, { ...ok, motivation: 5 }, ok, ok, { ...ok, sleep: 3 }]
-    const r = readiness({ ...ok, fatigue: 2, motivation: 3 }, varied)
-    expect(r.action === 'modify' || r.action === 'downgrade').toBe(true)
-    expect(r.reasons.length).toBeGreaterThan(0)
+  it('יום נוסף שאינו התאום הביתי — מיותר', () => {
+    const plan = [
+      { id: 'a', dow: 0, title: 'חדר כושר — משיכה, דחיפה וסטטיים' },
+      { id: 'b', dow: 0, title: 'בית — סקילים ישן' },
+    ]
+    expect(staleDays(plan, days, twin).map((d) => d.id)).toEqual(['b'])
   })
 
-  it('אין מצב שבו אות טוב מעלה עומס', () => {
-    const great: Wellness = { sleep: 5, fatigue: 5, soreness: 5, motivation: 5 }
-    const r = readiness(great, hist)
-    expect(r.action).toBe('go')
-    expect(['go', 'modify', 'downgrade']).toContain(r.action)
+  it('התאום הביתי עצמו לא מיותר', () => {
+    const plan = [
+      { id: 'a', dow: 0, title: 'חדר כושר — משיכה, דחיפה וסטטיים' },
+      { id: 'b', dow: 0, title: 'בבית — משיכה, דחיפה וסטטיים' },
+      { id: 'c', dow: 2, title: 'חדר כושר — רגליים ושוקיים' },
+      { id: 'd', dow: 2, title: 'בבית — רגליים' },
+    ]
+    expect(staleDays(plan, days, twin)).toEqual([])
   })
 
-  it('בלי היסטוריה מספקת לא ממציאים החלטה', () => {
-    expect(readiness(ok, []).action).toBe('go')
+  it('תאום עם כותרת ישנה כן מיותר — כי הוא כבר לא זה שנבנה', () => {
+    const plan = [
+      { id: 'a', dow: 0, title: 'חדר כושר — משיכה, דחיפה וסטטיים' },
+      { id: 'b', dow: 0, title: 'בבית — משיכה וסטטיים' },
+    ]
+    expect(staleDays(plan, days, twin).map((d) => d.id)).toEqual(['b'])
   })
 })
 
@@ -448,7 +447,7 @@ describe('תקציב הגיד ומינון הסקילים', () => {
       programFor(dow)
         .filter((e) => !e.home && re.test(e.name))
         .reduce((a, e) => a + (e.sets ?? 0), 0)
-    const pull = /Front Lever|מתח|חתירה/
+    const pull = /Front Lever|מתח/
     const push = /פסאודו|מקבילים|לחיצת כתפיים/
     const weeklyPull = sets(0, pull) + sets(2, pull)
     const weeklyPush = sets(0, push) + sets(2, push)
@@ -456,6 +455,24 @@ describe('תקציב הגיד ומינון הסקילים', () => {
     expect(weeklyPull).toBeLessThanOrEqual(WEEKLY_SETS.pull[1])
     expect(weeklyPush).toBeGreaterThanOrEqual(WEEKLY_SETS.push[0])
     expect(weeklyPush).toBeLessThanOrEqual(WEEKLY_SETS.push[1])
+    // ויחס משיכה־דחיפה מאוזן: מעל 1.5:1 זו ההכנה הקלאסית לכאב כתף
+    expect(weeklyPull / weeklyPush).toBeLessThanOrEqual(1.5)
+  })
+
+  it('יש דפוס Hinge אחד, והוא בחדר כושר ולא בבית', () => {
+    const hinge = programFor(2).find((e) => /גשר ירך/.test(e.name))
+    expect(hinge).toBeTruthy()
+    expect(hinge!.home).toBeFalsy()
+    expect(hinge!.metric).toBe('weight')
+  })
+
+  it('אין מכרע, Split Squat או סקוואט בשום יום חדר כושר', () => {
+    for (const dow of [0, 2]) {
+      for (const ex of programFor(dow)) {
+        if (ex.home) continue
+        expect(/מכרע|lunge|split squat|סקוואט|דדליפט|deadlift/i.test(ex.name), `${dow}: ${ex.name}`).toBe(false)
+      }
+    }
   })
 
   it('Front Lever נעשה פעמיים בשבוע, ולא בימים עוקבים', () => {

@@ -24,8 +24,8 @@ import { today as todayISO } from '../dates'
 import { alive } from '../store'
 import { fieldVdot } from '../adapt'
 import {
-  DEFAULT_GYM_DAYS, HALF_ANCHORS, HOME_TWIN, baseWeeklyKm, blockType, paces, planWeek, programFor,
-  qualityRuns, volumeRamp, weekChanges, type CurrentDay,
+  DEFAULT_GYM_DAYS, HALF_ANCHORS, HOME_TWIN, baseWeeklyKm, blockType, checkWeek, paces, planWeek,
+  programFor, qualityRuns, staleDays, volumeRamp, weekChanges, weekKinds, type CurrentDay,
 } from '../training'
 
 export default function WeekPlanCard() {
@@ -62,7 +62,18 @@ export default function WeekPlanCard() {
     }))
     const { changes, fixes } = weekChanges(current, days)
     const peak = Math.max(...ramp.filter((w) => w.kind === 'build').map((w) => w.km))
-    return { weeks, startKm, ramp, now, days, changes, fixes, peak, quality: qualityRuns(now.km), block: blockType(1) }
+
+    // הכרטיס בודק את ההצעה של עצמו מול החוקים. אם משהו כאן אי פעם יידלק,
+    // זה באג במחולל — לא הצעה לגיטימית.
+    const broken = checkWeek(weekKinds(days))
+
+    // ימים שנשארו בתוכנית מגרסאות קודמות (`staleDays` ב-training.ts)
+    const stale = staleDays(alive(s.workoutPlan ?? []), days, (dow) => HOME_TWIN[dow]?.title)
+
+    return {
+      weeks, startKm, ramp, now, days, changes, fixes, peak, broken, stale,
+      quality: qualityRuns(now.km), block: blockType(1),
+    }
   }, [s.workouts, s.workoutPlan, gymDays])
 
   /** מה שנשלח לחנות: שבעת הימים, ואחריהם התאומים הביתיים של ימי הכושר */
@@ -184,6 +195,56 @@ export default function WeekPlanCard() {
               )
             })}
           </div>
+
+          <div className="tiny faint" style={{ marginTop: 8 }}>
+            <b>ימי ריצה רצופים הם מתוכננים.</b> האיסור הוא על שני ימים <b>קשים</b> ברצף — לא על שתי ריצות.
+            חמש ריצות בשבוע עם שני ימי כושר מחייבות רצף, וזו בדיוק הדרך שבה תדירות מעלה נפח מתחת לתקרה של
+            45 דקות: רביעי קל, חמישי איכות, שישי קל, שבת ארוכה — שני ימים קשים בלבד, ו-48 שעות ביניהם.
+          </div>
+
+          {!!view.broken.length && (
+            <div className="run-warn" style={{ marginTop: 10 }}>
+              <b className="small">השבוע שנבנה שובר חוק — זה באג במחולל</b>
+              <ul style={{ margin: '6px 0 0', paddingInlineStart: 18 }}>
+                {view.broken.map((b) => (
+                  <li key={b} className="tiny">
+                    {b}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {!!view.stale.length && (
+            <div className="run-warn" style={{ marginTop: 10 }}>
+              <b className="small">
+                {view.stale.length} ימים בתוכנית שלא שייכים לה
+              </b>
+              <div className="tiny" style={{ marginTop: 4 }}>
+                הם לא מופיעים במסך התוכנית, אבל כן ברשימת "עשיתי אימון אחר" — ולכן הם מבלבלים בשקט.
+                מה שנרשם עליהם נשמר.
+              </div>
+              <ul style={{ margin: '6px 0 0', paddingInlineStart: 18 }}>
+                {view.stale.map((d) => (
+                  <li key={d.id} className="tiny faint">
+                    {HE_DAYS[d.dow]} · {d.title}
+                  </li>
+                ))}
+              </ul>
+              <button
+                className="btn xs"
+                style={{ marginTop: 8 }}
+                onClick={() => {
+                  const before = alive(s.workoutPlan ?? []).map((d) => ({ ...d }))
+                  for (const d of view.stale) actions.deleteWorkoutDay(d.id)
+                  setUndo(before)
+                  toast(`${view.stale.length} ימים הוסרו`)
+                }}
+              >
+                להסיר אותם
+              </button>
+            </div>
+          )}
 
           {!!view.fixes.length && (
             <div className="run-warn" style={{ marginTop: 10 }}>
