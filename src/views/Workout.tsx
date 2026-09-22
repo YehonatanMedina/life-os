@@ -476,6 +476,7 @@ function ExerciseCard({
       <div className="spread" style={{ alignItems: 'flex-start' }}>
         <div className="grow" style={{ minWidth: 0 }}>
           <b>{ex.name}</b>
+          {ex.home && <span className="chip" style={{ marginInlineStart: 6 }}>בבית, לפני</span>}
           <div className="tiny faint">
             {ex.sets ? `${ex.sets} סטים` : ''}
             {ex.reps ? ` · ${ex.reps} חזרות` : ''}

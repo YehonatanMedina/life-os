@@ -12,6 +12,7 @@
 // ---------------------------------------------------------------------------
 import { alive, dayCapacity, dayLog, eventsOn, plannedOn, sessionsOn, store, trackById, weekLog } from './store'
 import { TRAINING_DOCTRINE } from './training'
+import { nightly } from './adapt'
 import { addDays, logicalDate, today, weekStart } from './dates'
 import { buildWeekStats } from './insights'
 import { fitnessForecast, runForecast } from './forecast'
@@ -111,6 +112,11 @@ export function buildAtlasContext(s: AppState) {
     // תורת האימון נשלחת עם ההקשר: העורך הלילי משנה את התוכנית לפי
     // החוקים האלה, ולא לפי מה שנשמע נכון. המקור של כל מספר כתוב לידו.
     training: TRAINING_DOCTRINE,
+    // וההחלטות עצמן, כבר מחושבות מהיומן (src/adapt.ts): לכל תרגיל שנרשם
+    // השבוע — מה לעשות איתו, למה, ובדיוק איזו פקודה מבצעת את זה. הסוכן
+    // מאשר, מנסח, ומטפל במה שהכללים לא מכסים; הוא לא מחשב את זה מחדש,
+    // כי חישוב מחדש בכל לילה מייצר החלטה אחרת על אותם נתונים.
+    coach: nightly(s, t),
     generatedAt: new Date().toISOString(),
     today: t,
     settings: {
@@ -121,6 +127,10 @@ export function buildAtlasContext(s: AppState) {
       dailyTokenGoal: s.settings.dailyTokenGoal,
       weeklyTokenGoal: s.settings.weeklyTokenGoal,
       reviewDow: s.settings.reviewDow,
+      // זמינות חדר הכושר — מה שהשבוע נבנה ממנו. יום סגור לא מוחק אימון,
+      // הוא מחליף אותו בתאום הביתי.
+      gymDays: s.settings.gymDays ?? [0, 1, 2, 3, 4],
+      gymOff: (s.settings.gymOff ?? []).filter((d) => d >= t),
     },
     tracks: alive(s.tracks)
       .sort((a, b) => a.order - b.order)

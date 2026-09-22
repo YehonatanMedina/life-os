@@ -48,8 +48,12 @@ test('השבוע נגזר, מוחל, ונשמר בלי לאבד היסטוריה
   // שבעה ימים, והתרגילים מוצגים ולא רק שמות הימים
   await expect(card).toContainText('ריצה ארוכה')
   await expect(card).toContainText('הרמות עקבים')
-  await expect(card).toContainText('Tuck Front Lever')
+  await expect(card).toContainText('Front Lever')
   await expect(card).toContainText('קפיצות פוגו')
+  // הבלוק הביתי מוצג בנפרד — הוא לא חלק מתקרת 45 הדקות
+  await expect(card).toContainText('בבית לפני')
+  // ימי חדר הכושר הם קלט, ולא הנחה
+  await expect(card).toContainText('באילו ימים יש חדר כושר')
 
   // ההחלפה מבקשת אישור
   await card.getByRole('button', { name: 'החל את התוכנית' }).click()
@@ -64,8 +68,13 @@ test('השבוע נגזר, מוחל, ונשמר בלי לאבד היסטוריה
   const after = await readPlan(page)
   const live = after.filter((d: any) => !d.deleted)
 
-  // יום הגיבוי לא נגע
+  // יום הגיבוי לא נגע — גם עכשיו, כשההצעה מייצרת תאום ביתי לאותו יום
   expect(live.some((d: any) => d.id === 'wd-0b' && d.title === 'דחיפה בבית — משקל גוף')).toBe(true)
+
+  // ולכל יום חדר כושר נבנה תאום ביתי משלו, שלא מופיע במסך התוכנית אבל קיים
+  const twins = live.filter((d: any) => d.kind === 'home' && d.title.startsWith('בבית — '))
+  expect(twins.length).toBe(2)
+  for (const t of twins) expect(live.filter((d: any) => d.dow === t.dow).length).toBeGreaterThan(1)
 
   // שבת הפכה לריצה ארוכה, ושישי לריצה קלה
   const sat = live.find((d: any) => d.dow === 6 && d.kind === 'run')
@@ -84,6 +93,9 @@ test('השבוע נגזר, מוחל, ונשמר בלי לאבד היסטוריה
   // ומה שנוסף — קיים
   expect(allEx.some((e: any) => e.name.includes('הרמות עקבים בעמידה'))).toBe(true)
   expect(allEx.some((e: any) => e.name === 'קפיצות פוגו')).toBe(true)
+  // עמידת ידיים בכל שבעת הימים — זה מה שהבלוק הביתי בא לעשות
+  expect(live.filter((d: any) => d.dow <= 6 && d.ex.some((e: any) => e.name.includes('עמידת ידיים'))).length)
+    .toBeGreaterThanOrEqual(7)
 
   // טווח הקצב שנקבע מהריצות שלו לא נמחק על ידי ההחלפה
   expect(live.find((d: any) => d.dow === 5)?.pace).toBe('6:40-7:10')

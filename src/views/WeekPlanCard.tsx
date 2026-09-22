@@ -2,25 +2,31 @@
 // השבוע שתורת האימון מייצרת — מהנתונים שלך, לא מתבנית.
 //
 // למה כרטיס שמחושב מחדש ולא תוכנית שנכתבה פעם אחת: הנפח השבועי אמור לעלות
-// כל שבוע, שבוע רביעי אמור לרדת, והחלוקה בין הריצות נגזרת מהנפח. תוכנית
-// שנכתבת ביד פעם אחת נכונה לשבוע אחד ואז מתיישנת בשקט. כאן היא נגזרת
-// מחדש בכל פתיחה: כמה ק״מ רצת בשבוע האחרון, כמה שבועות נשארו למרוץ, ומה
-// החוקים אומרים (src/training.ts, שם כתוב ליד כל מספר מאיפה הוא).
+// כל שבוע, שבוע רביעי אמור לרדת, החלוקה בין הריצות נגזרת מהנפח, והאימון
+// האיכותי השני נכנס רק מ-32 ק״מ בשבוע. תוכנית שנכתבת ביד פעם אחת נכונה
+// לשבוע אחד ואז מתיישנת בשקט. כאן היא נגזרת מחדש בכל פתיחה: כמה ק״מ רצת,
+// כמה שבועות נשארו למרוץ, באילו ימים יש חדר כושר, ומה החוקים אומרים
+// (src/training.ts, שם כתוב ליד כל מספר מאיפה הוא).
 //
-// הכרטיס לא כותב לתוכנית לבד. הוא מראה את ההפרש ואת הסיבה, וההחלטה
-// להחיל היא של יהונתן — דרך אטלס, שיודע להזיז גם את התרגילים עצמם.
+// **ימי חדר הכושר הם קלט ולא הנחה.** מי שאין לו חדר כושר ביום מסוים לא
+// מאבד אימון — היום מוחלף בתאום הביתי שלו, כי שבוע עם אימון כוח אחד שובר
+// את רצפת השבוע.
 // ---------------------------------------------------------------------------
 import React, { useMemo, useState } from 'react'
 import { actions, useApp } from '../store'
 import { useToast } from '../ui'
 import type { WorkoutDay } from '../types'
-import { HE_DAYS } from '../dates'
+import { HE_DAYS, HE_DAYS_SHORT } from '../dates'
 import { runForecast } from '../forecast'
 import { runWeeks } from '../store'
 import { weekStart } from '../dates'
 import { today as todayISO } from '../dates'
 import { alive } from '../store'
-import { HALF_ANCHORS, baseWeeklyKm, programFor, proposeWeek, volumeRamp, weekChanges, type CurrentDay } from '../training'
+import { fieldVdot } from '../adapt'
+import {
+  DEFAULT_GYM_DAYS, HALF_ANCHORS, HOME_TWIN, baseWeeklyKm, blockType, paces, planWeek, programFor,
+  qualityRuns, volumeRamp, weekChanges, type CurrentDay,
+} from '../training'
 
 export default function WeekPlanCard() {
   const s = useApp()
@@ -29,6 +35,8 @@ export default function WeekPlanCard() {
   const [ask, setAsk] = useState(false)
   /** התוכנית שהייתה לפני ההחלה — כדי שאפשר יהיה לבטל בלחיצה */
   const [undo, setUndo] = useState<WorkoutDay[] | null>(null)
+
+  const gymDays = s.settings.gymDays ?? DEFAULT_GYM_DAYS
 
   const view = useMemo(() => {
     const f = runForecast(s)
@@ -40,7 +48,11 @@ export default function WeekPlanCard() {
     const startKm = Math.max(6, base)
     const ramp = volumeRamp({ startKm, weeks })
     const now = ramp[0]
-    const days = proposeWeek({ weekKm: now.km, week: 1, weeks })
+    // הקצבים נגזרים מהריצה המהירה ביותר ב-60 הימים האחרונים. זו לא ריצת
+    // מבחן ולכן היא מזלזלת ביכולת — כלומר הטווח הקל שיוצא ממנה שמרני,
+    // וזה הכיוון הנכון לטעות בו.
+    const v = fieldVdot(s, todayISO())
+    const days = planWeek({ weekKm: now.km, week: 1, weeks, gymDays, paces: v ? paces(v) : undefined })
 
     const current: CurrentDay[] = alive(s.workoutPlan ?? []).map((d) => ({
       dow: d.dow,
@@ -50,8 +62,33 @@ export default function WeekPlanCard() {
     }))
     const { changes, fixes } = weekChanges(current, days)
     const peak = Math.max(...ramp.filter((w) => w.kind === 'build').map((w) => w.km))
-    return { weeks, startKm, ramp, now, days, changes, fixes, peak }
-  }, [s.workouts, s.workoutPlan])
+    return { weeks, startKm, ramp, now, days, changes, fixes, peak, quality: qualityRuns(now.km), block: blockType(1) }
+  }, [s.workouts, s.workoutPlan, gymDays])
+
+  /** מה שנשלח לחנות: שבעת הימים, ואחריהם התאומים הביתיים של ימי הכושר */
+  const toPlan = () => {
+    const main = view.days.map((d) => ({
+      dow: d.dow,
+      kind: d.kind,
+      title: d.title,
+      focus: d.focus,
+      target: d.km || d.minutes ? { km: d.km, minutes: d.minutes, pace: d.pace, how: d.how } : undefined,
+      exercises: programFor(d.dow),
+    }))
+    const twins = view.days
+      .filter((d) => d.kind === 'gym' && HOME_TWIN[d.dow])
+      .map((d) => ({
+        dow: d.dow,
+        kind: 'home' as const,
+        title: HOME_TWIN[d.dow].title,
+        focus: 'הגרסה הביתית של היום הזה — אותם דפוסים בלי מכונות',
+        target: undefined,
+        exercises: HOME_TWIN[d.dow].exercises,
+        // מזהה את עצמו לפי הכותרת בלבד — כדי שלא יבלע יום גיבוי קיים
+        exact: true,
+      }))
+    return [...main, ...twins]
+  }
 
   return (
     <div className="card pad">
@@ -75,43 +112,77 @@ export default function WeekPlanCard() {
           ארוכה <b className="ltr">{view.days.find((d) => d.dow === 6)?.km}</b> ק״מ
         </span>
         <span>
+          איכות <b className="ltr">{view.quality}</b>
+        </span>
+        <span>
           שיא מתוכנן <b className="ltr">{view.peak}</b> ק״מ
         </span>
       </div>
 
-      {view.peak < HALF_ANCHORS.weeklyKm && (
+      {view.quality === 1 && (
         <div className="tiny faint">
-          העוגן שנמדד לחצי מרתון הוא <span className="ltr">{HALF_ANCHORS.weeklyKm}</span> ק״מ בשבוע. בקצב הנוכחי
-          התוכנית לא מגיעה לשם בזמן הזה — זה אומר שהיעד רחוק יותר משבוע אחד של דחיפה, ולא שצריך להאיץ את הקצב.
+          האימון האיכותי השני נכנס מ-<span className="ltr">{HALF_ANCHORS.weeklyKm}</span> ק״מ בשבוע: תקרת עבודת
+          הסף היא 10% מהנפח, ומתחת לזה אין ממה לבנות שני אימונים. עד אז יום חמישי הוא קל עם ספרינטי עלייה —
+          גירוי מכני שכמעט לא עולה התאוששות.
         </div>
       )}
 
       {open && (
         <>
-          <div className="stack" style={{ gap: 6, marginTop: 10 }}>
-            {view.days.map((d) => (
-              <div key={d.dow} className="item" style={{ alignItems: 'flex-start' }}>
-                <div style={{ minWidth: 52 }}>
-                  <b className="small">{HE_DAYS[d.dow]}</b>
-                  {d.hard && <div className="tiny" style={{ color: 'var(--warn-text)' }}>קשה</div>}
-                </div>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div className="small">
-                    <b>{d.title}</b>
-                    {d.km ? <span className="ltr"> · {d.km} ק״מ</span> : null}
-                  </div>
-                  <div className="tiny faint">{d.focus}</div>
-                  {d.how && <div className="tiny faint">{d.how}</div>}
-                  {!!programFor(d.dow).length && (
-                    <div className="tiny faint" style={{ marginTop: 3 }}>
-                      {programFor(d.dow)
-                        .map((e) => `${e.name}${e.sets ? ` ${e.sets}×${e.reps ?? ''}` : ''}`)
-                        .join(' · ')}
-                    </div>
-                  )}
-                </div>
-              </div>
+          <div className="section-title" style={{ margin: '12px 0 4px' }}>באילו ימים יש חדר כושר</div>
+          <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+            {HE_DAYS_SHORT.map((label, dow) => (
+              <button
+                key={dow}
+                className={`btn xs${gymDays.includes(dow) ? ' primary' : ''}`}
+                aria-pressed={gymDays.includes(dow)}
+                onClick={() => {
+                  const next = gymDays.includes(dow) ? gymDays.filter((d) => d !== dow) : [...gymDays, dow].sort()
+                  if (!next.length) return
+                  actions.setSettings({ gymDays: next })
+                }}
+              >
+                {label}
+              </button>
             ))}
+          </div>
+          <div className="tiny faint" style={{ marginTop: 4 }}>
+            יום שסגור מקבל את הגרסה הביתית של האימון — לא מחיקה. לתאריך בודד שבו הוא סגור אפשר לומר לאטלס,
+            והוא יסמן אותו.
+          </div>
+
+          <div className="stack" style={{ gap: 6, marginTop: 12 }}>
+            {view.days.map((d) => {
+              const home = programFor(d.dow).filter((e) => e.home)
+              const main = programFor(d.dow).filter((e) => !e.home)
+              return (
+                <div key={d.dow} className="item" style={{ alignItems: 'flex-start' }}>
+                  <div style={{ minWidth: 52 }}>
+                    <b className="small">{HE_DAYS[d.dow]}</b>
+                    {d.hard && <div className="tiny" style={{ color: 'var(--warn-text)' }}>קשה</div>}
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="small">
+                      <b>{d.title}</b>
+                      {d.km ? <span className="ltr"> · {d.km} ק״מ</span> : null}
+                      {d.pace ? <span className="tiny faint ltr"> · {d.pace}</span> : null}
+                    </div>
+                    <div className="tiny faint">{d.focus}</div>
+                    {d.how && <div className="tiny faint">{d.how}</div>}
+                    {!!home.length && (
+                      <div className="tiny faint" style={{ marginTop: 3 }}>
+                        בבית לפני: {home.map((e) => `${e.name}${e.sets ? ` ${e.sets}×${e.reps ?? ''}` : ''}`).join(' · ')}
+                      </div>
+                    )}
+                    {!!main.length && (
+                      <div className="tiny faint" style={{ marginTop: 3 }}>
+                        {main.map((e) => `${e.name}${e.sets ? ` ${e.sets}×${e.reps ?? ''}` : ''}`).join(' · ')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
 
           {!!view.fixes.length && (
@@ -161,16 +232,7 @@ export default function WeekPlanCard() {
               <button
                 className="btn xs primary"
                 onClick={() => {
-                  const before = actions.applyWeekPlan(
-                    view.days.map((d) => ({
-                      dow: d.dow,
-                      kind: d.kind,
-                      title: d.title,
-                      focus: d.focus,
-                      target: d.km || d.minutes ? { km: d.km, minutes: d.minutes, how: d.how } : undefined,
-                      exercises: programFor(d.dow),
-                    })) as never,
-                  )
+                  const before = actions.applyWeekPlan(toPlan() as never)
                   setUndo(before)
                   setAsk(false)
                   toast('התוכנית עודכנה')
@@ -188,7 +250,7 @@ export default function WeekPlanCard() {
           )}
           <div className="tiny faint" style={{ marginTop: 8 }}>
             מה שנרשם על תרגיל נשאר מחובר אליו גם אם הוא עבר ליום אחר — ההחלפה שומרת על זהות התרגילים.
-            ימי גיבוי (״דחיפה בבית״) לא נוגעים.
+            לכל יום כושר נבנה גם תאום ביתי, שנכנס לבד ביום שבו אין חדר כושר.
           </div>
         </>
       )}

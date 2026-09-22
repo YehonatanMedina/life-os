@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import {
   actions, alive, currentStage, exerciseHistory, fitnessProgress, ladderFraction, longestRun,
   runWeeks, skillExIds, skillOf, stageProgress, useApp, workoutDayOn, workoutHasData,
-  workoutMinutes, workoutOn,
+  homeMinutes, workoutMinutes, workoutOn,
 } from '../store'
 import {
   HE_DAYS, HE_DAYS_SHORT, dow, minutesToHM, plural, shortDate, today as todayISO,
@@ -11,6 +11,7 @@ import {
 import { Ring, Sheet } from '../ui'
 import RunCard from './RunCard'
 import WeekPlanCard from './WeekPlanCard'
+import CoachCard from './CoachCard'
 import { PlanSheet, ProgressSheet, WorkoutSheet, KIND_EMOJI, setText, targetText } from './Workout'
 import {
   FOCUS_COUNT, RUN_MILESTONES, RUN_WEEKLY_GROWTH, focusLadders, isFocusGoal, laddersInOrder,
@@ -65,6 +66,11 @@ export default function Workouts() {
             <section className="sec">
               <div className="sec-h"><h2>ריצה</h2></div>
               <RunCard date={date} target={day?.kind === 'run' || day?.kind === 'walk' ? day.target : undefined} />
+            </section>
+
+            <section className="sec">
+              <div className="sec-h"><h2>מה משתנה</h2></div>
+              <CoachCard />
             </section>
 
             <section className="sec">
@@ -150,6 +156,9 @@ function TodayCard({ date, onOpen }: { date: string; onOpen: () => void }) {
   // כמה זמן האימון אמור לקחת. החישוב יושב ב-store (workoutMinutes) כדי
   // שהתוכנית השבועית תציג בדיוק את אותו מספר.
   const minutes = useMemo(() => workoutMinutes(day), [day])
+  // הבלוק הביתי נמדד בנפרד: הוא לא חלק מתקרת 45 הדקות, וזה בדיוק מה
+  // שהוא בא לפתור — מה שדורש תדירות יומית או שנראה חריג בחדר כושר.
+  const home = useMemo(() => homeMinutes(day), [day])
 
   return (
     <div className="card">
@@ -162,6 +171,7 @@ function TodayCard({ date, onOpen }: { date: string; onOpen: () => void }) {
             יום {HE_DAYS[dow(date)]}
             {day ? ` · ${WORKOUT_KIND_LABEL[day.kind]}` : ''}
             {minutes ? ` · כ-${minutes} דק׳` : ''}
+            {home ? ` · ${home} דק׳ בבית לפני` : ''}
             {log?.km ? ` · ${log.km} ק״מ` : ''}
           </div>
         </div>
@@ -778,6 +788,7 @@ function WeekPlan() {
         {HE_DAYS.map((label, d) => {
           const day = plan.find((x) => x.dow === d)
           const mins = workoutMinutes(day)
+          const homeMins = homeMinutes(day)
           return (
             <div className="item" key={d} style={{ minHeight: 38 }}>
               <span className="tiny faint" style={{ width: 34, flex: '0 0 34px' }}>{label}</span>
@@ -786,6 +797,9 @@ function WeekPlan() {
                   {day ? `${KIND_EMOJI[day.kind]} ${day.title}` : '—'}
                   {mins > 0 && (
                     <span className="tiny faint" style={{ fontWeight: 400 }}> · כ-{mins} דק׳</span>
+                  )}
+                  {homeMins > 0 && (
+                    <span className="tiny faint" style={{ fontWeight: 400 }}> · {homeMins} בבית</span>
                   )}
                 </div>
                 {day && day.exercises.length > 0 && (

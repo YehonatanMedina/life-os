@@ -7,7 +7,7 @@ vi.hoisted(() => {
 })
 
 import { blankState, freshStore, task, event, rule, day, week, workout, pin, tick, NOW, KEY, type StoreModule } from './helpers'
-import type { AppState } from '../../../src/types'
+import type { AppState, WorkoutDay } from '../../../src/types'
 import {
   FOCUS_COUNT, GOAL_ORDER, SKILL_LADDERS, focusLadders, isFocusGoal, laddersInOrder, matchesSkill,
 } from '../../../src/skills'
@@ -1011,5 +1011,57 @@ describe('ההתקדמות הכוללת', () => {
     ] }))
     // 5 ו-8 נסגרו, 10 ומעלה לא
     expect(S.runFraction(get())).toMatchObject({ stage: 2, total: 7, km: 8.2 })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// החלפת התוכנית השבועית — מה נשמר ומה נדרס
+// ---------------------------------------------------------------------------
+describe('applyWeekPlan', () => {
+  let S: StoreModule
+  const get = () => S.store.get()
+
+  const before = (): WorkoutDay[] => [
+    { id: 'wd-0', updatedAt: 1, dow: 0, title: 'חדר כושר — דחיפה', kind: 'gym', exercises: [
+      { id: 'ex-dips', name: 'מקבילים (Dips)', sets: 3, reps: '8-10', metric: 'bodyweight' },
+    ] },
+    { id: 'wd-0b', updatedAt: 1, dow: 0, title: 'דחיפה בבית', kind: 'home', exercises: [] },
+    { id: 'wd-5', updatedAt: 1, dow: 5, title: 'ריצה ארוכה', kind: 'run', target: { km: 7, pace: '6:40-7:10' }, exercises: [] },
+  ]
+
+  it('שדה שההצעה לא קבעה לא נמחק — גם כשהמפתח קיים עם undefined', async () => {
+    S = await freshStore(blankState({ workoutPlan: before() }))
+    S.actions.applyWeekPlan([
+      { dow: 5, kind: 'run', title: 'ריצה קלה', target: { km: 4, pace: undefined, how: 'קלה' }, exercises: [] },
+    ] as never)
+    const day = S.alive(get().workoutPlan ?? []).find((d) => d.dow === 5)!
+    expect(day.target?.km).toBe(4)
+    // זה הבאג: פיזור של {pace: undefined} דורס ערך קיים
+    expect(day.target?.pace).toBe('6:40-7:10')
+  })
+
+  it('יום שמזהה את עצמו לפי כותרת לא בולע יום גיבוי קיים', async () => {
+    S = await freshStore(blankState({ workoutPlan: before() }))
+    S.actions.applyWeekPlan([
+      { dow: 0, kind: 'gym', title: 'חדר כושר — משיכה וסטטיים', exercises: [] },
+      { dow: 0, kind: 'home', title: 'בבית — משיכה וסטטיים', exact: true, exercises: [] },
+    ] as never)
+    const live = S.alive(get().workoutPlan ?? [])
+    // יום הגיבוי שלו נשאר כפי שהיה
+    expect(live.find((d) => d.id === 'wd-0b')?.title).toBe('דחיפה בבית')
+    // והתאום נוצר לצידו
+    expect(live.some((d) => d.title === 'בבית — משיכה וסטטיים')).toBe(true)
+  })
+
+  it('החלה שנייה לא משכפלת את התאום', async () => {
+    S = await freshStore(blankState({ workoutPlan: before() }))
+    const days = [
+      { dow: 0, kind: 'gym', title: 'חדר כושר — משיכה וסטטיים', exercises: [] },
+      { dow: 0, kind: 'home', title: 'בבית — משיכה וסטטיים', exact: true, exercises: [] },
+    ] as never
+    S.actions.applyWeekPlan(days)
+    S.actions.applyWeekPlan(days)
+    const live = S.alive(get().workoutPlan ?? [])
+    expect(live.filter((d) => d.title === 'בבית — משיכה וסטטיים').length).toBe(1)
   })
 })

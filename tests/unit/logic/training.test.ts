@@ -4,7 +4,14 @@
 // ---------------------------------------------------------------------------
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_GYM_DAYS,
   HALF_ANCHORS,
+  INTENSITY,
+  TENDON_BUDGET,
+  WEEKLY_SETS,
+  blockType,
+  planWeek,
+  qualityRuns,
   LONG_RUN_MIN_MINUTES,
   MDC95,
   RUN_SESSIONS,
@@ -22,6 +29,7 @@ import {
   testChanged,
   vdot,
   volumeRamp,
+  programFor,
   proposeWeek,
   splitWeek,
   weekChanges,
@@ -254,7 +262,7 @@ describe('מבנה השבוע', () => {
     ['quality-run'],
     ['legs', 'upper'],
     ['easy-run'],
-    ['upper', 'skills'],
+    ['quality-run'],
     ['easy-run'],
     ['long-run'],
   ]
@@ -268,9 +276,19 @@ describe('מבנה השבוע', () => {
     expect(checkWeek(bad).some((x) => x.includes('כלכלת הריצה'))).toBe(true)
   })
 
-  it('יותר משלושה ימים קשים — נתפס', () => {
-    const bad: DayKind[][] = [['quality-run'], ['legs'], ['easy-run'], ['quality-run'], ['legs'], ['easy-run'], ['long-run']]
+  it('יותר מארבעה ימים קשים — נתפס', () => {
+    const bad: DayKind[][] = [['quality-run'], ['legs'], ['easy-run'], ['quality-run'], ['legs'], ['quality-run'], ['long-run']]
     expect(checkWeek(bad).some((x) => x.includes('ימים קשים'))).toBe(true)
+  })
+
+  it('שלושה אימוני איכות — נתפס, כי התשובה לתקרת הזמן היא ריצה נוספת', () => {
+    const bad: DayKind[][] = [['upper'], ['quality-run'], ['easy-run'], ['quality-run'], ['easy-run'], ['quality-run'], ['long-run']]
+    expect(checkWeek(bad).some((x) => x.includes('אימוני איכות'))).toBe(true)
+  })
+
+  it('שני ימי סטטיים ברצף — נתפס, כי הגיד מסתגל לאט מהשריר', () => {
+    const bad: DayKind[][] = [['upper', 'skills'], ['upper', 'skills'], ['easy-run'], ['easy-run'], ['legs'], ['easy-run'], ['long-run']]
+    expect(checkWeek(bad).some((x) => x.includes('סטטיים'))).toBe(true)
   })
 
   it('הריצה הארוכה לבד ביום שלה', () => {
@@ -279,7 +297,7 @@ describe('מבנה השבוע', () => {
   })
 
   it('כוח פלג גוף עליון באותו יום עם ריצה הוא מותר', () => {
-    const shared: DayKind[][] = [['upper', 'easy-run'], ['easy-run'], ['legs'], ['easy-run'], ['upper'], ['quality-run'], ['long-run']]
+    const shared: DayKind[][] = [['upper', 'easy-run'], ['easy-run'], ['legs'], ['easy-run'], ['upper'], ['easy-run'], ['long-run']]
     expect(checkWeek(shared).filter((x) => x.includes('פלג גוף')).length).toBe(0)
   })
 
@@ -291,20 +309,51 @@ describe('מבנה השבוע', () => {
 })
 
 describe('השבוע שהחוקים מייצרים', () => {
-  const week = proposeWeek({ weekKm: 24, week: 9, weeks: 20 })
+  const week = planWeek({ weekKm: 24, week: 1, weeks: 20 })
+  const big = planWeek({ weekKm: 36, week: 1, weeks: 20 })
 
-  it('שבעה ימים, ארבע ריצות ושלושה אימוני כוח', () => {
+  it('שבעה ימים, חמש ריצות ושני אימוני כוח', () => {
     expect(week.length).toBe(7)
-    expect(week.filter((d) => d.kind === 'run').length).toBe(4)
-    expect(week.filter((d) => d.kind === 'gym').length).toBe(3)
+    // תחת תקרת זמן, תדירות היא הדרך היחידה להעלות נפח — ולכן ריצה
+    // חמישית ולא אימון קשה שלישי
+    expect(week.filter((d) => d.kind === 'run').length).toBe(5)
+    // ושני ימי כוח ולא שלושה: שלושה פגעו בסף האירובי
+    expect(week.filter((d) => d.kind === 'gym').length).toBe(2)
+    expect(INTENSITY.strengthSessionsPerWeek).toBe(2)
   })
 
-  it('בדיוק שלושה ימים קשים', () => {
+  it('מתחת ל-32 ק״מ יש אימון איכות אחד, ומעל — שניים', () => {
+    expect(qualityRuns(24)).toBe(1)
+    expect(qualityRuns(HALF_ANCHORS.weeklyKm)).toBe(2)
+    expect(week.filter((d) => d.hard && d.kind === 'run' && /איכות/.test(d.title)).length).toBe(1)
+    expect(big.filter((d) => d.kind === 'run' && /איכות/.test(d.title)).length).toBe(2)
+  })
+
+  it('בנפח נמוך שלושה ימים קשים, ובנפח גבוה ארבעה — ולא יותר', () => {
     expect(week.filter((d) => d.hard).length).toBe(3)
+    expect(big.filter((d) => d.hard).length).toBe(4)
+  })
+
+  it('שני אימוני האיכות רחוקים 72 שעות', () => {
+    const q = big.filter((d) => /איכות/.test(d.title)).map((d) => d.dow)
+    expect(q.length).toBe(2)
+    expect(Math.abs(q[1] - q[0])).toBe(3)
   })
 
   it('אין חדר כושר בשישי ובשבת', () => {
     for (const dow of [5, 6]) expect(week.find((d) => d.dow === dow)!.kind).not.toBe('gym')
+  })
+
+  it('יום סגור מקבל את הגרסה הביתית ולא נמחק', () => {
+    // בלי חדר כושר בשלישי — היום נשאר, בתור בית
+    const noTue = planWeek({ weekKm: 24, week: 1, weeks: 20, gymDays: [0, 1, 3, 4] })
+    const tue = noTue.find((d) => d.dow === 2)!
+    expect(tue.kind).toBe('home')
+    expect(tue.title).toContain('בבית')
+    expect(noTue.length).toBe(7)
+    // וכשאין חדר כושר בכלל — עדיין שבעה ימים, ועדיין שני ימי כוח
+    const none = planWeek({ weekKm: 24, week: 1, weeks: 20, gymDays: [3] })
+    expect(none.filter((d) => d.kind === 'home').length).toBe(2)
   })
 
   it('רגליים כבדות רק ביום שאחריו ריצה קלה', () => {
@@ -313,36 +362,130 @@ describe('השבוע שהחוקים מייצרים', () => {
     expect(next.hard).toBe(false)
   })
 
-  it('הריצה הארוכה לבד, והאיכות 48 שעות ממנה', () => {
+  it('הריצה הארוכה לבד, והיום שאחריה פלג גוף עליון בלבד', () => {
     const long = week.find((d) => /ארוכה/.test(d.title))!
-    const quality = week.find((d) => /איכות/.test(d.title))!
     expect(long.dow).toBe(6)
-    // יום שני — יומיים אחרי שבת
-    expect(quality.dow).toBe(1)
+    // ראשון: משיכה וסטטיים — בלי רגליים, כי אובדן הכוח אחרי הארוכה
+    // נמשך 24–48 שעות
+    const after = week.find((d) => d.dow === 0)!
+    expect(after.hard).toBe(false)
+    expect(/רגליים/.test(after.title)).toBe(false)
+  })
+
+  it('הבלוק ההולך ומשתנה: פירמידלי קודם, פולרי אחר כך', () => {
+    expect(blockType(1)).toBe('pyramidal')
+    expect(blockType(8)).toBe('pyramidal')
+    expect(blockType(9)).toBe('polarized')
+    const late = planWeek({ weekKm: 36, week: 12, weeks: 20 })
+    expect(late.find((d) => d.dow === 4)!.title).toContain('אינטרוולים')
   })
 
   it('המסגרת עוברת את בדיקת מבנה השבוע', () => {
-    const days: DayKind[][] = Array.from({ length: 7 }, (_, i) => {
-      const d = week.find((x) => x.dow === i)!
-      if (d.kind === 'gym') return /רגליים/.test(d.title) ? ['legs', 'upper'] : ['upper', 'skills']
-      if (/ארוכה/.test(d.title)) return ['long-run']
-      if (/איכות/.test(d.title)) return ['quality-run']
-      return ['easy-run']
-    })
-    expect(checkWeek(days)).toEqual([])
+    for (const w of [week, big]) {
+      const days: DayKind[][] = Array.from({ length: 7 }, (_, i) => {
+        const d = w.find((x) => x.dow === i)!
+        if (d.kind === 'gym' || d.kind === 'home') return /רגליים/.test(d.title) ? ['legs', 'skills'] : ['upper', 'skills']
+        if (/ארוכה/.test(d.title)) return ['long-run']
+        if (/איכות/.test(d.title)) return ['quality-run']
+        return ['easy-run']
+      })
+      expect(checkWeek(days)).toEqual([])
+    }
   })
 
   it('חלוקת הנפח מסתכמת לשבוע, והארוכה היא הגדולה', () => {
     const s = splitWeek(24)
-    expect(s.long + s.quality + 2 * s.easy).toBeCloseTo(24, 0)
+    expect(s.qualityDays).toBe(1)
+    expect(s.long + s.quality + 3 * s.easy).toBeCloseTo(24, 0)
     expect(s.long).toBeGreaterThan(s.quality)
     expect(s.quality).toBeGreaterThan(s.easy)
+
+    const b = splitWeek(36)
+    expect(b.qualityDays).toBe(2)
+    expect(b.long + 2 * b.quality + 2 * b.easy).toBeCloseTo(36, 0)
   })
 
   it('נפח קטן מייצר ריצות קצרות ולא שליליות', () => {
     const s = splitWeek(10.5)
     expect(s.easy).toBeGreaterThan(0)
     expect(s.long).toBeGreaterThan(s.easy)
+  })
+
+  it('ברירת המחדל של ימי הכושר היא ראשון עד חמישי', () => {
+    expect(DEFAULT_GYM_DAYS).toEqual([0, 1, 2, 3, 4])
+  })
+
+  it('כשיש קצבים — לכל ריצה טווח, והקל איטי מהאיכותי', () => {
+    const p = paces(vdot(5000, 1500))
+    const w = planWeek({ weekKm: 36, week: 1, weeks: 20, paces: p })
+    const runs = w.filter((d) => d.kind === 'run')
+    for (const r of runs) expect(r.pace, r.title).toBeTruthy()
+    const easy = w.find((d) => d.dow === 3)!.pace!
+    const quality = w.find((d) => d.dow === 1)!.pace!
+    // הקל הוא טווח, האיכותי הוא מספר אחד — והקל איטי יותר
+    expect(easy).toContain('-')
+    expect(quality).not.toContain('-')
+    const num = (t: string) => Number(t.split(':')[0]) + Number(t.split(':')[1]) / 60
+    expect(num(easy.split('-')[0])).toBeGreaterThan(num(quality))
+  })
+
+  it('בלי מבחן שדה אין קצב מומצא', () => {
+    for (const d of planWeek({ weekKm: 36, week: 1, weeks: 20 })) expect(d.pace).toBeUndefined()
+  })
+})
+
+describe('תקציב הגיד ומינון הסקילים', () => {
+  it('התקרות קיימות ומספריות — בלעדיהן הכוח מקדים את הגיד', () => {
+    expect(TENDON_BUDGET.perSessionSec).toBeGreaterThan(0)
+    expect(TENDON_BUDGET.perWeekSec).toBeGreaterThanOrEqual(TENDON_BUDGET.perSessionSec)
+    // הגיד מסתגל ב-8–12 שבועות, ולכן אסור לקרוא לשלב "תקוע" לפני כן
+    expect(TENDON_BUDGET.minWeeksPerStage).toBeGreaterThanOrEqual(8)
+  })
+
+  it('התוכנית עומדת במינון השבועי של משיכה ודחיפה', () => {
+    // אחיזה נספרת כחזרה לכל שתי שניות, וסט של 10 שניות הוא סט אחד
+    const sets = (dow: number, re: RegExp) =>
+      programFor(dow)
+        .filter((e) => !e.home && re.test(e.name))
+        .reduce((a, e) => a + (e.sets ?? 0), 0)
+    const pull = /Front Lever|מתח|חתירה/
+    const push = /פסאודו|מקבילים|לחיצת כתפיים/
+    const weeklyPull = sets(0, pull) + sets(2, pull)
+    const weeklyPush = sets(0, push) + sets(2, push)
+    expect(weeklyPull).toBeGreaterThanOrEqual(WEEKLY_SETS.pull[0])
+    expect(weeklyPull).toBeLessThanOrEqual(WEEKLY_SETS.pull[1])
+    expect(weeklyPush).toBeGreaterThanOrEqual(WEEKLY_SETS.push[0])
+    expect(weeklyPush).toBeLessThanOrEqual(WEEKLY_SETS.push[1])
+  })
+
+  it('Front Lever נעשה פעמיים בשבוע, ולא בימים עוקבים', () => {
+    const days = [0, 1, 2, 3, 4, 5, 6].filter((d) => programFor(d).some((e) => /Front Lever/.test(e.name)))
+    expect(days.length).toBe(2)
+    expect(Math.abs(days[1] - days[0])).toBeGreaterThanOrEqual(2)
+  })
+
+  it('עמידת ידיים בכל יום, ותמיד בבלוק הביתי', () => {
+    for (let d = 0; d < 7; d++) {
+      const hs = programFor(d).find((e) => /עמידת ידיים/.test(e.name))
+      expect(hs, `יום ${d}`).toBeTruthy()
+      expect(hs!.home).toBe(true)
+    }
+  })
+
+  it('הבלוק הביתי לא בולע את האימון: כל יום כושר נכנס ל-45 דקות בלעדיו', () => {
+    const minutes = (list: ReturnType<typeof programFor>) => {
+      let sec = 0
+      for (const ex of list) {
+        const sets = Math.max(1, ex.sets ?? 3)
+        const rest = ex.rest ?? 90
+        sec += 60 + sets * ((ex.metric === 'time' ? 40 : 45) + rest)
+      }
+      return Math.round(sec / 60)
+    }
+    for (const d of [0, 2]) {
+      expect(minutes(programFor(d).filter((e) => !e.home)), `יום ${d}`).toBeLessThanOrEqual(46)
+      expect(minutes(programFor(d).filter((e) => e.home)), `בית ${d}`).toBeLessThanOrEqual(14)
+    }
   })
 })
 

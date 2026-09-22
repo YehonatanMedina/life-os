@@ -672,6 +672,14 @@ function stampMap(
   return { ...out, ...(nextAt ?? {}) }
 }
 
+/**
+ * רק השדות שבאמת נקבעו. פיזור של `{a: undefined}` דורס ערך קיים, ולכן
+ * מיזוג שמכבד "מה שלא נאמר נשאר" חייב לסנן קודם.
+ */
+function definedOnly<T extends object>(o: T): Partial<T> {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>
+}
+
 export const actions = {
   // ---- הגדרות ----
   setSettings(patch: Partial<AppState['settings']>) {
@@ -1016,7 +1024,20 @@ export const actions = {
    *   * **שחזור.** התוכנית הקודמת מוחזרת מהפונקציה, כדי שהמסך יוכל
    *     להציע לבטל.
    */
-  applyWeekPlan(days: Array<Omit<WorkoutDay, 'id' | 'updatedAt' | 'exercises'> & { exercises: Array<Omit<Exercise, 'id'>> }>): WorkoutDay[] {
+  applyWeekPlan(
+    days: Array<
+      Omit<WorkoutDay, 'id' | 'updatedAt' | 'exercises'> & {
+        exercises: Array<Omit<Exercise, 'id'>>
+        /**
+         * יום שמזהה את עצמו **רק לפי הכותרת**: אם אין יום קיים עם אותה
+         * כותרת באותו יום בשבוע — נוצר יום חדש במקום לתפוס יום קיים.
+         * כך התאום הביתי לא בולע יום גיבוי שיהונתן כתב בעצמו, ובכל זאת
+         * נשאר יציב בין החלה להחלה.
+         */
+        exact?: boolean
+      }
+    >,
+  ): WorkoutDay[] {
     const before = (store.get().workoutPlan ?? []).map((d) => ({ ...d }))
     store.set((s) => {
       const old = alive(s.workoutPlan ?? [])
@@ -1024,9 +1045,25 @@ export const actions = {
       for (const d of old) for (const ex of d.exercises) if (!byName.has(ex.name)) byName.set(ex.name, ex.id)
 
       const replaced = new Set<ID>()
-      const next = days.map((d) => {
-        const prev = old.find((x) => x.dow === d.dow && !replaced.has(x.id))
-        if (prev) replaced.add(prev.id)
+      // שני מעברים: קודם התאמה לפי כותרת (שם שנשאר זהה בין החלה להחלה),
+      // ורק אחר כך לפי מיקום. בלי המעבר הראשון, יום שהכותרת שלו השתנתה
+      // היה גונב את היום של השכן שלו באותו יום בשבוע.
+      const claim = days.map((d) => {
+        const m = old.find((x) => x.dow === d.dow && !replaced.has(x.id) && x.title === d.title)
+        if (m) replaced.add(m.id)
+        return m
+      })
+      days.forEach((d, i) => {
+        if (claim[i] || d.exact) return
+        const m = old.find((x) => x.dow === d.dow && !replaced.has(x.id))
+        if (m) {
+          replaced.add(m.id)
+          claim[i] = m
+        }
+      })
+
+      const next = days.map((d, i) => {
+        const prev = claim[i]
         return {
           ...(prev ?? {}),
           id: prev?.id ?? uid('wd'),
@@ -1034,13 +1071,20 @@ export const actions = {
           kind: d.kind,
           title: d.title,
           focus: d.focus,
-          // טווח הקצב שהיה נשמר: הוא נקבע מהריצות שלו ואנחנו משנים כאן מרחק
-          target: d.target ? { ...(prev?.target ?? {}), ...d.target } : prev?.target,
+          // מיזוג ולא החלפה: מה שההצעה לא קובעת נשאר. טווח קצב שנקבע ביד
+          // שורד כל עוד אין מבחן שדה שממנו אפשר לגזור אותו — וברגע שיש,
+          // הקצב הנגזר גובר, כי הוא מתעדכן מעצמו והידני מתיישן בשקט.
+          //
+          // `definedOnly` הוא לא ניקיון: פיזור של שדה שערכו undefined **מוחק**
+          // את מה שהיה שם. בלעדיו הצעה בלי קצב הייתה מוחקת קצב קיים בשקט.
+          target: d.target ? { ...(prev?.target ?? {}), ...definedOnly(d.target) } : prev?.target,
           exercises: d.exercises.map((e) => ({ ...e, id: byName.get(e.name) ?? uid('ex') })),
           updatedAt: Date.now(),
           deleted: false,
         } as WorkoutDay
       })
+      // שדה עזר שלא שייך לרשומה
+      for (const d of next) delete (d as unknown as Record<string, unknown>).exact
       const untouched = (s.workoutPlan ?? []).filter((d) => !replaced.has(d.id))
       return { ...s, workoutPlan: [...next, ...untouched] }
     })
@@ -1695,7 +1739,22 @@ export function workoutOn(s: AppState, date: ISODate): WorkoutLog | undefined {
 export function workoutDayOn(s: AppState, date: ISODate): WorkoutDay | undefined {
   const dayId = workoutOn(s, date)?.dayId
   const plan = alive(s.workoutPlan ?? [])
-  return (dayId ? plan.find((d) => d.id === dayId) : undefined) ?? plan.find((d) => d.dow === parseISO(date).getDay())
+  const pinned = dayId ? plan.find((d) => d.id === dayId) : undefined
+  if (pinned) return pinned
+  const dow = parseISO(date).getDay()
+  const day = plan.find((d) => d.dow === dow)
+  if (!day || day.kind !== 'gym' || !noGymOn(s, date)) return day
+  // יום חדר כושר בתאריך שבו אין חדר כושר: התאום הביתי של אותו יום. הוא
+  // יושב בתוכנית עם אותו dow ולכן לא מופיע במסך התוכנית — אבל הוא קיים,
+  // וזו הסיבה שיום סגור לא מוחק אימון אלא מחליף אותו.
+  return plan.find((d) => d.dow === dow && d.id !== day.id && d.kind !== 'gym') ?? day
+}
+
+/** אין חדר כושר בתאריך הזה — לא ביום הזה בשבוע, או שהתאריך עצמו סומן */
+export function noGymOn(s: AppState, date: ISODate): boolean {
+  const g = s.settings.gymDays
+  if (g && !g.includes(parseISO(date).getDay())) return true
+  return (s.settings.gymOff ?? []).includes(date)
 }
 
 /**
@@ -1712,8 +1771,20 @@ export function workoutDayOn(s: AppState, date: ISODate): WorkoutDay | undefined
  */
 export function workoutMinutes(day?: WorkoutDay): number {
   if (!day || day.kind === 'run' || day.kind === 'walk') return 0
+  return blockMinutes((day.exercises ?? []).filter((e) => !e.home))
+}
+
+/**
+ * הבלוק הביתי — עשר הדקות שנעשות בדירה לפני האימון. הוא נמדד בנפרד כי
+ * הוא לא חלק מהתקרה של 45 הדקות: זה בדיוק מה שהוא בא לפתור.
+ */
+export function homeMinutes(day?: WorkoutDay): number {
+  return blockMinutes((day?.exercises ?? []).filter((e) => e.home))
+}
+
+function blockMinutes(list: Exercise[]): number {
   let sec = 0
-  for (const ex of day.exercises ?? []) {
+  for (const ex of list) {
     const sets = Math.max(1, ex.sets ?? 3)
     const rest = ex.rest ?? 90
     const work = ex.metric === 'time' ? 40 : 45

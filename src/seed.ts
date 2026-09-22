@@ -157,6 +157,10 @@ export const DEFAULT_SETTINGS: Settings = {
   easyWeekend: false,
   easyHoliday: false,
   easyExamDay: false,
+  // חדר כושר ראשון עד חמישי. בשישי ובשבת אין — וזה לא חריג שצריך לזכור
+  // כל שבוע אלא נתון שהשבוע נבנה ממנו.
+  gymDays: [0, 1, 2, 3, 4],
+  gymOff: [],
 }
 
 export function newDeviceId(): string {

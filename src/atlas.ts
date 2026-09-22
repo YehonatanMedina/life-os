@@ -939,16 +939,23 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
     }
     case 'setSettings': {
       const patch = strip(c.patch)
-      const allowed = ['wakeTime', 'bedTime', 'dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'name', 'reviewDow']
+      const allowed = ['wakeTime', 'bedTime', 'dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'name', 'reviewDow', 'gymDays', 'gymOff']
       const NUM = ['dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'reviewDow']
       // רק מפתחות מותרים, ורק מהטיפוס הנכון — "6" או NaN היו הופכים את הקיבולת ל-NaN
       const RANGE: Record<string, [number, number]> = { dailyTokenGoal: [1, 24], weeklyTokenGoal: [1, 168], tokenMinutes: [10, 240], reviewDow: [0, 6] }
+      // זמינות חדר הכושר: ימים בשבוע, ותאריכים בודדים שבהם הוא סגור. שתיהן
+      // רשימות, ולכן הבדיקה היא על כל איבר — רשימה עם איבר אחד פסול הייתה
+      // מייצרת שבוע שנבנה סביב יום שלא קיים.
       const okVal = (k: string, v: unknown) =>
-        NUM.includes(k)
-          ? typeof v === 'number' && Number.isFinite(v) && v >= RANGE[k][0] && v <= RANGE[k][1]
-          : k === 'wakeTime' || k === 'bedTime'
-            ? typeof v === 'string' && /^\d{2}:\d{2}$/.test(v)
-            : typeof v === 'string'
+        k === 'gymDays'
+          ? Array.isArray(v) && v.length > 0 && v.every((x) => int(x, 0, 6)) && new Set(v).size === v.length
+          : k === 'gymOff'
+            ? Array.isArray(v) && v.every((x) => isDate(x))
+            : NUM.includes(k)
+              ? typeof v === 'number' && Number.isFinite(v) && v >= RANGE[k][0] && v <= RANGE[k][1]
+              : k === 'wakeTime' || k === 'bedTime'
+                ? typeof v === 'string' && /^\d{2}:\d{2}$/.test(v)
+                : typeof v === 'string'
       const safe = Object.fromEntries(Object.entries(patch).filter(([k, v]) => allowed.includes(k) && okVal(k, v)))
       if (!Object.keys(safe).length) throw new Error('setSettings: nothing valid')
       const prev = Object.fromEntries(Object.keys(safe).map((k) => [k, (s.settings as any)[k]]))
