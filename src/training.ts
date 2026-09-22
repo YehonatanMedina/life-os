@@ -224,7 +224,11 @@ export function volumeRamp(opts: {
     const g = n <= 3 ? growth / 2 : growth
     km = Math.min(cap, n === 1 ? km : lastBuild * (1 + g))
     lastBuild = km
-    out.push({ n, km: r1(km), kind: 'build', longKm: r1(longShare(km)) })
+    // בשלושת שבועות הבנייה האחרונים הארוכה לוקחת חלק גדול יותר — ככה
+    // עושות תוכניות למתחילים (43–52% מהשבוע), וזה מה שמקרב את הארוכה
+    // למרחק שבאמת מכין למרוץ.
+    const finalBuild = left <= 5
+    out.push({ n, km: r1(km), kind: 'build', longKm: r1(finalBuild ? km * 0.45 : longShare(km)) })
   }
   return out
 }
@@ -566,3 +570,328 @@ export const TRAINING_DOCTRINE = {
     'מכרעים במשקל גוף בבית — מותרים.',
   ],
 } as const
+
+// -- מהחוקים אל השבוע ---------------------------------------------------------
+
+export type ProposedDay = {
+  dow: number
+  kind: 'gym' | 'home' | 'run' | 'walk'
+  title: string
+  focus: string
+  /** לימי ריצה */
+  km?: number
+  minutes?: number
+  /** מה עושים היום, במשפט */
+  how?: string
+  /** האם זה יום קשה — לספירה ולבדיקה */
+  hard: boolean
+}
+
+export type WeekProposal = {
+  days: ProposedDay[]
+  weekKm: number
+  /** השבוע בתוכנית, מתוך כמה */
+  week: number
+  weeks: number
+  /** מה השתנה מול התוכנית הקיימת, בשפה שאפשר להחליט לפיה */
+  changes: string[]
+  /** הפרות שנמצאו בתוכנית הקיימת */
+  fixes: string[]
+}
+
+/**
+ * חלוקת הנפח השבועי בין ארבעה ימי ריצה. הארוכה לוקחת את החלק שלה
+ * (`longShare`), ומה שנשאר מתחלק בין האיכות לשתי הקלות — האיכות מעט
+ * ארוכה יותר, כי היא כוללת חימום ושחרור.
+ */
+export function splitWeek(weekKm: number): { long: number; quality: number; easy: number } {
+  const long = Math.round(longShare(weekKm) * 10) / 10
+  const rest = Math.max(0, weekKm - long)
+  const quality = Math.round(rest * 0.36 * 10) / 10
+  const easy = Math.round(((rest - quality) / 2) * 10) / 10
+  return { long, quality, easy }
+}
+
+/**
+ * השבוע שהחוקים מייצרים.
+ *
+ * למה דווקא הסדר הזה — כל יום כאן הוא תוצאה של אילוץ, לא של טעם:
+ *
+ *   ראשון  כוח (דחיפה)      — אחרי הארוכה של שבת, ופלג גוף עליון לא מפריע לה
+ *   שני    ריצת איכות       — 48 שעות אחרי הארוכה, וזה המרחק המינימלי בין קשים
+ *   שלישי  כוח (משיכה+רגליים) — רגליים כבדות רק כאן, כי מחר ריצה קלה בלבד
+ *   רביעי  ריצה קלה         — 24 שעות אחרי רגליים; קלה מותרת, קשה לא
+ *   חמישי  כוח (משיכה+סטטיים) — בלי רגליים, כדי לא לזהם את שישי ושבת
+ *   שישי   ריצה קלה         — אין חדר כושר
+ *   שבת    ריצה ארוכה       — אין חדר כושר, והיא לבד ביום שלה
+ *
+ * שלושה ימים קשים בדיוק: איכות, רגליים, ארוכה.
+ */
+export function proposeWeek(opts: { weekKm: number; week: number; weeks: number; longRunMinutes?: number }): ProposedDay[] {
+  const s = splitWeek(opts.weekKm)
+  return [
+    {
+      dow: 0,
+      kind: 'gym',
+      title: 'חדר כושר — דחיפה ושוקיים',
+      focus: 'עמידת ידיים בהתחלה כשהכתף טרייה, אחר כך הדחיפה הכבדה, ובסוף הרמות עקבים',
+      how: 'הרמות עקבים הן התרגיל היחיד שהשינוי בו תאם עם שיפור עלות החמצן בריצה.',
+      hard: false,
+    },
+    {
+      dow: 1,
+      kind: 'run',
+      title: 'ריצת איכות',
+      focus: 'האימון האיכותי היחיד בשבוע',
+      km: s.quality,
+      hard: true,
+    },
+    {
+      dow: 2,
+      kind: 'gym',
+      title: 'חדר כושר — משיכה ורגליים',
+      focus: 'היום היחיד עם רגליים כבדות, כי למחרת יש רק ריצה קלה',
+      how: 'לחיצת רגליים כבדה (4×4–6) וכפיפות ברכיים. בלי סקוואט, דדליפט או מכרעים.',
+      hard: true,
+    },
+    {
+      dow: 3,
+      kind: 'run',
+      title: 'ריצה קלה',
+      focus: 'קלה בכוונה — 24 שעות אחרי רגליים',
+      km: s.easy,
+      how: 'אם הרגליים כבדות מאתמול זה צפוי. קלה באמת, ואם צריך — הליכה.',
+      hard: false,
+    },
+    {
+      dow: 4,
+      kind: 'gym',
+      title: 'חדר כושר — משיכה וסטטיים',
+      focus: 'מתח, פרונט לבר ו-L-Sit. בלי רגליים, כדי לא לזהם את סוף השבוע',
+      hard: false,
+    },
+    {
+      dow: 5,
+      kind: 'run',
+      title: 'ריצה קלה + האצות',
+      focus: 'נפח קל, ובסוף שש האצות של 20 שניות',
+      km: s.easy,
+      how: 'ההאצות קצרות בכוונה: ארוכות מזה כבר לוקחות מהארוכה של מחר.',
+      hard: false,
+    },
+    {
+      dow: 6,
+      kind: 'run',
+      title: 'ריצה ארוכה',
+      focus: 'הדבר היחיד שאימון אינטרוולים לא קונה — עמידוּת',
+      km: s.long,
+      minutes: opts.longRunMinutes,
+      how: 'קצב נוח לכל האורך. זו הריצה היחידה שלא מוגבלת ב-45 דקות.',
+      hard: true,
+    },
+  ]
+}
+
+/** תיאור קצר של יום בתוכנית קיימת, להשוואה */
+export type CurrentDay = { dow: number; kind: string; title: string; km?: number }
+
+/**
+ * מה משתנה, ולמה. מוחזר כטקסט כדי שההחלטה תהיה מול הסבר ולא מול דיף.
+ */
+export function weekChanges(current: CurrentDay[], proposed: ProposedDay[]): { changes: string[]; fixes: string[] } {
+  const changes: string[] = []
+  const fixes: string[] = []
+  const HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
+  const byDow = new Map<number, CurrentDay>()
+  for (const d of current) if (!byDow.has(d.dow)) byDow.set(d.dow, d)
+
+  // הפרות בתוכנית הקיימת. שימו לב לדיוק: האיסור הוא על ריצה **קשה** אחרי
+  // רגליים, לא על כל ריצה — ריצה קלה למחרת היא בדיוק מה שצריך לעשות שם.
+  const hardRun = (d?: CurrentDay) => !!d && d.kind === 'run' && /איכות|ארוכה|אינטרוול|טמפו|סף/.test(d.title)
+  for (let i = 0; i < 7; i++) {
+    const cur = byDow.get(i)
+    if (cur && /רגליים/.test(cur.title) && hardRun(byDow.get((i + 1) % 7))) {
+      fixes.push(`${HE[i]} רגליים ולמחרת ריצה קשה — כלכלת הריצה יורדת ב-24 השעות האלה`)
+    }
+  }
+  const runDays = current.filter((d) => d.kind === 'run').length
+  if (runDays < 4) fixes.push(`${runDays} ימי ריצה בשבוע — בתקרה של 45 דקות התדירות היא הדרך היחידה להעלות נפח`)
+  // ריצה ארוכה שאינה ארוכה: מתחת ל-70 דקות היא לא קונה עמידוּת
+  const longest = Math.max(0, ...current.filter((d) => d.kind === 'run').map((d) => d.km ?? 0))
+  if (longest > 0 && longest * 7 < LONG_RUN_MIN_MINUTES) {
+    fixes.push(`הארוכה בשבוע היא ${longest} ק״מ — בקצב שלך זה פחות מ-70 דקות, ומתחת לזה היא ריצה רגילה ולא ארוכה`)
+  }
+
+  for (const p of proposed) {
+    const cur = byDow.get(p.dow)
+    if (!cur) {
+      changes.push(`${HE[p.dow]}: נוסף — ${p.title}`)
+      continue
+    }
+    if (cur.kind !== p.kind) changes.push(`${HE[p.dow]}: ${cur.title} ← ${p.title}`)
+    else if (p.km !== undefined && cur.km !== undefined && Math.abs(cur.km - p.km) >= 0.5) {
+      changes.push(`${HE[p.dow]}: ${cur.km} ק״מ ← ${p.km}`)
+    }
+  }
+  return { changes, fixes }
+}
+
+/**
+ * הנפח שממנו בונים. **לא** השבוע הנוכחי — הוא חלקי כמעט תמיד, וביום ראשון
+ * בבוקר הוא אפס, מה שהיה מאפס את כל התוכנית. ולא הממוצע, כי שבוע אחד חלש
+ * (מבחנים, מחלה) היה מוריד את הבסיס. מה שכן: **הגבוה מבין השבועות השלמים
+ * האחרונים** — זה הנפח שהגוף כבר יודע לעשות.
+ *
+ * הרשימה מגיעה מ-runWeeks: [תחילת שבוע, קילומטרים], מהישן לחדש.
+ */
+export function baseWeeklyKm(weeks: Array<[string, number]>, thisWeekStart: string, look = 4): number {
+  const done = weeks.filter(([ws]) => ws !== thisWeekStart)
+  if (!done.length) {
+    // אין שבוע שלם עדיין — לוקחים את מה שיש עכשיו, כדי לא להתחיל מאפס
+    const now = weeks.find(([ws]) => ws === thisWeekStart)
+    return now ? Math.round(now[1] * 10) / 10 : 0
+  }
+  const recent = done.slice(-look).map(([, km]) => km)
+  return Math.round(Math.max(...recent) * 10) / 10
+}
+
+// -- התרגילים עצמם ------------------------------------------------------------
+
+export type ProposedExercise = {
+  name: string
+  sets?: number
+  reps?: string
+  metric: 'weight' | 'bodyweight' | 'reps' | 'time'
+  note?: string
+  rest?: number
+  cues?: string
+  /** למה התרגיל הזה נמצא כאן, במשפט אחד עם מקור */
+  why?: string
+}
+
+/**
+ * הסדר בתוך האימון הוא החלטה, לא טעם:
+ *
+ *   1. **עמידת ידיים ראשונה, תמיד.** בסקירה שיטתית של 38 מחקרים על עייפות
+ *      ולמידה מוטורית, 65% הראו פגיעה ברכישת מיומנות — והעייפות שמזיקה
+ *      היא **מקומית לשריר**, לא קרדיווסקולרית. כלומר מה שהורס תרגול
+ *      עמידת ידיים זה כתף עייפה, לא ריאות עייפות.
+ *      pubmed.ncbi.nlm.nih.gov/42480681/
+ *   2. **הכבד אחרי זה.** במטא-אנליזה של סדר תרגילים, העלייה בכוח הגדולה
+ *      ביותר היא בתרגילים שנעשים בתחילת האימון.
+ *      pubmed.ncbi.nlm.nih.gov/32077380/
+ *   3. **סטטיים אחרי המשיכה הכבדה**, כי הם מתחרים על אותו תקציב.
+ *   4. **זוגות אנטגוניסטיים** (מתח מול מקבילים): חוסכים כמחצית מזמן
+ *      האימון בלי הבדל בכוח או בהיפרטרופיה. pubmed.ncbi.nlm.nih.gov/39903375/
+ *      זו הדרך היחידה להכניס את הכל ל-45 דקות.
+ */
+export const PROGRAM: Record<number, { exercises: ProposedExercise[] }> = {
+  // ראשון — דחיפה ושוקיים
+  0: {
+    exercises: [
+      {
+        name: 'תרגול עמידת ידיים על הקיר',
+        sets: 4,
+        reps: 'מקסימום זמן',
+        metric: 'time',
+        rest: 60,
+        cues: 'פנים לקיר, החזה כמעט נוגע, ידיים 20–30 ס״מ מהקיר.',
+        note: 'ראשון באימון, כשהכתף טרייה. עוצרים כשהתנוחה מתחילה להישבר ולא כשנגמר הכוח.',
+        why: 'עייפות מקומית פוגעת ברכישת מיומנות; עייפות קרדיווסקולרית פחות.',
+      },
+      { name: 'מקבילים (Dips)', sets: 3, reps: '6-8', metric: 'bodyweight', rest: 120, note: 'RIR 1–2. כשנסגרים 3×15 במשקל גוף — עוברים לחגורה.' },
+      { name: 'לחיצת חזה בשיפוע עליון (משקולות)', sets: 3, reps: '8-10', metric: 'weight', rest: 120 },
+      { name: 'לחיצת כתפיים בישיבה (משקולות)', sets: 3, reps: '8-10', metric: 'weight', rest: 90 },
+      { name: 'הרחקת כתפיים — הנפות לצדדים במשקולות', sets: 3, reps: '12-15', metric: 'weight', rest: 60 },
+      { name: 'פייס פול בכבל (Face Pull)', sets: 3, reps: '15', metric: 'weight', rest: 60, note: 'מאזן שלושה תרגילי דחיפה, ומחזיק כתף בריאה בעמידת ידיים.' },
+      {
+        name: 'הרמות עקבים בעמידה',
+        sets: 4,
+        reps: '6-8',
+        metric: 'weight',
+        rest: 90,
+        cues: 'טווח מלא — עקב יורד מתחת לגובה המדרגה, ועלייה עד הסוף.',
+        note: 'כבד. אם 8 חזרות קלות — מוסיפים משקל.',
+        why: 'בפרוטוקול שנמדד על רצים, השינוי בהרמות עקבים היה המשתנה היחיד שתאם עם שיפור עלות החמצן (r=−0.477).',
+      },
+    ],
+  },
+  // שלישי — משיכה ורגליים
+  2: {
+    exercises: [
+      { name: 'תרגול עמידת ידיים על הקיר', sets: 3, reps: 'מקסימום זמן', metric: 'time', rest: 60, note: 'בלוק קצר יותר מיום ראשון — לפני משיכה כבדה.' },
+      {
+        name: 'מתח (Pull-ups)',
+        sets: 4,
+        reps: '5-8',
+        metric: 'bodyweight',
+        rest: 120,
+        note: 'RIR 1–2, לא עד כישלון. אם הסט העליון נותן 8–12 — מוסיפים משקל בפעם הבאה.',
+        why: 'שישה עד עשרה סטים קשים לדפוס תנועה בשבוע; מעבר לזה התשואה פוחתת, וחדה במיוחד לכוח.',
+      },
+      { name: 'חתירה במשקולות בודדות או במכונה', sets: 3, reps: '8-10 לכל יד', metric: 'weight', rest: 90 },
+      {
+        name: 'לחיצת רגליים במכונה (Leg Press)',
+        sets: 4,
+        reps: '4-6',
+        metric: 'weight',
+        rest: 150,
+        cues: 'ירידה מבוקרת, דחיפה מהירה ככל האפשר.',
+        note: 'כבד — 80–85% ממה שאפשר להרים פעם אחת. זה היום היחיד בשבוע עם רגליים כבדות.',
+        why: 'עומס ≥80% משפר כלכלת ריצה; עומס בינוני (40–79%) לא נמדד כמובהק.',
+      },
+      { name: 'כפיפות ברכיים במכונה (Leg Curls)', sets: 3, reps: '8-12', metric: 'weight', rest: 90, cues: 'ירידה איטית — שם עיקר העבודה.' },
+      {
+        name: 'הרמות עקבים בישיבה',
+        sets: 3,
+        reps: '8-12',
+        metric: 'weight',
+        rest: 60,
+        why: 'ברך כפופה ב-90 מעלות מכוונת לסוליאוס — השריר שתורם הכי הרבה לדחיפה בריצה.',
+      },
+    ],
+  },
+  // חמישי — משיכה וסטטיים
+  4: {
+    exercises: [
+      { name: 'תרגול עמידת ידיים על הקיר', sets: 3, reps: 'מקסימום זמן', metric: 'time', rest: 60 },
+      { name: 'מתח (Pull-ups)', sets: 3, reps: '5-8', metric: 'bodyweight', rest: 120, note: 'יום המשיכה השני. RIR 1–2.' },
+      {
+        name: 'Tuck Front Lever',
+        sets: 5,
+        reps: '10 שניות',
+        metric: 'time',
+        rest: 120,
+        cues: 'הגב מקביל לרצפה, לא הישבן. מרפקים ישרים.',
+        note: 'אחיזת עבודה היא כ-70% מהאחיזה המקסימלית. עוצרים כשהתנוחה נשברת, לא כשהשעון מגיע.',
+        why: 'עבודה סטטית היא כוח ולא מיומנות, ולכן היא באה אחרי המשיכה הכבדה ולא לפניה.',
+      },
+      { name: 'משיכת פולי עליון (Lat Pulldown)', sets: 3, reps: '10-12', metric: 'weight', rest: 90 },
+      { name: 'L-Sit — Tuck (כל הגוף באוויר)', sets: 3, reps: '20 שניות', metric: 'time', rest: 90, cues: 'כתפיים למטה, ידיים ישרות, אגן נכנס פנימה.' },
+      { name: 'הרמות רגליים בתלייה (Hanging Leg Raises)', sets: 3, reps: '10-12', metric: 'reps', rest: 90, note: 'ברכיים מכופפות אם הישרות לא נקיות. זה מה שמחבר את חדר הכושר ל-L-Sit ול-Front Lever.' },
+      { name: 'כפיפות מרפק במשקולות', sets: 3, reps: '10-12', metric: 'weight', rest: 60, note: 'התרגיל הישיר היחיד לזרוע הקדמית בשבוע.' },
+    ],
+  },
+  // שישי — הבלוק הביתי שנוסע עם הריצה הקלה
+  5: {
+    exercises: [
+      {
+        name: 'קפיצות פוגו',
+        sets: 4,
+        reps: '10',
+        metric: 'reps',
+        rest: 45,
+        cues: 'קרסול נוקשה, מגע קצר בקרקע, ברך כמעט ישרה.',
+        note: 'ארבעים נגיעות. לפני הריצה, על קרקע רכה.',
+        why: 'חמש דקות קפיצות ביום, שישה שבועות — כלכלת הריצה השתפרה ב-12 ו-14 קמ״ש. הכי זול שיש, ובבית.',
+      },
+      { name: 'מכרעים (Lunges) במשקל גוף', sets: 3, reps: '15 לכל רגל', metric: 'reps', rest: 60, note: 'בבית, אחרי הריצה.' },
+      { name: 'Hollow Body Hold (החזקת סירה)', sets: 3, reps: '30 שניות', metric: 'time', rest: 60, note: 'אותה תנוחה בדיוק של עמידת ידיים ושל Front Lever, רק בשכיבה.' },
+    ],
+  },
+}
+
+/** מוסיף לכל יום בהצעה את התרגילים שלו */
+export function programFor(dow: number): ProposedExercise[] {
+  return PROGRAM[dow]?.exercises ?? []
+}

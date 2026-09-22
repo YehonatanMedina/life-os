@@ -1004,6 +1004,52 @@ export const actions = {
   upsertWorkoutDay(d: WorkoutDay) {
     store.set((s) => ({ ...s, workoutPlan: upsertList(s.workoutPlan ?? [], stamp(d)) }))
   },
+  /**
+   * מחליף את התוכנית השבועית בתוכנית שנגזרה מתורת האימון.
+   *
+   * שלושה דברים שנשמרים בכוונה:
+   *   * **זהות התרגילים.** תרגיל עם אותו שם מקבל את אותו מזהה שהיה לו,
+   *     ולכן כל מה שנרשם עליו (משקלים, חזרות, היסטוריה) נשאר מחובר —
+   *     גם אם הוא עבר ליום אחר בשבוע.
+   *   * **ימים חלופיים.** מוחלף רק היום הראשון של כל יום-בשבוע, כי זה
+   *     היום שהאפליקציה בוחרת בפועל. יום גיבוי (״דחיפה בבית״) נשאר.
+   *   * **שחזור.** התוכנית הקודמת מוחזרת מהפונקציה, כדי שהמסך יוכל
+   *     להציע לבטל.
+   */
+  applyWeekPlan(days: Array<Omit<WorkoutDay, 'id' | 'updatedAt' | 'exercises'> & { exercises: Array<Omit<Exercise, 'id'>> }>): WorkoutDay[] {
+    const before = (store.get().workoutPlan ?? []).map((d) => ({ ...d }))
+    store.set((s) => {
+      const old = alive(s.workoutPlan ?? [])
+      const byName = new Map<string, ID>()
+      for (const d of old) for (const ex of d.exercises) if (!byName.has(ex.name)) byName.set(ex.name, ex.id)
+
+      const replaced = new Set<ID>()
+      const next = days.map((d) => {
+        const prev = old.find((x) => x.dow === d.dow && !replaced.has(x.id))
+        if (prev) replaced.add(prev.id)
+        return {
+          ...(prev ?? {}),
+          id: prev?.id ?? uid('wd'),
+          dow: d.dow,
+          kind: d.kind,
+          title: d.title,
+          focus: d.focus,
+          // טווח הקצב שהיה נשמר: הוא נקבע מהריצות שלו ואנחנו משנים כאן מרחק
+          target: d.target ? { ...(prev?.target ?? {}), ...d.target } : prev?.target,
+          exercises: d.exercises.map((e) => ({ ...e, id: byName.get(e.name) ?? uid('ex') })),
+          updatedAt: Date.now(),
+          deleted: false,
+        } as WorkoutDay
+      })
+      const untouched = (s.workoutPlan ?? []).filter((d) => !replaced.has(d.id))
+      return { ...s, workoutPlan: [...next, ...untouched] }
+    })
+    return before
+  },
+  /** מחזיר תוכנית שהוחלפה, בדיוק כמו שהייתה */
+  restoreWeekPlan(plan: WorkoutDay[]) {
+    store.set((s) => ({ ...s, workoutPlan: plan.map((d) => ({ ...d, updatedAt: Date.now() })) }))
+  },
   patchWorkoutDay(id: ID, patch: Partial<WorkoutDay>) {
     store.set((s) => ({
       ...s,

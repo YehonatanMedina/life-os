@@ -22,6 +22,9 @@ import {
   testChanged,
   vdot,
   volumeRamp,
+  proposeWeek,
+  splitWeek,
+  weekChanges,
   type DayKind,
   type Wellness,
 } from '../../../src/training'
@@ -126,6 +129,21 @@ describe('סולם הנפח', () => {
       if (ramp[i].kind !== 'build' || ramp[i - 1].kind !== 'build') continue
       expect(ramp[i].km / ramp[i - 1].km).toBeLessThan(1.11)
     }
+  })
+
+  it('בשבועות האחרונים הארוכה גדלה יחסית — כמו בתוכניות למתחילים', () => {
+    const builds = ramp.filter((w) => w.kind === 'build')
+    const early = builds[1]
+    const late = builds[builds.length - 1]
+    expect(early.longKm / early.km).toBeLessThan(0.44)
+    expect(late.longKm / late.km).toBeGreaterThan(0.44)
+  })
+
+  it('הריצה הארוכה בשיא מגיעה לטווח שתוכניות אמיתיות נותנות', () => {
+    const r = volumeRamp({ startKm: 10.5, weeks: 20 })
+    const longest = Math.max(...r.map((w) => w.longKm))
+    // תוכנית המתחילים הנפוצה בעולם של חצי מרתון מגיעה ל-16 ק״מ
+    expect(longest).toBeGreaterThan(12)
   })
 
   it('תקרת נפח נשמרת', () => {
@@ -269,5 +287,109 @@ describe('מבנה השבוע', () => {
     expect(WEEK_FLOOR.longRuns).toBeGreaterThanOrEqual(1)
     expect(WEEK_FLOOR.qualityRuns).toBeGreaterThanOrEqual(1)
     expect(WEEK_FLOOR.strengthSessions).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('השבוע שהחוקים מייצרים', () => {
+  const week = proposeWeek({ weekKm: 24, week: 9, weeks: 20 })
+
+  it('שבעה ימים, ארבע ריצות ושלושה אימוני כוח', () => {
+    expect(week.length).toBe(7)
+    expect(week.filter((d) => d.kind === 'run').length).toBe(4)
+    expect(week.filter((d) => d.kind === 'gym').length).toBe(3)
+  })
+
+  it('בדיוק שלושה ימים קשים', () => {
+    expect(week.filter((d) => d.hard).length).toBe(3)
+  })
+
+  it('אין חדר כושר בשישי ובשבת', () => {
+    for (const dow of [5, 6]) expect(week.find((d) => d.dow === dow)!.kind).not.toBe('gym')
+  })
+
+  it('רגליים כבדות רק ביום שאחריו ריצה קלה', () => {
+    const legs = week.find((d) => /רגליים/.test(d.title))!
+    const next = week.find((d) => d.dow === (legs.dow + 1) % 7)!
+    expect(next.hard).toBe(false)
+  })
+
+  it('הריצה הארוכה לבד, והאיכות 48 שעות ממנה', () => {
+    const long = week.find((d) => /ארוכה/.test(d.title))!
+    const quality = week.find((d) => /איכות/.test(d.title))!
+    expect(long.dow).toBe(6)
+    // יום שני — יומיים אחרי שבת
+    expect(quality.dow).toBe(1)
+  })
+
+  it('המסגרת עוברת את בדיקת מבנה השבוע', () => {
+    const days: DayKind[][] = Array.from({ length: 7 }, (_, i) => {
+      const d = week.find((x) => x.dow === i)!
+      if (d.kind === 'gym') return /רגליים/.test(d.title) ? ['legs', 'upper'] : ['upper', 'skills']
+      if (/ארוכה/.test(d.title)) return ['long-run']
+      if (/איכות/.test(d.title)) return ['quality-run']
+      return ['easy-run']
+    })
+    expect(checkWeek(days)).toEqual([])
+  })
+
+  it('חלוקת הנפח מסתכמת לשבוע, והארוכה היא הגדולה', () => {
+    const s = splitWeek(24)
+    expect(s.long + s.quality + 2 * s.easy).toBeCloseTo(24, 0)
+    expect(s.long).toBeGreaterThan(s.quality)
+    expect(s.quality).toBeGreaterThan(s.easy)
+  })
+
+  it('נפח קטן מייצר ריצות קצרות ולא שליליות', () => {
+    const s = splitWeek(10.5)
+    expect(s.easy).toBeGreaterThan(0)
+    expect(s.long).toBeGreaterThan(s.easy)
+  })
+})
+
+describe('מה משתנה מול התוכנית הקיימת', () => {
+  /** התוכנית שהייתה: שלוש ריצות, ורגליים ביום שלפני ריצה */
+  const current = [
+    { dow: 0, kind: 'gym', title: 'חדר כושר — דחיפה' },
+    { dow: 1, kind: 'run', title: 'ריצה קצרה', km: 4 },
+    { dow: 2, kind: 'gym', title: 'חדר כושר — משיכה ורגליים' },
+    { dow: 3, kind: 'run', title: 'ריצה קלה', km: 3 },
+    { dow: 4, kind: 'gym', title: 'חדר כושר — משיכה ופלג גוף עליון' },
+    { dow: 5, kind: 'run', title: 'ריצה ארוכה', km: 7 },
+    { dow: 6, kind: 'home', title: 'בית — סקילים' },
+  ]
+
+  it('ריצה קלה אחרי רגליים היא תקינה — ולא נסמנת כתקלה', () => {
+    // האיסור הוא על ריצה **קשה** אחרי רגליים. בתוכנית הזו יום
+    // רביעי הוא הקלה בשבוע, וזה בדיוק מה שצריך להיות שם.
+    const { fixes } = weekChanges(current, proposeWeek({ weekKm: 24, week: 9, weeks: 20 }))
+    expect(fixes.some((f) => f.includes('כלכלת הריצה'))).toBe(false)
+  })
+
+  it('תופס רגליים יום לפני ריצה קשה', () => {
+    const bad = current.map((d) => (d.dow === 3 ? { ...d, title: 'ריצת איכות' } : d))
+    const { fixes } = weekChanges(bad, proposeWeek({ weekKm: 24, week: 9, weeks: 20 }))
+    expect(fixes.some((f) => f.includes('כלכלת הריצה'))).toBe(true)
+  })
+
+  it('תופס ריצה ארוכה שאינה ארוכה', () => {
+    const { fixes } = weekChanges(current, proposeWeek({ weekKm: 24, week: 9, weeks: 20 }))
+    expect(fixes.some((f) => f.includes('70 דקות'))).toBe(true)
+  })
+
+  it('תופס שיש פחות מארבעה ימי ריצה', () => {
+    const { fixes } = weekChanges(current, proposeWeek({ weekKm: 24, week: 9, weeks: 20 }))
+    expect(fixes.some((f) => f.includes('ימי ריצה'))).toBe(true)
+  })
+
+  it('מסביר כל שינוי ביום ובשם, ולא מחזיר דיף גולמי', () => {
+    const { changes } = weekChanges(current, proposeWeek({ weekKm: 24, week: 9, weeks: 20 }))
+    expect(changes.length).toBeGreaterThan(0)
+    for (const c of changes) expect(c).toMatch(/ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת/)
+  })
+
+  it('שבוע שכבר תואם לא מייצר תיקונים מיותרים', () => {
+    const good = proposeWeek({ weekKm: 24, week: 9, weeks: 20 }).map((d) => ({ dow: d.dow, kind: d.kind, title: d.title, km: d.km }))
+    const { fixes } = weekChanges(good, proposeWeek({ weekKm: 24, week: 9, weeks: 20 }))
+    expect(fixes).toEqual([])
   })
 })

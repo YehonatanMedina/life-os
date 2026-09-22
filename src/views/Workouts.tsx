@@ -10,6 +10,7 @@ import {
 } from '../dates'
 import { Ring, Sheet } from '../ui'
 import RunCard from './RunCard'
+import WeekPlanCard from './WeekPlanCard'
 import { PlanSheet, ProgressSheet, WorkoutSheet, KIND_EMOJI, setText, targetText } from './Workout'
 import {
   FOCUS_COUNT, RUN_MILESTONES, RUN_WEEKLY_GROWTH, focusLadders, isFocusGoal, laddersInOrder,
@@ -64,6 +65,11 @@ export default function Workouts() {
             <section className="sec">
               <div className="sec-h"><h2>ריצה</h2></div>
               <RunCard date={date} target={day?.kind === 'run' || day?.kind === 'walk' ? day.target : undefined} />
+            </section>
+
+            <section className="sec">
+              <div className="sec-h"><h2>השבוע</h2></div>
+              <WeekPlanCard />
             </section>
 
             <section className="sec">
