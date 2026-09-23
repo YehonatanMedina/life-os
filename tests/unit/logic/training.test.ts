@@ -341,8 +341,8 @@ describe('תקציב הגיד ומינון הסקילים', () => {
         (a, d) => a + d.exercises.filter((e) => !e.home && re.test(e.name)).reduce((x, e) => x + (e.sets ?? 0), 0),
         0,
       )
-    const pull = sets(/Front Lever|מתח \(Pull|חתירה/)
-    const push = sets(/פסאודו|מקבילים|לחיצת כתפיים|שכיבות סמיכה/)
+    const pull = sets(/מתח \(Pull|חתירה|פולי|סופרמן/)
+    const push = sets(/מקבילים|לחיצת כתפיים|שכיבות סמיכה/)
     expect(pull).toBeGreaterThanOrEqual(WEEKLY_SETS.pull[0])
     expect(pull).toBeLessThanOrEqual(WEEKLY_SETS.pull[1])
     expect(push).toBeGreaterThanOrEqual(WEEKLY_SETS.push[0])
@@ -351,7 +351,9 @@ describe('תקציב הגיד ומינון הסקילים', () => {
     expect(pull / push).toBeLessThanOrEqual(1.5)
   })
 
-  it('תקציב הגיד: זמן האחיזה השבועי מתחת לתקרה', () => {
+  // מ-23.9.2026 אין בתוכנית החזקה בזרוע ישרה (Front Lever ופסאודו-פלאנש
+  // ירדו לבקשתו). התקרה נשארת, כי היא מה שיאכוף את המינון ביום שהן יחזרו.
+  it('תקציב הגיד: זמן האחיזה בזרוע ישרה מתחת לתקרה', () => {
     let sec = 0
     for (const d of week) {
       for (const e of d.exercises) {
@@ -359,23 +361,35 @@ describe('תקציב הגיד ומינון הסקילים', () => {
         sec += (e.sets ?? 0) * Number(/(\d+)/.exec(e.reps ?? '')?.[1] ?? 0)
       }
     }
-    expect(sec).toBeGreaterThan(0)
+    expect(sec).toBe(0)
     expect(sec).toBeLessThanOrEqual(TENDON_BUDGET.perWeekSec)
   })
 
-  it('Front Lever פעמיים בשבוע בכל הרכב — גם כשאין יום סטטיים', () => {
+  const pullDays = (w: typeof week) =>
+    w.filter((d) => d.exercises.some((e) => !e.home && /מתח \(Pull|חתירה|פולי|סופרמן/.test(e.name))).map((d) => d.dow)
+
+  it('משיכה פעמיים בשבוע בכל הרכב — גם כשאין יום משיכה שני', () => {
     for (const runs of [3, 4]) {
       const w = planWeek({ weekKm: 15, week: 1, weeks: 20, runsPerWeek: runs })
-      const days = w.filter((d) => d.exercises.some((e) => /Front Lever/.test(e.name))).map((d) => d.dow)
+      const days = pullDays(w)
       expect(days.length, `${runs} ריצות`).toBe(2)
       expect(Math.abs(days[1] - days[0]), `${runs} ריצות`).toBeGreaterThanOrEqual(2)
     }
   })
 
-  it('Front Lever פעמיים בשבוע, ולא בימים עוקבים', () => {
-    const days = week.filter((d) => d.exercises.some((e) => /Front Lever/.test(e.name))).map((d) => d.dow)
+  it('משיכה פעמיים בשבוע, ולא בימים עוקבים', () => {
+    const days = pullDays(week)
     expect(days.length).toBe(2)
     expect(Math.abs(days[1] - days[0])).toBeGreaterThanOrEqual(2)
+  })
+
+  // מה שהחליף את ה-Front Lever הוא משיכה אמיתית, ולא כלום
+  it('אין Front Lever ואין פסאודו-פלאנש בשום יום', () => {
+    for (const d of week) {
+      for (const e of d.exercises) {
+        expect(/Front Lever|פסאודו/.test(e.name), `${d.title}: ${e.name}`).toBe(false)
+      }
+    }
   })
 
   it('עמידת ידיים בכל יום, ותמיד בבלוק הביתי', () => {

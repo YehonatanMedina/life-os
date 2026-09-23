@@ -967,15 +967,15 @@ describe('קטלוג המיומנויות', () => {
     expect(at('sk-handstand')).toBeLessThan(at('sk-hspu'))
     expect(at('sk-lsit')).toBeLessThan(at('sk-vsit'))
     // Back Lever ודגל הדרקון **אינם** תנאי ל-Front Lever — הם משלימים לו,
-    // ולכן הוא מותר לפניהם. מה שקבע את המעבר (22.9.2026) הוא שהתוכנית
-    // מאמנת אותו פעמיים בשבוע.
+    // ולכן המקום שלו ביחס אליהם הוא החלטה ולא חוק (לפניהם ב-22.9.2026,
+    // אחריהם ב-23.9 כשהתוכנית הפסיקה לאמן אותו). מה שכן חוק:
     expect(at('sk-frontlever')).toBeLessThan(at('sk-oapullup'))
   })
 
   it('המוקד הוא בדיוק מה שהתוכנית מודדת כל שבוע', () => {
     // אם זה נשבר — או שהתוכנית השתנתה, או שהמוקד התיישן. שניהם דורשים החלטה.
     expect(focusLadders().map((l) => l.id)).toEqual([
-      'sk-handstand', 'sk-lsit', 'sk-pullup', 'sk-dip', 'sk-frontlever',
+      'sk-handstand', 'sk-lsit', 'sk-pullup', 'sk-dip',
     ])
   })
 })

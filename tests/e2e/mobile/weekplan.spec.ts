@@ -48,7 +48,7 @@ test('השבוע נגזר, מוחל, ונשמר בלי לאבד היסטוריה
   // שבעה ימים, והתרגילים מוצגים ולא רק שמות הימים
   await expect(card).toContainText('ריצה ארוכה')
   await expect(card).toContainText('הרמות עקבים')
-  await expect(card).toContainText('Front Lever')
+  await expect(card).toContainText('מתח (Pull-ups)')
   await expect(card).toContainText('קפיצות פוגו')
   // הבלוק הביתי מוצג בנפרד — הוא לא חלק מתקרת 45 הדקות
   await expect(card).toContainText('בבית לפני')
