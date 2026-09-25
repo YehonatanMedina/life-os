@@ -60,6 +60,10 @@ export default function NewsCard() {
     }
   })
 
+  // המהדורה לא נטענה בכלל (אין רשת ואין מטמון) — נאמר את זה במקום להיעלם
+  const [loadErr, setLoadErr] = useState(false)
+  const [reload, setReload] = useState(0)
+
   // קריינות מקומית כשאין קובץ שמע (או כשהקובץ עוד לא נוצר)
   const [audioOk, setAudioOk] = useState<boolean | null>(null)
   const [speaking, setSpeaking] = useState(false)
@@ -75,6 +79,7 @@ export default function NewsCard() {
         const norm = normalizeEdition(j)
         if (!alive || !norm) return
         setEd(norm)
+        setLoadErr(false)
         try {
           localStorage.setItem(CACHE_KEY, JSON.stringify(norm))
         } catch {
@@ -82,18 +87,21 @@ export default function NewsCard() {
         }
       })
       .catch(() => {
+        let cached: Edition | null = null
         try {
           const c = localStorage.getItem(CACHE_KEY)
-          const cached = c ? normalizeEdition(JSON.parse(c)) : null
-          if (cached && alive) setEd(cached)
+          cached = c ? normalizeEdition(JSON.parse(c)) : null
         } catch {
           /* ignore */
         }
+        if (!alive) return
+        if (cached) setEd(cached)
+        else setLoadErr(true)
       })
     return () => {
       alive = false
     }
-  }, [])
+  }, [reload])
 
   useEffect(() => () => window.speechSynthesis?.cancel(), [])
 
@@ -105,7 +113,30 @@ export default function NewsCard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shown?.date])
 
-  if (!ed) return null
+  // מהדורה שלא נטענה (אין רשת, אין מטמון) נראתה עד 25.9.2026 בדיוק כמו בוקר בלי
+  // כרטיס: אין מה ללחוץ ואין מה להבין. אומרים את זה, ונותנים לנסות שוב.
+  if (!ed) {
+    if (!loadErr) return null
+    return (
+      <div className="card rail alert">
+        <div className="card-h">
+          <div className="grow" style={{ minWidth: 0 }}>
+            <b>חדשות הבוקר</b>
+            <div className="tiny faint">המהדורה לא נטענה — בדוק חיבור לאינטרנט.</div>
+          </div>
+          <button
+            className="btn ghost sm"
+            onClick={() => {
+              setLoadErr(false)
+              setReload((n) => n + 1)
+            }}
+          >
+            נסה שוב
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   // נסגר להיום — אבל לא נעלם. ה-✕ יושב בפינה של כרטיס, בטלפון הוא נלחץ בטעות,
   // וה-flag יושב ב-localStorage של המכשיר הזה: בלי שורת חזרה הבוקר הזה אבד
