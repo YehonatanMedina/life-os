@@ -73,6 +73,14 @@ describe('parseReply — הטקסט והבלוק', () => {
     expect(F.visibleText('שלום\n<<<at')).toBe('שלום')
     expect(F.visibleText('שלום\n<<<atlas\n{"commands":[]}\n>>>')).toBe('שלום')
   })
+  it('תג פנימי שדלף לטקסט יורד מהתצוגה, גם כשהוא עוד לא נסגר', () => {
+    expect(F.stripInternalTags('<thinking>לחשוב</thinking>התשובה')).toBe('התשובה')
+    expect(F.stripInternalTags('התשובה <thinking>חצי')).toBe('התשובה ')
+    expect(F.visibleText('שלום <thinking>חצי')).toBe('שלום')
+    expect(F.parseReply('<thinking>רגע</thinking>בוצע.').text).toBe('בוצע.')
+    // סוגריים משולשים של הבלוק הם לא תג — הם לא נפגעים
+    expect(F.stripInternalTags('שלום <<<atlas')).toBe('שלום <<<atlas')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -129,7 +137,7 @@ describe('buildRequest — מה נשלח למודל', () => {
         { from: 'user', text: 'תודה' },
       ],
     })
-    expect(req.model).toBe('claude-sonnet-5')
+    expect(req.model).toBe('claude-opus-5')
     expect(req.stream).toBe(true)
     // Sonnet 5 חושב כברירת מחדל והחשיבה נספרת ב-max_tokens — במסלול שאמור
     // לענות תוך שניות זה היה חותך תשובות
@@ -276,8 +284,8 @@ describe('חשבון החודש', () => {
     F.addUsage({ input: 1000, cacheWrite: 0, cacheRead: 5000, output: 100 })
     const u = F.readUsage()
     expect(u).toMatchObject({ month: '2026-09', calls: 2, input: 2000, cacheWrite: 2000, cacheRead: 8000, output: 500 })
-    // 2000*3 + 2000*3.75 + 8000*0.3 + 500*15 = 6000+7500+2400+7500 = 23400 / 1e6
-    expect(F.usageCostUSD(u)).toBeCloseTo(0.0234, 6)
+    // 2000*5 + 2000*6.25 + 8000*0.5 + 500*25 = 10000+12500+4000+12500 = 39000 / 1e6
+    expect(F.usageCostUSD(u)).toBeCloseTo(0.039, 6)
     localStorage.setItem('life-os-atlas-usage', JSON.stringify({ ...u, month: '2026-08' }))
     expect(F.readUsage().calls).toBe(0)
   })

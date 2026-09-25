@@ -48,7 +48,7 @@ describe('describeApiError', () => {
 
 describe('מדדי הבקשה', () => {
   const body = {
-    model: 'claude-sonnet-5',
+    model: 'claude-opus-5',
     max_tokens: 1400,
     stream: true,
     system: [
@@ -65,7 +65,7 @@ describe('מדדי הבקשה', () => {
 
   it('אורכים בלבד — בלי תוכן, כדי שאפשר יהיה לשתף אבחון', () => {
     const m = requestMetrics(body)
-    expect(m).toMatchObject({ model: 'claude-sonnet-5', maxTokens: 1400, stream: true, cacheBlocks: 2 })
+    expect(m).toMatchObject({ model: 'claude-opus-5', maxTokens: 1400, stream: true, cacheBlocks: 2 })
     expect(m.systemChars).toEqual([6, 11, 4])
     expect(m.messages).toEqual([
       { role: 'user', chars: 4 },
@@ -101,13 +101,13 @@ describe('רישום התקלה', () => {
 
   it('failureFrom: קורא את הגוף, רושם סטטוס, סיבה, request-id ומדדים, ומחזיר הודעה בעברית', async () => {
     const res = new Response(TOO_LONG, { status: 400, headers: { 'request-id': 'req_abc123' } })
-    const body = { model: 'claude-sonnet-5', max_tokens: 1400, stream: true, system: [{ type: 'text', text: 'ארוך מאוד' }], messages: [{ role: 'user', content: 'שלום' }] }
+    const body = { model: 'claude-opus-5', max_tokens: 1400, stream: true, system: [{ type: 'text', text: 'ארוך מאוד' }], messages: [{ role: 'user', content: 'שלום' }] }
     const shown = await failureFrom(res, body, 'test')
     expect(shown).toContain('prompt is too long')
     const f = readApiFailure()!
     expect(f).toMatchObject({ status: 400, where: 'test', errType: 'invalid_request_error', requestId: 'req_abc123' })
     expect(f.message).toContain('214057')
-    expect(f.req).toMatchObject({ model: 'claude-sonnet-5', totalChars: 13 })
+    expect(f.req).toMatchObject({ model: 'claude-opus-5', totalChars: 13 })
     expect(f.at).toBeGreaterThan(Date.now() - 5_000)
   })
 
@@ -127,7 +127,7 @@ describe('רישום התקלה', () => {
 
 describe('גרסאות הבקשה', () => {
   const full = {
-    model: 'claude-sonnet-5',
+    model: 'claude-opus-5',
     max_tokens: 1400,
     stream: true,
     thinking: { type: 'disabled' },
@@ -156,7 +156,7 @@ describe('גרסאות הבקשה', () => {
     expect(b.system.map((x: any) => x.text)).toEqual(['פרסונה', 'הקשר'])
     expect(b.system.every((x: any) => !x.cache_control)).toBe(true)
     expect(b.messages).toEqual([{ role: 'user', content: 'ההודעה עכשיו' }])
-    expect(b.model).toBe('claude-sonnet-5')
+    expect(b.model).toBe('claude-opus-5')
     expect(b.stream).toBe(true)
   })
 

@@ -36,7 +36,7 @@ test('הודעה רגילה נענית תוך שניות, בזרימה, בלי I
 
   // מה נשלח ל-Claude: המודל, המפתח מההגדרות, 3 בלוקי מערכת (2 במטמון), הזרמה
   const req = claude.last('A')!
-  expect(req.model).toBe('claude-sonnet-5')
+  expect(req.model).toBe('claude-opus-5')
   expect(req.stream).toBe(true)
   expect(req.headers['x-api-key']).toBe(TEST_API_KEY)
   expect(req.headers['anthropic-dangerous-direct-browser-access']).toBe('true')
@@ -291,7 +291,7 @@ test('דחייה של הבקשה המלאה: גרסה רזה עונה בכל ז�
   await expect(card).toContainText('שגיאה 400')
   await expect(card).toContainText('invalid_request_error')
   await expect(card).toContainText('prompt is too long')
-  await expect(card).toContainText('claude-sonnet-5')
+  await expect(card).toContainText('claude-opus-5')
 
   // המחסן: התקלה וההתאוששות, בלי טקסט של השיחה
   await gotoTab(A.page, 'היום')
@@ -311,7 +311,7 @@ test('דחייה של הבקשה המלאה: גרסה רזה עונה בכל ז�
   expect(pulse.fastApiFailure).toMatchObject({ where: 'send', variant: 'full', errType: 'invalid_request_error' })
   expect(pulse.fastApiFailure.requestId).toMatch(/^req_/)
   expect(pulse.fastApiFailure.message).toContain('214057')
-  expect(pulse.fastApiFailure.req).toMatchObject({ model: 'claude-sonnet-5', stream: true })
+  expect(pulse.fastApiFailure.req).toMatchObject({ model: 'claude-opus-5', stream: true })
   expect(pulse.fastApiFailure.req.totalChars).toBeGreaterThan(100)
   expect(pulse.fastRecovery).toMatchObject({ variant: 'lean', afterStatus: 400 })
   expect(JSON.stringify(pulse.fastApiFailure)).not.toContain('מה המצב היום')

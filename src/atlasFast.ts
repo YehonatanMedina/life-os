@@ -1,11 +1,11 @@
 // ---------------------------------------------------------------------------
 // אטלס — המסלול המהיר.
 //
-// שיחה רגילה לא צריכה מכונה בענן, שכפול מאגרים ואופוס: האפליקציה כבר מחזיקה
-// את כל המצב, אז היא שולחת ישירות ל-API של Claude (Sonnet) את הפרסונה של
-// אטלס, את הזיכרון שלו, הקשר דחוס של המערכת ואת השיחה האחרונה — ומקבלת
-// תשובה תוך שניות, בזרימה. אותו פורמט פקודות כמו במסלול העמוק, ולכן "תזיז
-// את הריצה למחר" מתבצע מיד באפליקציה, עם ביטול.
+// שיחה רגילה לא צריכה מכונה בענן ושכפול מאגרים: האפליקציה כבר מחזיקה את כל
+// המצב, אז היא שולחת ישירות ל-API של Claude את הפרסונה של אטלס, את הזיכרון
+// שלו, הקשר דחוס של המערכת ואת השיחה האחרונה — ומקבלת תשובה תוך שניות,
+// בזרימה. אותו פורמט פקודות כמו במסלול העמוק, ולכן "תזיז את הריצה למחר"
+// מתבצע מיד באפליקציה, עם ביטול.
 //
 // מה שדורש קוד או תכנון ארוך המודל לא מנסה לעשות: הוא מחזיר `escalate`,
 // והאפליקציה מעבירה את ההודעה לאטלס העמוק (Issue → שגרה בענן).
@@ -17,7 +17,19 @@ import { alive, dayCapacity, dayLog, eventsOn, sessionsOn, store, trackById, wee
 import { addDays, hhmm, logicalDate, today, weekStart } from './dates'
 import type { AppState } from './types'
 
-export const FAST_MODEL = 'claude-sonnet-5'
+/**
+ * המודל של המסלול המהיר. היה Sonnet 5 עד 25.9.2026; הוחלף לאופוס 5 כי איכות
+ * השיפוט — מה לבצע לבד, מה לשאול, מה להעביר לעמוק — היא מה שהמסלול הזה נמדד
+ * בו, והיא לא הספיקה. המחיר: פי 2.5 לטוקן (ראו PRICE_USD_PER_M), ומכאן
+ * שהמטמון על הפרסונה ועל הזיכרון חשוב עוד יותר.
+ */
+export const FAST_MODEL = 'claude-opus-5'
+/**
+ * עומק החשיבה של אופוס 5. גבוה הוא ברירת המחדל שלו ממילא, אבל כאן הוא כתוב
+ * במפורש: חשיבה כבויה מותרת רק בעומק גבוה או נמוך ממנו, ובלי הצמד הזה בקוד
+ * שינוי ברירת מחדל עתידית היה מחזיר 400 על כל הודעה.
+ */
+const EFFORT = 'high'
 const API_URL = 'https://api.anthropic.com/v1/messages'
 const USAGE_KEY = 'life-os-atlas-usage'
 /** כמה הודעות מהשיחה נכנסות להקשר של המודל */
@@ -86,8 +98,8 @@ export function fastReady(): boolean {
 }
 
 // -- עלות ----------------------------------------------------------------------
-/** מחירי Sonnet 5 לדולר למיליון טוקנים — רק להערכה על המסך */
-export const PRICE_USD_PER_M = { input: 3, cacheWrite: 3.75, cacheRead: 0.3, output: 15 }
+/** מחירי אופוס 5 לדולר למיליון טוקנים — רק להערכה על המסך */
+export const PRICE_USD_PER_M = { input: 5, cacheWrite: 6.25, cacheRead: 0.5, output: 25 }
 export const USD_TO_ILS = 3.7
 
 export function readUsage(): Usage {
@@ -183,7 +195,7 @@ export const PERSONA = `אתה אטלס — מנהל החיים של המשתמ�
 <<<atlas
 {"commands":[…], "escalate": "סיבה" | null, "memory": "שורה" | null}
 >>>
-בלי הבלוק כשאין מה לשים בו. בלי טקסט אחרי הבלוק.
+בלי הבלוק כשאין מה לשים בו. בלי טקסט אחרי הבלוק. אל תכלול בתשובה תגי XML פנימיים או מערכתיים.
 
 **פעולה קיימת רק אם היא בבלוק.** הטקסט לא משנה כלום במערכת. אמרת "בוצע", "עדכנתי", "הוספתי", "החלפתי" או "הורדתי" — הפקודה חייבת להופיע בבלוק של אותה תשובה. אין "אעדכן עכשיו" בלי פקודה. אל תכתוב בטקסט רשימה של פעולות שביצעת, ובפרט לא שורה בסגנון [פעולות שבוצעו: …] — האפליקציה מציגה בעצמה את מה שבוצע, מתוך הבלוק, עם כפתור ביטול. בתורות הקודמות בשיחה אתה רואה את הבלוקים שלך בדיוק בצורה הזו: זה מה שבאמת בוצע.`
 
@@ -348,9 +360,10 @@ export function buildRequest(input: { text: string; thread: ThreadTurn[]; memory
   return {
     model: FAST_MODEL,
     max_tokens: MAX_TOKENS,
-    // Sonnet 5 חושב כברירת מחדל, וטוקני החשיבה נספרים בתוך max_tokens — כלומר
+    output_config: { effort: EFFORT },
+    // המודל חושב כברירת מחדל, וטוקני החשיבה נספרים בתוך max_tokens — כלומר
     // מעבר חשיבה ארוך היה יכול לאכול את התקרה ולהחזיר תשובה חתוכה או ריקה.
-    // המסלול הזה קיים כדי לענות תוך שניות; מה שדורש חשיבה עוברת לעמוק (Opus).
+    // המסלול הזה קיים כדי לענות תוך שניות; מה שדורש חשיבה עובר לעמוק.
     thinking: { type: 'disabled' },
     stream: input.stream !== false,
     system,
@@ -368,6 +381,32 @@ export function stripFakeLog(text: string): string {
 }
 
 /**
+ * תגים פנימיים שדלפו לתשובה. מודל שחושב כברירת מחדל ונשלח עם חשיבה כבויה
+ * עלול לכתוב תג פנימי לתוך הטקסט הגלוי — נדיר, אבל על המסך זה נראה שבור.
+ * הפרסונה מבקשת לא לעשות את זה; זו הרשת מתחתיה. תג פתוח בלי סגירה (מה
+ * שקורה תוך כדי זרימה) חותך משם והלאה, כמו הבלוק.
+ */
+const TAG_NAME = '(?:thinking|reasoning|antml:[a-z_-]+)'
+/** בלוק שלם עם פתיחה וסגירה — יורד על התוכן שבתוכו */
+const INTERNAL_BLOCK = new RegExp(`<(${TAG_NAME})\\b[^>]*>[\\s\\S]*?<\\/\\1>`, 'gi')
+/** פתיחה בלי סגירה — הטקסט שאחריה עוד בתוך התג, וחותכים משם */
+const INTERNAL_OPEN = new RegExp(`<${TAG_NAME}\\b[^>]*>`, 'i')
+/** סגירה יתומה — יורדת לבדה */
+const INTERNAL_CLOSE = new RegExp(`<\\/${TAG_NAME}\\b[^>]*>`, 'gi')
+/** תג שעוד לא הסתיים — מה שקורה באמצע הזרימה */
+const INTERNAL_PARTIAL = /<\/?(?:thinking|reasoning|antml:)[^>]*$/i
+export function stripInternalTags(text: string): string {
+  let out = (text || '').replace(INTERNAL_BLOCK, '')
+  const open = out.search(INTERNAL_OPEN)
+  if (open >= 0) out = out.slice(0, open)
+  out = out.replace(INTERNAL_CLOSE, '')
+  const partial = out.search(INTERNAL_PARTIAL)
+  return partial >= 0 ? out.slice(0, partial) : out
+}
+/** הניקוי המלא של טקסט להצגה: תגים פנימיים ואז שורת יומן מזויפת */
+const clean = (text: string) => stripFakeLog(stripInternalTags(text))
+
+/**
  * הטקסט מצהיר על שינוי במערכת? משמש לשומר שמוודא שהצהרה כזו הגיעה עם פקודה.
  * מכוון לניסוח של ביצוע ("בוצע", "עדכנתי", "הורדתי את X"), לא לשיחה על העבר.
  */
@@ -379,8 +418,8 @@ export function claimsAction(text: string): boolean {
 /** מפרק את הטקסט שהמודל החזיר: תשובה + בלוק <<<atlas … >>> אופציונלי */
 export function parseReply(raw: string, now: number = Date.now()): Omit<FastReply, 'usage' | 'model'> {
   const marker = raw.indexOf('<<<atlas')
-  if (marker < 0) return { text: stripFakeLog(raw), commands: [] }
-  const text = stripFakeLog(raw.slice(0, marker))
+  if (marker < 0) return { text: clean(raw), commands: [] }
+  const text = clean(raw.slice(0, marker))
   let json = raw.slice(marker + '<<<atlas'.length)
   const end = json.indexOf('>>>')
   if (end >= 0) json = json.slice(0, end)
@@ -407,8 +446,8 @@ export function parseReply(raw: string, now: number = Date.now()): Omit<FastRepl
 export function visibleText(partial: string): string {
   const i = partial.indexOf('<<<')
   const shown = (i >= 0 ? partial.slice(0, i) : partial).replace(/\s+$/, '')
-  // שורת יומן מזויפת לא מהבהבת על המסך גם תוך כדי כתיבה
-  return stripFakeLog(shown)
+  // שורת יומן מזויפת ותג פנימי שדלף לא מהבהבים על המסך גם תוך כדי כתיבה
+  return clean(shown)
 }
 
 /** הסיבה שה-API החזיר, כפי שהוא ניסח אותה */
@@ -565,9 +604,12 @@ export function variantBody(body: any, v: Variant): any {
   // סדר הבלוקים: 0 פרסונה, 1 זיכרון, 2 הקשר
   const keep = v === 'lean' ? [plain[0], ...plain.slice(2)] : [plain[0]]
   const out = { ...body, system: keep.filter(Boolean), messages: lastUser }
-  // בגרסה החשופה יורדת גם הגדרת החשיבה — אם מודל עתידי ידחה אותה, הגרסה הזאת
-  // תעבור, והרישום יגיד בדיוק מה היה האשם.
-  if (v === 'bare') delete out.thinking
+  // בגרסה החשופה יורדות גם הגדרת החשיבה ועומק החשיבה — אם מודל עתידי ידחה
+  // אחת מהן, הגרסה הזאת תעבור, והרישום יגיד בדיוק מה היה האשם.
+  if (v === 'bare') {
+    delete out.thinking
+    delete out.output_config
+  }
   return out
 }
 

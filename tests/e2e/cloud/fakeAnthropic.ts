@@ -68,7 +68,7 @@ export class FakeAnthropic {
     const ev = (type: string, data: Record<string, unknown>) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`
     let out = ev('message_start', {
       message: {
-        id: 'msg_fake', type: 'message', role: 'assistant', model: 'claude-sonnet-5', content: [],
+        id: 'msg_fake', type: 'message', role: 'assistant', model: 'claude-opus-5', content: [],
         usage: { input_tokens: u.input ?? 900, cache_creation_input_tokens: u.cacheWrite ?? 0, cache_read_input_tokens: u.cacheRead ?? 2200, output_tokens: 1 },
       },
     })

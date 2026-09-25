@@ -461,7 +461,7 @@ export interface Settings {
    */
   aiKey?: string
   /**
-   * מפתח API של Claude למסלול המהיר של אטלס (Sonnet ישירות מהדפדפן). יושב
+   * מפתח API של Claude למסלול המהיר של אטלס (ישירות מהדפדפן). יושב
    * בהגדרות המסונכרנות — מוצפן במחסן, לעולם לא בקוד.
    */
   apiKey?: string
