@@ -205,11 +205,20 @@ test.describe('שימוש אמיתי — בוקר', () => {
     s = await readState(page)
     expect(s.news[0].note).toBe('פחות פוליטיקה, יותר מתמטיקה')
     expect(s.news[0].votes['tech-1'].v).toBe(1)
-    // ✕ מסמן שנקרא להיום — הכרטיס נעלם, ואחרי רענון נשאר סגור
+    // ✕ מסמן שנקרא להיום — הכרטיס נסגר, ואחרי רענון נשאר סגור; במקומו שורה שמחזירה
     await news.getByRole('button', { name: 'סמן כנקרא וסגור להיום' }).click()
     await expect(news).toHaveCount(0)
+    const newsBack = page.locator('.card', { hasText: 'סומנו כנקראו היום' })
+    await expect(newsBack).toBeVisible()
     await page.reload()
     await expect(page.locator('.bottomnav button')).toHaveCount(6)
+    await expect(page.locator('.card', { hasText: 'חדשות הבוקר ·' })).toHaveCount(0)
+    // "פתיחה" מחזירה את המהדורה — סגירה בטעות לא מאבדת את הבוקר
+    await page.locator('.card', { hasText: 'סומנו כנקראו היום' }).getByRole('button', { name: 'פתיחה' }).click()
+    await expect(page.locator('.card', { hasText: 'חדשות הבוקר ·' })).toBeVisible()
+    await page.locator('.card', { hasText: 'חדשות הבוקר ·' })
+      .getByRole('button', { name: 'סמן כנקרא וסגור להיום' })
+      .click()
     await expect(page.locator('.card', { hasText: 'חדשות הבוקר ·' })).toHaveCount(0)
     // המצב שרד את הרענון
     s = await readState(page)

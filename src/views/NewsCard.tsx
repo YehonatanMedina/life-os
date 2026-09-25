@@ -105,7 +105,36 @@ export default function NewsCard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shown?.date])
 
-  if (!ed || dismissed === ed.date) return null
+  if (!ed) return null
+
+  // נסגר להיום — אבל לא נעלם. ה-✕ יושב בפינה של כרטיס, בטלפון הוא נלחץ בטעות,
+  // וה-flag יושב ב-localStorage של המכשיר הזה: בלי שורת חזרה הבוקר הזה אבד
+  // למכשיר בלי דרך להחזיר אותו. השורה דקה בכוונה — היא לא תופסת את המקום
+  // שהכרטיס תפס.
+  if (dismissed === ed.date)
+    return (
+      <div className="card rail alert">
+        <div className="card-h">
+          <div className="grow" style={{ minWidth: 0 }}>
+            <b>חדשות הבוקר</b>
+            <div className="tiny faint">סומנו כנקראו היום</div>
+          </div>
+          <button
+            className="btn ghost sm"
+            onClick={() => {
+              setDismissed('')
+              try {
+                localStorage.removeItem(READ_KEY)
+              } catch {
+                /* ignore */
+              }
+            }}
+          >
+            פתיחה
+          </button>
+        </div>
+      </div>
+    )
 
   // המהדורה המוצגת: של היום, או אחת מהארכיון
   const view = arch ?? ed
