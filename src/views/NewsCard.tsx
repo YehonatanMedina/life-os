@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 
 import { archivedEdition, normalizeEdition, type Edition, type Section, type Story } from '../news'
-import { addDays, niceDate, plural } from '../dates'
+import { addDays, niceDate, plural, today } from '../dates'
 import { useToast, vibrate } from '../ui'
 import { actions, useApp } from '../store'
 import { queueNewsFeedback } from '../cloud'
@@ -238,7 +238,8 @@ export default function NewsCard() {
         <div className="grow" style={{ minWidth: 0 }}>
           <b>{view.title || 'חדשות הבוקר'}</b>
           <div className="tiny faint">
-            {arch ? `${niceDate(view.date)} · ` : ''}
+            {/* מהדורה שאינה של היום — מהמטמון, או קובץ שלא התחדש — אומרת מתי היא */}
+            {arch || view.date !== today() ? `${niceDate(view.date)} · ` : ''}
             {plural(totalStories, 'סיפור אחד', 'סיפורים')}
             {view.minutes ? ` · כ־${view.minutes} דקות` : ''}
           </div>
