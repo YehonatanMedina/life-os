@@ -16,6 +16,58 @@ export function tutorial(query: string): string {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
 }
 
+/**
+ * מילון שם-תרגיל → חיפוש. שמות התרגילים בתוכנית בעברית, והטכניקה
+ * הטובה ביוטיוב היא באנגלית — תרגום ידני של השמות שחוזרים בתוכנית נותן
+ * תוצאות טובות בהרבה מחיפוש של השם העברי. הסדר קובע: הביטוי הספציפי
+ * לפני הכללי, אחרת "שכיבות סמיכה בעמידת ידיים" ייתפס כעמידת ידיים.
+ */
+const EX_SEARCH: Array<[RegExp, string]> = [
+  [/שכיבות סמיכה בעמידת ידיים/, 'wall handstand push up proper form'],
+  [/עמידת ידיים/, 'wall handstand hold proper form'],
+  [/שורש כף יד/, 'wrist and elbow warm up before handstand'],
+  [/סיבובי מפרקים/, 'joint rotation warm up routine'],
+  [/פייק פוש|פייק פושאפ/, 'pike push up proper form'],
+  [/שכיבות סמיכה בשיפוע (יורד|שלילי)/, 'decline push up proper form'],
+  [/שכיבות סמיכה/, 'push up proper form'],
+  [/דחיפות טריצפס/, 'bench dips proper form shoulder safe'],
+  [/חתירת סופרמן/, 'prone superman row back extension proper form'],
+  [/חתירה במשקולות|חתירה חופשית/, 'dumbbell row proper form'],
+  [/קפיצות פוגו/, 'pogo jumps proper form'],
+  [/הרמות עקבים על רגל אחת/, 'single leg calf raise proper form'],
+  [/הרמות עקבים/, 'standing calf raise proper form'],
+  [/גשר ירך על רגל אחת/, 'single leg hip thrust proper form'],
+  [/גשר ירך/, 'barbell hip thrust proper form'],
+  [/הרמות רגליים בתלייה/, 'hanging leg raises proper form'],
+  [/הרמות רגליים/, 'lying leg raises proper form'],
+  [/פייס פול/, 'cable face pull proper form'],
+  [/מכרעים/, 'lunges proper form'],
+  [/מתח/, 'pull ups proper form'],
+  [/מקבילים/, 'dips proper form'],
+  [/משיכת פולי/, 'lat pulldown proper form'],
+]
+
+/**
+ * טקסט החיפוש לתרגיל: מילון קודם, אחריו האנגלית שבתוך השם (הרבה תרגילים
+ * נכתבים "מתח (Pull-ups)"), ורק אם אין — השם העברי כמו שהוא.
+ */
+export function exerciseSearch(name: string): string {
+  const clean = name.trim()
+  for (const [re, query] of EX_SEARCH) if (re.test(clean)) return query
+  const latin = clean.match(/[A-Za-z][A-Za-z-]*/g)
+  if (latin && latin.join(' ').length >= 3) return `${latin.join(' ')} proper form`
+  return `${clean} טכניקה נכונה`
+}
+
+/**
+ * הקישור של "איך עושים את זה" לתרגיל. קישור שנשמר ידנית גובר; בלעדיו
+ * זה חיפוש יוטיוב — כך לכל תרגיל יש קישור, גם לתרגיל שנוסף מחר.
+ */
+export function exerciseTutorial(ex: { name: string; video?: string }): string {
+  const manual = ex.video?.trim()
+  return manual ? manual : tutorial(exerciseSearch(ex.name))
+}
+
 /** תנאי המעבר של שלב, בשפה שאפשר למדוד מול יומן האימונים */
 export interface StageTarget {
   metric: ExMetric

@@ -10,7 +10,7 @@ import {
 import { Confirm, useToast, vibrate } from '../ui'
 import type { Exercise, ExMetric, ID, RunTarget, SetLog, WorkoutDay, WorkoutKind, WorkoutLog } from '../types'
 import { WORKOUT_KIND_LABEL } from '../types'
-import { gradePace, paceText, parsePaceRange } from '../skills'
+import { exerciseTutorial, gradePace, paceText, parsePaceRange } from '../skills'
 
 // ---------------------------------------------------------------------------
 // אימונים — הגיליונות.
@@ -497,17 +497,16 @@ function ExerciseCard({
         </div>
       )}
       {ex.note && <div className="tiny" style={{ color: 'var(--text-dim)', marginTop: 6 }}>{ex.note}</div>}
-      {ex.video && (
-        <a
-          className="btn xs ghost"
-          style={{ marginTop: 8 }}
-          href={ex.video}
-          target="_blank"
-          rel="noreferrer"
-        >
-          איך עושים את זה
-        </a>
-      )}
+      {/* לכל תרגיל יש קישור: השמור ידנית, ואם אין — חיפוש יוטיוב לפי השם */}
+      <a
+        className="btn xs ghost"
+        style={{ marginTop: 8 }}
+        href={exerciseTutorial(ex)}
+        target="_blank"
+        rel="noreferrer"
+      >
+        איך עושים את זה
+      </a>
 
       {last && (
         <div className="row" style={{ marginTop: 8, gap: 6, flexWrap: 'wrap' }}>
@@ -810,7 +809,7 @@ export function ExerciseEditor({ day }: { day: WorkoutDay }) {
                   className="input ltr"
                   style={{ marginBottom: 8 }}
                   value={ex.video ?? ''}
-                  placeholder="קישור לטוטוריאל"
+                  placeholder="קישור לטוטוריאל (ריק = חיפוש יוטיוב לפי השם)"
                   onChange={(e) => actions.patchExercise(day.id, ex.id, { video: e.target.value })}
                 />
                 <input

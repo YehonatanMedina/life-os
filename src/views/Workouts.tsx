@@ -14,7 +14,7 @@ import WeekPlanCard from './WeekPlanCard'
 import CoachCard from './CoachCard'
 import { PlanSheet, ProgressSheet, WorkoutSheet, KIND_EMOJI, setText, targetText } from './Workout'
 import {
-  FOCUS_COUNT, RUN_MILESTONES, focusLadders, isFocusGoal, laddersInOrder,
+  FOCUS_COUNT, RUN_MILESTONES, exerciseTutorial, focusLadders, isFocusGoal, laddersInOrder,
   tutorial,
 } from '../skills'
 import { sessionCapKm } from '../training'
@@ -236,11 +236,9 @@ function TodayCard({ date, onOpen }: { date: string; onOpen: () => void }) {
                   </div>
                 )}
               </div>
-              {ex.video && (
-                <a className="btn xs ghost" href={ex.video} target="_blank" rel="noreferrer">
-                  טוטוריאל
-                </a>
-              )}
+              <a className="btn xs ghost" href={exerciseTutorial(ex)} target="_blank" rel="noreferrer">
+                טוטוריאל
+              </a>
             </div>
           ))}
         </div>
