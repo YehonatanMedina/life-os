@@ -570,6 +570,8 @@ function HabitSheet({ habit, onClose }: { habit: HabitDef | null; onClose: () =>
                     )
                   }}
                 />
+                {/* שלב שהוא חלון בשגרת הערב — השאר מופיעים בצ׳קליסט שלה */}
+                {x.flow && <span className="pill tinted" style={{ ['--c' as any]: 'var(--accent)' }}>חלון</span>}
                 <button
                   className="btn ghost xs"
                   aria-label="מחיקת השלב"

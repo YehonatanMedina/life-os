@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  actions, alive, dayCapacity, dayLog, defaultTrackId, habitPct, hasSpreadRoom, minutesByTrack,
+  actions, alive, dayCapacity, dayLog, defaultTrackId, habitPct, hasSpreadRoom, journalBetween, minutesByTrack,
   minutesOn, plannedOn, spreadTasks, taskWeight, trackById, uid, useApp, weekLog, weekMinutes,
   weekSessions,
 } from '../store'
@@ -51,7 +51,8 @@ function daySubstance(d: DayLog): boolean {
     !!d.workout ||
     !!d.wake ||
     !!d.wakeTime ||
-    !!d.nap
+    !!d.nap ||
+    !!d.journal?.trim()
   )
 }
 
@@ -740,7 +741,7 @@ export function WeeklyFlow({ ws, onClose }: { ws: string; onClose: () => void })
           )}
 
           {step === 2 && (
-            <QuestionsStep answers={answers} setAnswers={setAnswers} score={score} setScore={setScore} />
+            <QuestionsStep ws={ws} answers={answers} setAnswers={setAnswers} score={score} setScore={setScore} />
           )}
 
           {step === 3 && <GoalsStep goals={goals} setGoals={setGoals} st={st} nextWs={nextWs} />}
@@ -785,11 +786,13 @@ export function WeeklyFlow({ ws, onClose }: { ws: string; onClose: () => void })
 
 // ---------------------------------------------------------------------------
 function QuestionsStep({
+  ws,
   answers,
   setAnswers,
   score,
   setScore,
 }: {
+  ws: string
   answers: Record<string, string>
   setAnswers: (f: (a: Record<string, string>) => Record<string, string>) => void
   score: number
@@ -799,12 +802,33 @@ function QuestionsStep({
   const core = REVIEW_QUESTIONS.filter((q) => q.core)
   const extra = REVIEW_QUESTIONS.filter((q) => !q.core)
   const shown = more ? [...core, ...extra] : core
+  const s = useApp()
+  const journal = journalBetween(s, ws, addDays(ws, 6))
 
   return (
     <>
       <p className="small muted" style={{ margin: 0 }}>
         חמש שאלות. תשובה של שורה עדיפה על פסקה שלא נכתבה.
       </p>
+      {/* מה שנכתב בשגרת הערב לאורך השבוע — חומר גלם לתשובות */}
+      {journal.length > 0 && (
+        <details className="card week-journal">
+          <summary>
+            <b>📓 מה כתבת השבוע</b>{' '}
+            <span className="tiny faint">· {plural(journal.length, 'ערב אחד', 'ערבים')}</span>
+          </summary>
+          <div className="list">
+            {journal.map((j) => (
+              <div className="item" key={j.date} style={{ alignItems: 'flex-start' }}>
+                <div className="txt">
+                  <div className="sub2">{niceDate(j.date)}</div>
+                  <div className="small" style={{ whiteSpace: 'pre-wrap' }} dir="auto">{j.text}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
       {shown.map((q, i) => (
         <div className="qcard" key={q.id}>
           <div className="q">

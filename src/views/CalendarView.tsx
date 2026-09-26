@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { actions, alive, defaultTrackId, eventsOn, tasksDueOn, trackById, useApp } from '../store'
+import { actions, alive, dayLog, defaultTrackId, eventsOn, tasksDueOn, trackById, useApp } from '../store'
 import {
   HE_DAYS_SHORT, addDays, addMonths, diffDays, iso, isSameMonth, minutesToTime, monthGrid,
   monthLabel, niceDate, parseISO, plural, shortDate, timeToMinutes, today as todayISO, weekDates,
@@ -239,14 +239,17 @@ type Drag = {
   moved: boolean
 }
 
-function HourGrid({
+export function HourGrid({
   dates,
   onOpen,
   onNew,
+  scrollToMin,
 }: {
   dates: string[]
   onOpen: (e: CalEvent) => void
   onNew: (date: string, start: string) => void
+  /** לאן לגלול בפתיחה (דקות מחצות). ברירת המחדל — השעה הנוכחית. */
+  scrollToMin?: number
 }) {
   const s = useApp()
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -288,7 +291,7 @@ function HourGrid({
   useLayoutEffect(() => {
     const el = bodyRef.current
     if (!el) return
-    const y = ((nowMin - h0 * 60) / 60) * HOUR_PX - 120
+    const y = (((scrollToMin ?? nowMin) - h0 * 60) / 60) * HOUR_PX - 120
     el.scrollTop = Math.max(0, y)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -631,6 +634,7 @@ function DayList({
   const evs = eventsOn(s, date).sort(
     (a, b) => Number(b.allDay) - Number(a.allDay) || (a.start ?? '').localeCompare(b.start ?? ''),
   )
+  const journal = dayLog(s, date).journal?.trim()
   // כולל מה שכבר הושלם — אחרת השורה נעלמת ברגע הסימון והביטול נראה כמו קסם
   const tasks = alive(s.tasks)
     .filter((t) => t.due === date)
@@ -650,8 +654,15 @@ function DayList({
         </div>
       </div>
       <BulkDates open={bulk} onClose={() => setBulk(false)} defaultKind="birthday" />
+      {/* מה שנכתב על היום הזה בשגרת הערב */}
+      {journal && (
+        <div className="day-journal">
+          <div className="tiny faint" style={{ fontWeight: 700, marginBottom: 4 }}>📓 מה כתבתי על היום</div>
+          <div className="small" style={{ whiteSpace: 'pre-wrap' }} dir="auto">{journal}</div>
+        </div>
+      )}
       <div className="list">
-        {evs.length === 0 && tasks.length === 0 && <div className="empty">אין כלום ביום הזה.</div>}
+        {evs.length === 0 && tasks.length === 0 && !journal && <div className="empty">אין כלום ביום הזה.</div>}
         {evs.map((e) => {
           const col = e.trackId ? trackById(s, e.trackId)?.color ?? kindColor(e.kind) : kindColor(e.kind)
           return (
@@ -711,10 +722,13 @@ export function EventSheet({
   ev,
   isNew,
   onClose,
+  onSaved,
 }: {
   ev: CalEvent | null
   isNew?: boolean
   onClose: () => void
+  /** אחרי שמירה מוצלחת — למשל שיבוץ משימה ביומן של מחר */
+  onSaved?: (e: CalEvent) => void
 }) {
   const s = useApp()
   const toast = useToast()
@@ -769,6 +783,7 @@ export function EventSheet({
     if (isNew) actions.addEvent({ ...draft, title: draft.title.trim() })
     else actions.patchEvent(draft.id, { ...draft, title: draft.title.trim() })
     toast(isNew ? 'האירוע נוסף' : 'נשמר')
+    onSaved?.({ ...draft, title: draft.title.trim() })
     onClose()
   }
 

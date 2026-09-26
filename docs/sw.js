@@ -47,19 +47,25 @@ self.addEventListener('push', (e) => {
       dir: 'rtl',
       lang: 'he',
       tag: data.tag || undefined,
-      data: { url: './' },
+      // התראה יכולה לבקש מסך מסוים — שגרת הערב נפתחת ישר מההתראה שלה
+      data: { url: typeof data.url === 'string' && data.url.startsWith('./') ? data.url : './' },
     }),
   )
 })
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close()
+  const url = (e.notification.data && e.notification.data.url) || './'
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {
-        if ('focus' in c) return c.focus()
+        if ('focus' in c) {
+          // האפליקציה כבר פתוחה — היא פותחת את המסך בעצמה, בלי טעינה מחדש
+          if (url !== './') c.postMessage({ type: 'open', url })
+          return c.focus()
+        }
       }
-      return clients.openWindow('./')
+      return clients.openWindow(url)
     }),
   )
 })

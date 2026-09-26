@@ -1046,6 +1046,14 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
       if (!prev) throw new Error('habit not found')
       const patch = habitFields(c.patch, c.habitId)
       if (!Object.keys(patch).length) throw new Error('patchHabit: nothing valid')
+      // אטלס שולח את השלבים כטקסט. שלב שכבר היה (לפי מזהה או טקסט) שומר את המזהה
+      // שלו — הסימונים של היום נשארים — ואת החלון שלו בשגרת הערב
+      if (patch.steps) {
+        patch.steps = (patch.steps as HabitStep[]).map((st) => {
+          const old = prev.steps?.find((x) => x.id === st.id || x.text.trim() === st.text.trim())
+          return old ? { ...st, id: old.id, ...(old.flow ? { flow: old.flow } : {}) } : st
+        })
+      }
       actions.upsertHabit({ ...prev, ...patch, updatedAt: Date.now() } as HabitDef)
       return { kind: 'habit', id: c.habitId, prev, patch }
     }

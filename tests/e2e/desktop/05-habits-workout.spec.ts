@@ -59,19 +59,20 @@ test.describe('הרגלים ושגרות', () => {
     await expect(habitsCard(app).locator('.item', { hasText: 'שגרת בוקר' })).toContainText('4/4 שלבים')
   })
 
-  test('השלב "לארגן את מחר" פותח תכנון מחר; המשימה נוחתת על מחר ביומן', async ({ app }) => {
+  test('השלב "לבנות את מחר" פותח את שגרת הערב בחלון של מחר; המשימה נוחתת על מחר ביומן', async ({ app }) => {
     const card = habitsCard(app)
     await card.locator('.item', { hasText: 'שגרת ערב' }).getByRole('button', { name: /שגרת ערב/ }).click()
-    const planStep = card.locator('.item', { hasText: 'לארגן את מחר' })
+    const planStep = card.locator('.item', { hasText: 'לבנות את מחר' })
     await planStep.getByRole('button', { name: /פתח$/ }).click()
-    const sh = app.getByRole('dialog', { name: 'תכנון מחר' })
+    const sh = app.getByRole('dialog', { name: 'שגרת ערב' })
     await expect(sh).toBeVisible()
+    await expect(sh).toContainText('בונים את מחר')
     await expect(sh).toContainText('יום שבת, 12 בספטמבר')
-    const inp = sh.getByPlaceholder('מה חייב לקרות מחר?')
+    const inp = sh.getByPlaceholder('+ משימה חדשה למחר…')
     await inp.fill('לקרוא מאמר')
     await inp.press('Enter')
-    await expect(sh.locator('.list .item', { hasText: 'לקרוא מאמר' })).toBeVisible()
-    await sh.getByRole('button', { name: /סגור/ }).click()
+    await expect(sh.locator('.card', { hasText: 'המשימות של מחר' }).locator('.item', { hasText: 'לקרוא מאמר' })).toBeVisible()
+    await sh.getByRole('button', { name: 'סגירה' }).click()
     // לא במסך היום
     await expect(app.locator('.card', { hasText: 'המשימות של היום' }).locator('.item', { hasText: 'לקרוא מאמר' })).toHaveCount(0)
     const st = await readState(app)

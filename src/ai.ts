@@ -10,7 +10,7 @@
 //   pulse.json          — דופק: מה קורה עכשיו, למנגנון התזכורות
 //   docs/insights/latest.json — הניתוח השבועי שחוזר, מוצפן באותו מפתח
 // ---------------------------------------------------------------------------
-import { alive, dayCapacity, dayLog, eventsOn, plannedOn, sessionsOn, store, trackById, weekLog } from './store'
+import { alive, dayCapacity, dayLog, eventsOn, journalBetween, plannedOn, sessionsOn, store, trackById, weekLog } from './store'
 import { TRAINING_DOCTRINE } from './training'
 import { nightly } from './adapt'
 import { addDays, logicalDate, today, weekStart } from './dates'
@@ -61,6 +61,8 @@ export function buildWeekDigest(s: AppState) {
       missedWeeklyItems: st.missedWeekly,
       goals: (wl.goals ?? []).map((g) => ({ text: g.text, done: !!g.done })),
       review: wl.review ? { score: wl.review.score, answers: wl.review.answers } : undefined,
+      // מה שנכתב בשגרת הערב — איך הוא עצמו תיאר כל יום
+      journal: journalBetween(s, ws, addDays(ws, 6)),
     }
   })
 
@@ -169,6 +171,8 @@ export function buildAtlasContext(s: AppState) {
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((d) => ({
         date: d.date, sleep: d.sleep, wake: d.wake, workout: d.workout,
+        journal: d.journal?.trim() || undefined,
+        nightDone: d.nightAt ? true : undefined,
         habitsDone: Object.entries(d.habits ?? {}).filter(([, v]) => v).map(([k]) => alive(s.habits).find((h) => h.id === k)?.name ?? k),
       })),
     weeks: alive(s.weeks)
@@ -246,7 +250,7 @@ function recentChanges(s: AppState, hours = 48) {
     const parts = [w.km ? `${w.km} ק״מ` : '', w.minutes ? `${w.minutes} דק׳` : '', done ? `${done} סטים` : '', w.note ?? '']
     add('workout', w, `${w.date} · ${w.title}`, parts.filter(Boolean).join(' · '))
   }
-  for (const d of alive(s.days)) add('day', d, d.date, [d.wake, d.sleep, d.workout].filter(Boolean).join(' · '))
+  for (const d of alive(s.days)) add('day', d, d.date, [d.wake, d.sleep, d.workout, d.journal?.trim() ? 'נכתב ביומן' : ''].filter(Boolean).join(' · '))
   for (const w of alive(s.weeks)) add('week', w, w.weekStart, w.review ? 'סקירה הוגשה' : 'שבוע')
   for (const k of alive(s.skills ?? [])) add('skill', k, k.id, k.stageId)
   for (const n of (s.news ?? []).filter((x) => !x.deleted)) add('news', n, n.date, n.note ? 'הערה על המהדורה' : 'דירוגים')

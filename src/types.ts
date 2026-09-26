@@ -149,6 +149,14 @@ export interface DayLog extends Rec {
   workout?: 'run' | 'strength' | 'other'
   /** נבחר Power Nap אחרי קימה מאוחרת */
   nap?: boolean
+  /**
+   * מה שכתבתי על היום הזה בשגרת הערב — טקסט חופשי: מה עשיתי, איך הרגשתי,
+   * מה חשבתי. חותמת משלו, כדי שסימון הרגל במכשיר אחר לא ידרוס פסקה שנכתבה כאן.
+   */
+  journal?: string
+  journalAt?: number
+  /** מתי שגרת הערב נסגרה ב"לילה טוב" */
+  nightAt?: number
 }
 
 export interface WeekLog extends Rec {
@@ -212,6 +220,11 @@ export interface Review {
 export interface HabitStep {
   id: ID
   text: string
+  /**
+   * שלב שהוא חלון בשגרת הערב ולא סתם צ׳ק: כתיבה על היום, בניית מחר, או
+   * הקריאה שסוגרת את הלילה. שלב בלי flow הוא פריט בצ׳קליסט (לסדר חדר…).
+   */
+  flow?: 'journal' | 'plan' | 'read'
 }
 
 export interface HabitDef extends Rec {
