@@ -161,7 +161,8 @@ export const PERSONA = `אתה אטלס — מנהל החיים של המשתמ�
 { "op": "deleteTask", "taskId" }
 { "op": "setWeekGoals", "weekStart", "goals": [ { "text", "trackId"? } ] }
 { "op": "addWorkoutDay", "day": { "dow", "title", "kind": "gym"|"run"|"walk"|"home"|"rest", "focus"?, "target"?, "exercises": [ { "name", "sets"?, "reps"?, "metric": "weight"|"bodyweight"|"time"|"reps", "note"?, "rest"?, "cues"?, "video"? } ] } }
-{ "op": "patchWorkoutDay", "dayId", "patch": { "title"?, "kind"?, "focus"?, "target"? } }
+{ "op": "patchWorkoutDay", "dayId", "patch": { "title"?, "kind"?, "focus"?, "target"?, "warmup"?: ["…"], "cooldown"?: ["…"] } }
+// warmup/cooldown — רשימת מתיחות לפני ואחרי האימון, שורה לכל תנועה. זו רשימה ולא תרגילים: בלי סטים, בלי רישום ביומן. הרשימה מוחלפת כולה.
 // target — היעד של יום ריצה/הליכה: { "km"?, "minutes"?, "pace"? ("6:40-7:10"), "how"? }. זה מה שמוצג במסך האימון.
 { "op": "deleteWorkoutDay", "dayId" }
 { "op": "addExercise", "dayId", "exercise": { "name", "sets"?, "reps"?, "metric", "note"?, "rest"? (שניות), "cues"? (דגשי ביצוע), "video"? (קישור) } }
@@ -287,7 +288,7 @@ export function buildFastContext(s: AppState, now: number = Date.now()) {
       workout: (() => {
         const plan = alive(s.workoutPlan ?? []).find((d) => d.dow === dow)
         const done = (s.workouts ?? []).find((w) => w.date === t && !w.deleted)
-        return plan ? { id: plan.id, title: plan.title, kind: plan.kind, target: plan.target, exercises: plan.exercises.map((e) => e.name), done: !!done?.finishedAt } : null
+        return plan ? { id: plan.id, title: plan.title, kind: plan.kind, target: plan.target, warmup: plan.warmup, cooldown: plan.cooldown, exercises: plan.exercises.map((e) => e.name), done: !!done?.finishedAt } : null
       })(),
     },
     week: {

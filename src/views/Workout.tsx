@@ -66,6 +66,48 @@ function useLockScroll() {
 // ---------------------------------------------------------------------------
 // מסך האימון — רישום, ועריכה באותו מקום
 // ---------------------------------------------------------------------------
+/**
+ * מתיחות פתיחה וסיום — רשימה, לא תרגילים. אין עליה סטים ולא רישום ביומן,
+ * כי מה שנרשם הוא מה שמודדים בו התקדמות. הסימון נשאר בזיכרון הגיליון
+ * בלבד: הוא עוזר לא לאבד את המקום באמצע, ולא מתיימר להיות היסטוריה.
+ */
+function MobilityCard({ title, items, hint }: { title: string; items: string[]; hint: string }) {
+  const [done, setDone] = useState<Record<number, boolean>>({})
+  const list = items.filter((t) => t.trim())
+  if (!list.length) return null
+  return (
+    <div className="card pad">
+      <div className="spread" style={{ alignItems: 'baseline' }}>
+        <div className="section-title">{title}</div>
+        <span className="tiny faint">{hint}</span>
+      </div>
+      <div className="stack" style={{ gap: 2, marginTop: 6 }}>
+        {list.map((t, i) => (
+          <button
+            key={i}
+            className="txt"
+            style={{
+              background: 'none',
+              border: 0,
+              textAlign: 'start',
+              padding: '5px 0',
+              display: 'flex',
+              gap: 8,
+              alignItems: 'baseline',
+              opacity: done[i] ? 0.5 : 1,
+            }}
+            aria-pressed={!!done[i]}
+            onClick={() => setDone((d) => ({ ...d, [i]: !d[i] }))}
+          >
+            <span className="tiny faint">{done[i] ? '✓' : '·'}</span>
+            <span style={{ textDecoration: done[i] ? 'line-through' : undefined }}>{t}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => void }) {
   const s = useApp()
   const toast = useToast()
@@ -187,9 +229,21 @@ export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => v
               {edit ? (
                 <ExerciseEditor day={day} />
               ) : (
-                day.exercises.map((ex) => (
-                  <ExerciseCard key={ex.id} date={date} ex={ex} log={log} onTouch={() => ensure()} />
-                ))
+                <>
+                  <MobilityCard
+                    title="מתיחות פתיחה"
+                    items={day.warmup ?? []}
+                    hint="לפני הסט הראשון"
+                  />
+                  {day.exercises.map((ex) => (
+                    <ExerciseCard key={ex.id} date={date} ex={ex} log={log} onTouch={() => ensure()} />
+                  ))}
+                  <MobilityCard
+                    title="מתיחות סיום"
+                    items={day.cooldown ?? []}
+                    hint="אחרי האימון, בנשימה רגועה"
+                  />
+                </>
               )}
 
               {!edit && day.exercises.length === 0 && day.kind !== 'run' && day.kind !== 'walk' && (
@@ -838,7 +892,29 @@ export function ExerciseEditor({ day }: { day: WorkoutDay }) {
           הוספה
         </button>
       </div>
+
+      <div style={{ padding: '10px 13px 13px', borderTop: '1px solid var(--line-soft)' }}>
+        <MobilityEditor day={day} field="warmup" label="מתיחות פתיחה" />
+        <MobilityEditor day={day} field="cooldown" label="מתיחות סיום" />
+        <div className="tiny faint">שורה לכל מתיחה. הרשימה מוצגת לפני ואחרי התרגילים, ולא נרשמת ביומן.</div>
+      </div>
     </div>
+  )
+}
+
+/** עריכת רשימת מתיחות — שורה לכל תנועה, בלי סטים ובלי רישום */
+function MobilityEditor({ day, field, label }: { day: WorkoutDay; field: 'warmup' | 'cooldown'; label: string }) {
+  return (
+    <label className="field" style={{ marginBottom: 8 }}>
+      <span>{label}</span>
+      <textarea
+        className="textarea"
+        style={{ minHeight: 64 }}
+        value={(day[field] ?? []).join('\n')}
+        placeholder="למשל: סיבובי כתפיים — 30 שניות"
+        onChange={(e) => actions.patchWorkoutDay(day.id, { [field]: e.target.value.split('\n') })}
+      />
+    </label>
   )
 }
 
