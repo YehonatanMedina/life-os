@@ -1179,13 +1179,19 @@ export const actions = {
     actions.patchWorkoutDay(id, { deleted: true })
   },
   /** מוסיף תרגיל בשורה אחת — השאר נערך אחר כך */
-  addExercise(dayId: ID, name: string, partial: Partial<Exercise> = {}): ID {
+  // `index` — איפה התרגיל נכנס ברשימה. הסדר בתוך האימון הוא לא קוסמטיקה:
+  // מיומנות ואחיזה סטטית נעשות טריות ולפני הכוח בזרוע כפופה (`SKILL_ORDER`),
+  // ותרגיל שנדחף תמיד לסוף נעשה עייף או לא נעשה. בלי `index` — בסוף, כמו קודם.
+  addExercise(dayId: ID, name: string, partial: Partial<Exercise> = {}, index?: number): ID {
     const ex: Exercise = { id: uid('ex'), name, sets: 3, reps: '10', metric: 'weight', ...partial }
     store.set((s) => ({
       ...s,
-      workoutPlan: (s.workoutPlan ?? []).map((d) =>
-        d.id === dayId ? { ...d, exercises: [...d.exercises, ex], updatedAt: Date.now() } : d,
-      ),
+      workoutPlan: (s.workoutPlan ?? []).map((d) => {
+        if (d.id !== dayId) return d
+        const list = [...d.exercises]
+        list.splice(index === undefined ? list.length : Math.max(0, Math.min(list.length, index)), 0, ex)
+        return { ...d, exercises: list, updatedAt: Date.now() }
+      }),
     }))
     return ex.id
   },
@@ -1938,28 +1944,39 @@ export function stageProgress(
   s: AppState,
   exIds: ID[] | undefined,
   target: { metric: string; value: number; sets: number; kg?: number } | undefined,
-): { ok: number; need: number; best: number; date?: ISODate; met: boolean } | null {
+): { ok: number; need: number; best: number; date?: ISODate; met: boolean; metTwice: boolean } | null {
   if (!target || !exIds?.length) return null
   const need = Math.max(1, target.sets)
-  let out = { ok: 0, need, best: 0, date: undefined as ISODate | undefined, met: false }
+  // הסט "עומד ביעד" רק אם גם התוספת במשקל מספיקה — 8 חזרות בלי משקל
+  // הן לא 8 חזרות עם 10 ק״ג
+  const value = (v: SetLog) => (target.metric === 'time' ? (v.sec ?? 0) : (v.reps ?? 0))
+  const heavy = (v: SetLog) => (v.kg ?? 0) >= (target.kg ?? 0)
+  const okOf = (sets: SetLog[]) => sets.filter((v) => heavy(v) && value(v) >= target.value).length
+
+  // כל הסשנים של כל התרגילים שמודדים את השלב, מאוחדים לפי תאריך: שני
+  // תרגילים שמודדים את אותה מיומנות באותו יום הם אימון אחד, לא שניים.
+  const byDate = new Map<ISODate, SetLog[]>()
   for (const exId of exIds) {
-    const hist = exerciseHistory(s, exId)
-    if (!hist.length) continue
-    // הסט "עומד ביעד" רק אם גם התוספת במשקל מספיקה — 8 חזרות בלי משקל
-    // הן לא 8 חזרות עם 10 ק״ג
-    const value = (v: SetLog) =>
-      target.metric === 'time' ? (v.sec ?? 0) : (v.reps ?? 0)
-    const heavy = (v: SetLog) => (v.kg ?? 0) >= (target.kg ?? 0)
-    for (const h of hist) {
-      const ok = h.sets.filter((v) => heavy(v) && value(v) >= target.value).length
-      const best = Math.max(0, ...h.sets.filter(heavy).map(value))
-      // האימון האחרון שבו התרגיל בוצע הוא זה שקובע את המצב הנוכחי
-      if (!out.date || h.date >= out.date) out = { ...out, ok, date: h.date }
-      if (best > out.best) out.best = best
+    for (const h of exerciseHistory(s, exId)) {
+      byDate.set(h.date, [...(byDate.get(h.date) ?? []), ...h.sets])
     }
   }
-  out.met = out.ok >= need
-  return out
+  const sessions = [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  const best = Math.max(0, ...sessions.flatMap(([, sets]) => sets.filter(heavy).map(value)))
+  const last = sessions[sessions.length - 1]
+  const prev = sessions[sessions.length - 2]
+  const ok = last ? okOf(last[1]) : 0
+  return {
+    ok,
+    need,
+    best,
+    // האימון האחרון שבו התרגיל בוצע הוא זה שקובע את המצב הנוכחי
+    date: last?.[0],
+    met: ok >= need,
+    // שני אימונים רצופים — זה התנאי למעבר שלב בפועל (`adapt.ts`), ולכן
+    // גם התנאי שמזיז את הסולם. אימון טוב אחד הוא לא שלב חדש.
+    metTwice: ok >= need && !!prev && okOf(prev[1]) >= need,
+  }
 }
 
 /** השלב שאתה בו כרגע (לפי מה שנשמר), עם נפילה לשלב הראשון */
@@ -2030,6 +2047,12 @@ export function skillExIds(s: AppState, lad: SkillLadder): ID[] {
  * את רגל אחת וגם את ה-L-Sit המלא — וקופצים מהשלב השני לחמישי בסשן אחד.
  * לכן מדידה אוטומטית סוגרת **שלב אחד בלבד**: את זה שאתה מתאמן עליו עכשיו.
  * שלב שנסגר בדרך אחרת מסומן ידנית (`done`) או נקבע במפורש (`stageId`).
+ *
+ * **והכלל השני (27.9.2026): שני אימונים, לא אחד.** מעבר שלב הוא שינוי מבני,
+ * ו-`adapt.ts` דורש ממנו תנאי מעבר שנסגר בשני אימונים רצופים. כשהמסך קפץ שלב
+ * על אימון אחד, המסך והמאמן אמרו שני דברים שונים על אותם נתונים — ולכן גם
+ * כאן התנאי הוא `metTwice`. השלב מסומן כ"נסגר" כבר באימון הראשון (`met`),
+ * אבל זז רק אחרי השני.
  */
 export function currentStage(s: AppState, lad: SkillLadder): number {
   const prog = skillOf(s, lad.id)
@@ -2046,7 +2069,7 @@ export function currentStage(s: AppState, lad: SkillLadder): number {
     if (done.has(st.id)) { i++; continue }
     if (auto) break
     const p = stageProgress(s, exIds, st.target)
-    if (!p?.met) break
+    if (!p?.metTwice) break
     auto = true
     i++
   }

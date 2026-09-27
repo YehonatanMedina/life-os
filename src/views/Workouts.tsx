@@ -577,7 +577,7 @@ function StageBlock({
             {p.ok}/{p.need} סטים ביעד
             {p.date ? ` · ${shortDate(p.date)}` : ''}
             {p.best ? ` · הכי טוב: ${p.best}${st.target?.metric === 'time' ? ' שנ׳' : ''}` : ''}
-            {p.met ? ' · עברת — אפשר לשלב הבא' : ''}
+            {p.metTwice ? ' · עברת — אפשר לשלב הבא' : p.met ? ' · נסגר פעם אחת — עוד אימון כזה והשלב זז' : ''}
           </div>
         </>
       )}

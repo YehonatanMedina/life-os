@@ -900,11 +900,13 @@ describe('מיומנויות — זיהוי אוטומטי מהתוכנית', ()
   })
 
   it('השלב מחושב מהיומן כשלא נקבע ידנית, וקביעה ידנית גוברת', async () => {
+    const big = { sets: { 'ex-handstand': [{ sec: 60 }, { sec: 60 }, { sec: 60 }, { sec: 60 }] } }
     S = await freshStore(blankState({
       workoutPlan: plan,
       // 4 סטים של 60 שנ׳ עומדים בתנאי של כמה שלבים בו־זמנית — אבל התרגיל
-      // שבוצע מודד שלב אחד, ולכן מדידה אוטומטית סוגרת אותו ועוצרת
-      workouts: [workout({ date: '2026-09-10', sets: { 'ex-handstand': [{ sec: 60 }, { sec: 60 }, { sec: 60 }, { sec: 60 }] } })],
+      // שבוצע מודד שלב אחד, ולכן מדידה אוטומטית סוגרת אותו ועוצרת.
+      // ושני אימונים, לא אחד: מעבר שלב הוא שינוי מבני.
+      workouts: [workout({ date: '2026-09-03', ...big }), workout({ date: '2026-09-10', ...big })],
     }))
     const lad = SKILL_LADDERS.find((x) => x.id === 'sk-handstand')!
     // סגר את "הבסיס" ועומד ב"טיפוס על הקיר" — ולא קופץ שלושה שלבים קדימה
@@ -913,10 +915,50 @@ describe('מיומנויות — זיהוי אוטומטי מהתוכנית', ()
     expect(lad.stages[S.currentStage(get(), lad)].id).toBe('chest-wall')
   })
 
+  it('אימון בודד שסוגר את התנאי לא מזיז את השלב', async () => {
+    S = await freshStore(blankState({
+      workoutPlan: plan,
+      workouts: [workout({ date: '2026-09-10', sets: { 'ex-handstand': [{ sec: 60 }, { sec: 60 }, { sec: 60 }, { sec: 60 }] } })],
+    }))
+    const lad = SKILL_LADDERS.find((x) => x.id === 'sk-handstand')!
+    expect(lad.stages[S.currentStage(get(), lad)].id).toBe('base')
+    // התנאי כן מסומן כנסגר — זה מה שהמסך מציג, וזה ההבדל בין "עוד לא" ל"תקוע"
+    expect(S.stageProgress(get(), S.skillExIds(get(), lad), lad.stages[0].target))
+      .toMatchObject({ met: true, metTwice: false })
+  })
+
   it('בלי שום רישום — השלב הוא הראשון', async () => {
     S = await freshStore(blankState({ workoutPlan: plan }))
     const lad = SKILL_LADDERS.find((x) => x.id === 'sk-lsit')!
     expect(S.currentStage(get(), lad)).toBe(0)
+  })
+
+  // 27.9.2026 — "דחיפות על כיסא (מקבילים ביתיים)" נתפסו על ידי המילה
+  // "מקבילים" וסגרו את 3×15 של סולם המקבילים. הרגליים על הרצפה נושאות
+  // חלק מהמשקל, ולכן זו מדידה של תרגיל אחר.
+  it('דחיפות על כיסא לא מודדות את סולם המקבילים', async () => {
+    S = await freshStore(blankState({ workoutPlan: [
+      { id: 'wd-x', updatedAt: 1, dow: 0, title: 'בית', kind: 'home' as const, exercises: [
+        { id: 'ex-dips', name: 'מקבילים (Dips)', metric: 'bodyweight' as const },
+        { id: 'ex-sh-dips', name: 'דחיפות על כיסא (מקבילים ביתיים)', metric: 'bodyweight' as const },
+        { id: 'ex-tri', name: 'דחיפות טריצפס על כיסא', metric: 'bodyweight' as const },
+      ] },
+    ] }))
+    const lad = SKILL_LADDERS.find((x) => x.id === 'sk-dip')!
+    expect(S.skillExIds(get(), lad)).toEqual(['ex-dips'])
+  })
+
+  it('תרגיל נכנס למקום שנקבע לו, כי סדר התרגילים הוא חלק מהאימון', async () => {
+    S = await freshStore(blankState({ workoutPlan: [
+      { id: 'wd-y', updatedAt: 1, dow: 0, title: 'בית', kind: 'home' as const, exercises: [
+        { id: 'ex-a', name: 'א', metric: 'reps' as const },
+        { id: 'ex-b', name: 'ב', metric: 'reps' as const },
+      ] },
+    ] }))
+    S.actions.addExercise('wd-y', 'סטטי', { id: 'ex-s', metric: 'time' }, 1)
+    S.actions.addExercise('wd-y', 'אחרון', { id: 'ex-z', metric: 'reps' })
+    const ids = get().workoutPlan!.find((d) => d.id === 'wd-y')!.exercises.map((x) => x.id)
+    expect(ids).toEqual(['ex-a', 'ex-s', 'ex-b', 'ex-z'])
   })
 })
 
@@ -1003,7 +1045,9 @@ describe('ההתקדמות הכוללת', () => {
   it('שלב שנסגר מזיז את המחוון, ותוספת משקל לא', async () => {
     S = await freshStore(blankState({ workoutPlan: plan }))
     const before = S.fitnessProgress(get()).pct
-    // 4×60 שנ׳ בעמידת ידיים סוגרות שלב אחד בסולם של שבעה — זה שבוצע
+    // 4×60 שנ׳ בעמידת ידיים סוגרות שלב אחד בסולם של שבעה — זה שבוצע.
+    // שני אימונים, כי שלב זז רק אחרי תנאי שנסגר פעמיים ברצף.
+    S.actions.patchWorkout('2026-09-03', { sets: { 'ex-handstand': [{ sec: 60 }, { sec: 60 }, { sec: 60 }, { sec: 60 }] } })
     S.actions.patchWorkout('2026-09-10', { sets: { 'ex-handstand': [{ sec: 60 }, { sec: 60 }, { sec: 60 }, { sec: 60 }] } })
     const after = S.fitnessProgress(get())
     expect(after.pct).toBeGreaterThan(before)

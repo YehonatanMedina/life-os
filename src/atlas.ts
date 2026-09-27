@@ -900,7 +900,9 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
       const id = c.exercise?.id || derived('ex', c)
       if (day.exercises.some((x) => x.id === id)) return null
       const { name, ...rest } = strip(c.exercise)
-      actions.addExercise(c.dayId, String(name ?? ''), { metric: 'weight', ...rest, id })
+      // `index` — מיקום ברשימה. תרגיל מיומנות שנוסף לסוף נעשה עייף או לא נעשה.
+      const at = Number.isFinite(Number(c.index)) ? Number(c.index) : undefined
+      actions.addExercise(c.dayId, String(name ?? ''), { metric: 'weight', ...rest, id }, at)
       return { kind: 'exercise', dayId: c.dayId, id, prev: null }
     }
     case 'patchExercise': {

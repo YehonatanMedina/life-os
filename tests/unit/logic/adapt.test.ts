@@ -20,6 +20,7 @@ import {
   noteSignals,
   repRange,
   stageExName,
+  stageExReps,
   tendonLoad,
   nightly,
 } from '../../../src/adapt'
@@ -173,6 +174,43 @@ describe('אחיזה סטטית — המדרגה היא התנוחה', () => {
     for (const st of lad.stages) {
       const name = stageExName(lad, st)
       expect(lad.match.some((m) => name.toLowerCase().includes(m.toLowerCase())), name).toBe(true)
+    }
+  })
+
+  // 27.9.2026 — עמידת ידיים עמדה על reps: "מקסימום זמן", ולכן לא היה מספר
+  // למדוד מולו: 4×45 שניות קיבלו "הטווח (מקסימום זמן) עוד לא נסגר".
+  it('בלי מספר בתוכנית, המדידה היא תנאי המעבר של השלב', () => {
+    const hs = { id: 'ex-handstand', name: 'תרגול עמידת ידיים על הקיר', sets: 4, reps: 'מקסימום זמן', metric: 'time' as const }
+    const four: Record<string, SetLog[]> = { 'ex-handstand': [{ sec: 45 }, { sec: 45 }, { sec: 45 }, { sec: 45 }] }
+    const s = state([day({ exercises: [hs] })], [log('2026-09-15', four), log(TODAY, four)])
+    s.skills = [{ id: 'sk-handstand', updatedAt: 1, stageId: 'chest-wall' }]
+    const c = nightly(s, TODAY).calls[0]
+    expect(c.verdict).toBe('advance')
+    expect(c.skill).toEqual({ id: 'sk-handstand', stageId: 'shoulder-taps' })
+    // והמדידה עוברת שלב יחד עם התנוחה: נגיעות כתף נספרות בחזרות
+    expect(c.patch).toMatchObject({ metric: 'reps', sets: 3, reps: '10' })
+  })
+
+  it('שלב שדורש 4 סטים לא נסגר על יום שמתוכנן ל-3', () => {
+    const hs = { id: 'ex-handstand', name: 'תרגול עמידת ידיים על הקיר', sets: 3, reps: 'מקסימום זמן', metric: 'time' as const }
+    const three: Record<string, SetLog[]> = { 'ex-handstand': [{ sec: 45 }, { sec: 45 }, { sec: 45 }] }
+    const s = state([day({ exercises: [hs] })], [log('2026-09-15', three), log(TODAY, three)])
+    s.skills = [{ id: 'sk-handstand', updatedAt: 1, stageId: 'chest-wall' }]
+    const c = nightly(s, TODAY).calls[0]
+    expect(c.verdict).not.toBe('advance')
+  })
+
+  it('שדה החזרות אחרי מעבר שלב הוא מספר, לא המשפט של הקריטריון', () => {
+    const lad = ladder('sk-lsit')!
+    // "3 סטים של 20 שניות" — repRange היה קורא מזה 3
+    expect(lad.stages[2].criteria).toContain('3 סטים')
+    expect(stageExReps(lad.stages[2])).toBe('20 שניות')
+    expect(repRange(stageExReps(lad.stages[2]))).toEqual([20, 20])
+    for (const l of [ladder('sk-handstand')!, lad]) {
+      for (const st of l.stages) {
+        const r = stageExReps(st)
+        if (st.target) expect(repRange(r), `${l.id}/${st.id}`).toEqual([st.target.value, st.target.value])
+      }
     }
   })
 })
