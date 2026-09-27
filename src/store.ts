@@ -3,7 +3,7 @@ import type {
   AppState, CalEvent, DayLog, Exercise, ID, ISODate, NewsRating, Rec, RecurRule, Session, SetLog,
   HabitStep, SkillProgress, Task, WeekGoal, WeekLog, WorkoutDay, WorkoutLog,
 } from './types'
-import { addDays, iso, logicalDate, parseISO, today, weekStart } from './dates'
+import { addDays, diffDays, iso, logicalDate, parseISO, today, weekStart } from './dates'
 import {
   RUN_GOAL, RUN_MILESTONES, goalRank, isFocusGoal, laddersInOrder, matchesSkill, type SkillLadder,
 } from './skills'
@@ -1968,13 +1968,22 @@ export function stageIndex(prog: SkillProgress | undefined, stageIds: string[]):
   return i === -1 ? 0 : i
 }
 
-/** הריצה הארוכה ביותר שנרשמה */
-export function longestRun(s: AppState): { km: number; date?: ISODate } {
+/**
+ * הריצה הארוכה ביותר שנרשמה. עם `withinDays` — הארוכה ביותר בחלון הזה,
+ * וזה מה שתקרת האימון הבודד ורצפת הריצה הארוכה נמדדות מולו: מה שרצת לפני
+ * חצי שנה כבר לא מתאר את מה שהרגל סופגת היום.
+ */
+export function longestRun(
+  s: AppState,
+  withinDays?: number,
+  from: ISODate = today(),
+): { km: number; date?: ISODate } {
   let out = { km: 0, date: undefined as ISODate | undefined }
   for (const w of s.workouts ?? []) {
     // ריצה שנמדדה ב-GPS נספרת גם כשהיום רשום כאימון אחר (חדר כושר בבוקר,
     // ריצה בערב): האימון האחר לא נדרס, והריצה לא נעלמת.
     if (w.deleted || (w.kind !== 'run' && !w.run) || !w.km) continue
+    if (withinDays !== undefined && diffDays(w.date, from) > withinDays) continue
     if (w.km > out.km) out = { km: w.km, date: w.date }
   }
   return out

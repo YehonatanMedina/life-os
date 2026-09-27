@@ -18,7 +18,10 @@ import {
   RUN_SESSIONS,
   WEEK_FLOOR,
   checkWeek,
+  longRunBand,
+  longRunHow,
   longShare,
+  LONG_MAX_SHARE,
   paces,
   riegel,
   sessionCapKm,
@@ -32,6 +35,7 @@ import {
   proposeWeek,
   splitWeek,
   weekChanges,
+  weekForLong,
   type DayKind,
 } from '../../../src/training'
 
@@ -302,6 +306,80 @@ describe('השבוע שהחוקים מייצרים', () => {
       expect(sp.easy).toBeGreaterThan(0)
       expect(sp.long).toBeGreaterThan(sp.easy)
     }
+  })
+
+  // -- הרצפה של הריצה הארוכה ---------------------------------------------
+  //
+  // הבאג שהתגלה 27.9.2026: שבוע של 10.5 ק״מ עם ריצה ארוכה אחרונה של 7.01
+  // ק״מ ייצר "ריצה ארוכה" של 4.4 ק״מ — 42% מהשבוע, וקצרה ב-37% ממה שכבר
+  // נרוץ — ועליה כתוב "70 דקות ומעלה" בזמן שזה 31 דקות.
+  it('הארוכה לא יורדת מתחת למה שכבר נרוץ בחודש האחרון', () => {
+    const plain = splitWeek(10.5, 3)
+    expect(plain.long).toBeCloseTo(4.4, 1)
+
+    const fixed = splitWeek(10.5, 3, 7.01)
+    expect(fixed.long).toBeGreaterThanOrEqual(7)
+    // ולא מעל 110% מהארוכה בחודש — התקרה היחידה עם דוז-רספונס על פציעות
+    expect(fixed.long).toBeLessThanOrEqual(sessionCapKm(7.01))
+  })
+
+  it('כשהרצפה גוררת את הארוכה למעלה — הנפח גדל, והקלות לא מתכווצות', () => {
+    const plain = splitWeek(10.5, 3)
+    const fixed = splitWeek(10.5, 3, 7.01)
+    expect(fixed.weekKm).toBeGreaterThan(plain.weekKm)
+    expect(fixed.easy).toBeGreaterThanOrEqual(plain.easy)
+    expect(fixed.quality).toBeGreaterThanOrEqual(plain.quality)
+    // והשבוע עדיין מסתכם בימים שלו
+    expect(fixed.long + fixed.quality + fixed.easy).toBeCloseTo(fixed.weekKm, 0)
+    // הארוכה לא בולעת יותר מהקצה העליון של מה שתוכניות למתחילים נותנות
+    expect(fixed.long / fixed.weekKm).toBeLessThanOrEqual(LONG_MAX_SHARE + 0.01)
+  })
+
+  it('כשהשבוע כבר גדול מספיק — אחוז מהשבוע הוא שקובע, לא הרצפה', () => {
+    const s = splitWeek(40, 3, 13)
+    expect(s.long).toBeCloseTo(longShare(40), 1)
+    expect(s.weekKm).toBeCloseTo(40, 1)
+  })
+
+  it('בלי יומן ריצות ההתנהגות לא משתנה', () => {
+    const a = splitWeek(24, 3)
+    const b = splitWeek(24, 3, 0)
+    expect(a).toEqual(b)
+  })
+
+  it('weekForLong מחזיר את הבסיס כשאין ארוכה, ומרים אותו כשיש', () => {
+    expect(weekForLong(10.5, 0)).toBe(10.5)
+    expect(weekForLong(40, 7)).toBe(40)
+    expect(weekForLong(10.5, 7.01)).toBeGreaterThan(10.5)
+    expect(longRunBand(7.01)).toEqual({ min: 7, max: 7.7 })
+  })
+
+  it('הטקסט של הארוכה לא מבטיח 70 דקות כשהמרחק לא נותן אותן', () => {
+    const short = longRunHow(7)
+    expect(short).not.toContain('70 דקות ומעלה')
+    expect(short).toContain('49 דקות')
+    expect(longRunHow(11)).toContain('70 דקות ומעלה')
+    // ובתוך התוכנית עצמה
+    const day = planWeek({ weekKm: 10.5, week: 1, weeks: 14, longest30Km: 7.01 })
+      .find((d) => d.dow === 6)!
+    expect(day.km).toBeGreaterThanOrEqual(7)
+    expect(day.how).not.toContain('70 דקות ומעלה')
+  })
+
+  it('התוכנית לא מייצרת ארוכה שהיא עצמה הייתה מסמנת כהפרה', () => {
+    const days = planWeek({ weekKm: 10.5, week: 1, weeks: 14, longest30Km: 7.01, gymDays: [0, 1, 2, 3, 4] })
+    const current = days.map((d) => ({ dow: d.dow, kind: d.kind, title: d.title, km: d.km }))
+    const { fixes, changes } = weekChanges(current, days, 7.01)
+    // אין נסיגה, ואין "הפרה" שאי אפשר לתקן — הפער ל-70 דקות נאמר כמצב ולא כליקוי
+    expect(fixes).toEqual([])
+    expect(changes.some((c) => /פחות מ-70 דקות/.test(c))).toBe(true)
+  })
+
+  it('ארוכה קצרה ממה שכבר נרוץ נרשמת כהפרה', () => {
+    const days = planWeek({ weekKm: 10.5, week: 1, weeks: 14, gymDays: [0, 1, 2, 3, 4] })
+    const current = days.map((d) => ({ dow: d.dow, kind: d.kind, title: d.title, km: d.km }))
+    const { fixes } = weekChanges(current, days, 7.01)
+    expect(fixes.some((f) => /נסיגה/.test(f))).toBe(true)
   })
 
   it('כשיש קצבים — לכל ריצה טווח, והקל איטי מהאיכותי', () => {

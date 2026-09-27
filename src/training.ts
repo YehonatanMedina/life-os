@@ -151,6 +151,26 @@ export const HALF_ANCHORS = { weeklyKm: 32, longKm: 21 }
  */
 export const LONG_RUN_MIN_MINUTES = 70
 
+/**
+ * מה כתוב על יום הריצה הארוכה. כל עוד המרחק לא מגיע ל-70 דקות, הטקסט אומר
+ * את זה במפורש במקום להבטיח אותן: ריצה של 31 דקות שכתוב עליה "70 דקות
+ * ומעלה" היא לא הוראה — היא באג שהמשתמש קורא.
+ */
+export function longRunHow(km: number, paceMinPerKm = EASY_PACE_GUESS): string {
+  const minutes = Math.round(km * paceMinPerKm)
+  if (minutes >= LONG_RUN_MIN_MINUTES) {
+    return 'קצב נוח לכל האורך, 70 דקות ומעלה. אין עליה תקרת זמן.'
+  }
+  return `קצב נוח לכל האורך — כ-${minutes} דקות. היעד הוא ${LONG_RUN_MIN_MINUTES} דקות, ולשם היא מטפסת; אין עליה תקרת זמן.`
+}
+
+/**
+ * הקצב הקל שמניחים כשאין מבחן שדה, בדקות לקילומטר. הוא משמש רק כדי לתרגם
+ * מרחק לדקות בטקסט ובבדיקות — ולכן הוא נמצא במקום אחד, ולא פעם כאן ופעם
+ * שם עם מספר אחר.
+ */
+export const EASY_PACE_GUESS = 7
+
 /** קילומטרים בספרה אחת — עיגול לשלם בנפח נמוך מעוות את קצב הגידול */
 const r1 = (n: number) => Math.round(n * 10) / 10
 
@@ -222,6 +242,57 @@ export function volumeRamp(opts: {
 export function longShare(weekKm: number): number {
   const share = weekKm < 25 ? 0.42 : weekKm < 40 ? 0.38 : 0.34
   return weekKm * share
+}
+
+/**
+ * החלק המרבי שהריצה הארוכה יכולה לקחת מהשבוע — הקצה העליון של אותו טווח
+ * שתוכניות למתחילים נותנות (43–52%). זה לא אותו מספר כמו `longShare`:
+ * `longShare` הוא **החלוקה הרצויה** כשהשבוע מספיק גדול, וזו **התקרה** על
+ * כמה מהשבוע מותר לארוכה לתפוס כשהיא נגררת כלפי מעלה מהרצפה שלמטה.
+ */
+export const LONG_MAX_SHARE = 0.52
+
+/**
+ * הרצפה והתקרה של הריצה הארוכה, בקילומטרים, לפי מה שבאמת נרוץ בחודש האחרון.
+ *
+ * **למה זה קיים.** `longShare` הוא אחוז מהשבוע, והוא נכון כשהשבוע מתאר את
+ * הרץ. הוא נכשל בדיוק במצב שבו התוכנית מתחילה: שבוע קטן שיש בו ריצה ארוכה
+ * אחת גדולה. שבוע של 10.5 ק״מ עם ארוכה של 7 ק״מ נותן 42% = 4.4 ק״מ — כלומר
+ * התוכנית מציעה "ריצה ארוכה" **קצרה ב-37% ממה שכבר נרוץ בשבוע שעבר**, ואז
+ * מצהירה עליה "70 דקות ומעלה" בזמן שבקצב שלו זה 31 דקות. אחוז מהשבוע אף
+ * פעם לא יכול להיות הכלל היחיד שקובע את הארוכה.
+ *
+ * הרצפה: הארוכה ביותר ב-30 הימים האחרונים. ריצה ארוכה שקצרה ממה שכבר נרוץ
+ * היא נסיגה, ולחצי מרתון היא הנסיגה היקרה ביותר — הארוכה היא העוגן היחיד
+ * עם השפעה נמדדת (‎−3:52 דקות בזמן, ועמידוּת ב-r=−0.67).
+ *
+ * התקרה: `sessionCapKm` — 110% מהארוכה ביותר בחודש. זה הכלל היחיד כאן עם
+ * דוז-רספונס אמיתי על פציעות, והוא נשמר גם כשהרצפה דוחפת כלפי מעלה.
+ */
+export function longRunBand(longest30Km: number): { min: number; max: number } {
+  const min = Math.round(Math.max(0, longest30Km) * 10) / 10
+  return { min, max: sessionCapKm(min) }
+}
+
+/**
+ * הנפח השבועי שממנו בונים, אחרי שהריצה הארוכה נלקחת בחשבון.
+ *
+ * כשהרצפה של הארוכה גבוהה מהחלק שלה בשבוע, יש שתי דרכים לפתור את זה:
+ * לקצר את הארוכה, או להגדיל את השבוע. מקצרים את הארוכה — זו נסיגה באימון
+ * היחיד שקונה עמידוּת. מקטינים את השאר כדי לפנות לה מקום — הריצה הקלה
+ * יוצאת באורך של 1.6 ק״מ, וזו כבר לא ריצה. לכן **השבוע גדל איתה**: הארוכה
+ * נשארת במקום, והקילומטרים שנוספים הולכים לריצות הקלות, שהן ממילא המקום
+ * שבו 75–85% מהדקות אמורות לשבת.
+ *
+ * כלל ה-10% לא נשבר כאן במובן שמשנה: הוא, לפי הניסוי היחיד שבדק אותו
+ * (p=0.90), אינו כלל בטיחות אלא תיאור של מה שתוכניות עושות — ואילו הכלל
+ * שכן נמדד, תקרת האימון הבודד, נשמר במלואו, כי אף ריצה אחת לא גדלה מעבר
+ * ל-110% ממה שכבר נרוץ.
+ */
+export function weekForLong(baseKm: number, longest30Km = 0): number {
+  if (longest30Km <= 0) return baseKm
+  const need = longRunBand(longest30Km).min / LONG_MAX_SHARE
+  return Math.round(Math.max(baseKm, need) * 10) / 10
 }
 
 /**
@@ -590,6 +661,7 @@ export const TRAINING_DOCTRINE = {
     'אין ריצה קשה ב-24 השעות שאחרי רגליים כבדות — כלכלת ריצה יורדת 5.6–10% — pubmed.ncbi.nlm.nih.gov/23724883/',
     'כוח פלג גוף עליון וריצה יכולים לחלוק יום — ההפרעה מקומית לשריר — pubmed.ncbi.nlm.nih.gov/39921365/',
     'הריצה הארוכה לבד ביום שלה, ולפחות 70 דקות — מתחת לזה היא לא קונה עמידוּת — pubmed.ncbi.nlm.nih.gov/40878015/',
+    'הריצה הארוכה אף פעם לא קצרה מהארוכה ביותר ב-30 הימים האחרונים, ואף פעם לא מעל 110% ממנה. אחוז מהשבוע קובע אותה רק כשהוא **גבוה** מהרצפה הזו — אחרת שבוע קטן עם ארוכה אחת גדולה היה מייצר נסיגה באימון היחיד שקונה עמידוּת. כשהרצפה גוררת אותה למעלה, הנפח השבועי גדל איתה והתוספת הולכת לריצות הקלות — pmc.ncbi.nlm.nih.gov/articles/PMC12421110/',
 'ימי ריצה רצופים, כשיש כאלה, הם תמיד קל אחרי קשה או קל לפני ארוך. האיסור הוא על שני ימים **קשים** ברצף, לא על שתי ריצות.',
     'ארבעה ימי כוח, ומתוכם **יום רגליים אחד בלבד**. שלושה ימי כוח בשבוע פגעו בסף האירובי (SMD −0.45) — אבל ההפרעה מקומית לשריר, ושלושת הימים האחרים הם פלג גוף עליון שהריצה לא נוגעת בו — journals.humankinetics.com/view/journals/ijspp/13/1/article-p57.xml · pubmed.ncbi.nlm.nih.gov/39921365/',
     '75–85% מדקות הריצה קלות. חלוקה פירמידלית, לא פולריזציה דוגמטית — בחובבים אין הבדל — pubmed.ncbi.nlm.nih.gov/39888556/',
@@ -696,20 +768,36 @@ export type WeekProposal = {
  *
  * הארוכה לוקחת את החלק שלה (`longShare`), ומה שנשאר מתחלק בין האיכות
  * לקלות — האיכות מעט ארוכה יותר, כי חימום ושחרור נספרים בתוכה.
+ *
+ * `longest30Km` — הארוכה ביותר ב-30 הימים האחרונים. כשהוא ניתן, הארוכה
+ * נחתכת לרצפה ולתקרה שנגזרות ממנו (`longRunBand`), והשבוע גדל כדי להכיל
+ * אותה (`weekForLong`) במקום שהריצות הקלות יתכווצו. בלעדיו — החלוקה היא
+ * אחוז מהשבוע בלבד, כמו קודם, וזה הנכון כשאין יומן להישען עליו.
+ *
+ * `weekKm` שחוזר הוא הנפח **אחרי** ההתאמה, ולכן הוא זה שצריך להיות על
+ * המסך — אחרת הכרטיס מראה שבוע שלא מסתכם בימים שהוא עצמו מציג.
  */
-export function splitWeek(weekKm: number, runs = 3): { long: number; quality: number; easy: number; qualityDays: 1 | 2 } {
-  const long = Math.round(longShare(weekKm) * 10) / 10
-  const rest = Math.max(0, weekKm - long)
+export function splitWeek(
+  weekKm: number,
+  runs = 3,
+  longest30Km = 0,
+): { long: number; quality: number; easy: number; qualityDays: 1 | 2; weekKm: number } {
+  const week = weekForLong(weekKm, longest30Km)
+  const share = Math.round(longShare(week) * 10) / 10
+  const band = longRunBand(longest30Km)
+  const long = longest30Km > 0 ? Math.min(Math.max(share, band.min), band.max) : share
+  const rest = Math.max(0, week - long)
   const others = Math.max(1, runs - 1)
-  const qualityDays = Math.min(qualityRuns(weekKm), Math.max(1, others - 1)) as 1 | 2
+  const qualityDays = Math.min(qualityRuns(week), Math.max(1, others - 1)) as 1 | 2
   const easyDays = Math.max(0, others - qualityDays)
   // האיכות מקבלת פי 1.2 מריצה קלה — זה בערך מה שחימום ושחרור מוסיפים
   const unit = rest / (qualityDays * 1.2 + easyDays)
   return {
-    long,
+    long: Math.round(long * 10) / 10,
     quality: Math.round(unit * 1.2 * 10) / 10,
     easy: Math.round(unit * 10) / 10,
     qualityDays,
+    weekKm: Math.round(week * 10) / 10,
   }
 }
 
@@ -792,6 +880,12 @@ export function planWeek(opts: {
   week: number
   weeks: number
   longRunMinutes?: number
+  /**
+   * הארוכה ביותר ב-30 הימים האחרונים. זו הרצפה והתקרה של הריצה הארוכה —
+   * בלעדיה התוכנית מציעה ארוכה שהיא אחוז מהשבוע בלבד, וזה יוצא קצר ממה
+   * שכבר נרוץ (ראו `longRunBand`).
+   */
+  longest30Km?: number
   /** הימים שבהם יש חדר כושר. ברירת מחדל: ראשון עד חמישי */
   gymDays?: number[]
   /** כמה ריצות בשבוע. ברירת מחדל: שלוש */
@@ -806,7 +900,7 @@ export function planWeek(opts: {
 }): ProposedDay[] {
   const runs = Math.max(1, Math.min(6, opts.runsPerWeek ?? DEFAULT_RUNS_PER_WEEK))
   const gym = opts.gymDays ?? DEFAULT_GYM_DAYS
-  const s = splitWeek(opts.weekKm, runs)
+  const s = splitWeek(opts.weekKm, runs, opts.longest30Km ?? 0)
   const polar = blockType(opts.week) === 'polarized'
 
   const mmss = (m: number) => {
@@ -907,7 +1001,11 @@ export function planWeek(opts: {
           km: s.long,
           pace: easyPace,
           minutes: opts.longRunMinutes,
-          how: 'קצב נוח לכל האורך, 70 דקות ומעלה. אין עליה תקרת זמן.',
+          // **הטקסט לא מבטיח 70 דקות כשהמרחק לא נותן אותן.** "70 דקות
+          // ומעלה" על ריצה של חצי שעה הוא הסתירה שהופכת את הכרטיס למשהו
+          // שאי אפשר להאמין לו. 70 דקות הן היעד שהארוכה מטפסת אליו, ועד
+          // שהיא שם — כותבים מה שהיא באמת.
+          how: longRunHow(s.long, p ? (p.easy[0] + p.easy[1]) / 2 : undefined),
           hard: true,
           exercises: runHomeBlock('long'),
         })
@@ -1045,7 +1143,11 @@ export type CurrentDay = { dow: number; kind: string; title: string; km?: number
 /**
  * מה משתנה, ולמה. מוחזר כטקסט כדי שההחלטה תהיה מול הסבר ולא מול דיף.
  */
-export function weekChanges(current: CurrentDay[], proposed: ProposedDay[]): { changes: string[]; fixes: string[] } {
+export function weekChanges(
+  current: CurrentDay[],
+  proposed: ProposedDay[],
+  longest30Km = 0,
+): { changes: string[]; fixes: string[] } {
   const changes: string[] = []
   const fixes: string[] = []
   const HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
@@ -1063,10 +1165,23 @@ export function weekChanges(current: CurrentDay[], proposed: ProposedDay[]): { c
   }
   const runDays = current.filter((d) => d.kind === 'run').length
   if (runDays < WEEK_FLOOR.runDays) fixes.push(`${runDays} ימי ריצה בשבוע — בתקרה של 45 דקות התדירות היא הדרך היחידה להעלות נפח`)
-  // ריצה ארוכה שאינה ארוכה: מתחת ל-70 דקות היא לא קונה עמידוּת
   const longest = Math.max(0, ...current.filter((d) => d.kind === 'run').map((d) => d.km ?? 0))
-  if (longest > 0 && longest * 7 < LONG_RUN_MIN_MINUTES) {
-    fixes.push(`הארוכה בשבוע היא ${longest} ק״מ — בקצב שלך זה פחות מ-70 דקות, ומתחת לזה היא ריצה רגילה ולא ארוכה`)
+  // **נסיגה בארוכה היא הפרה; להיות בדרך אליה — לא.** ארוכה קצרה ממה שכבר
+  // נרוץ בחודש האחרון היא דבר שאפשר לתקן היום, ולכן היא נכתבת כהפרה.
+  if (longest30Km > 0 && longest > 0 && longest < longRunBand(longest30Km).min - 0.05) {
+    fixes.push(
+      `הארוכה בתוכנית היא ${longest} ק״מ, קצרה מ-${longRunBand(longest30Km).min} שכבר רצת בחודש האחרון — זו נסיגה באימון היחיד שקונה עמידוּת`,
+    )
+  }
+  // ריצה ארוכה שאינה ארוכה: מתחת ל-70 דקות היא לא קונה עמידוּת. זה נאמר רק
+  // כשזה **בר-תיקון** — כלומר כשתקרת האימון הבודד (110% מהארוכה בחודש)
+  // מרשה בכלל להגיע ל-70 דקות. בתחילת בנייה היא לא מרשה, ואז זה לא ליקוי
+  // בתוכנית אלא המקום שבו הוא נמצא בסולם, ואומרים אותו בשורת השינויים.
+  const reachable = longest30Km <= 0 || sessionCapKm(longest30Km) * EASY_PACE_GUESS >= LONG_RUN_MIN_MINUTES
+  if (longest > 0 && longest * EASY_PACE_GUESS < LONG_RUN_MIN_MINUTES) {
+    const msg = `הארוכה בשבוע היא ${longest} ק״מ — בקצב שלך זה פחות מ-70 דקות, ומתחת לזה היא ריצה רגילה ולא ארוכה`
+    if (reachable) fixes.push(msg)
+    else changes.push(`${msg}. בתקרה של 110% מהארוכה בחודש אי אפשר לקפוץ לשם — היא מטפסת שבוע אחרי שבוע`)
   }
 
   for (const p of proposed) {

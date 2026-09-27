@@ -18,14 +18,14 @@ import { useToast } from '../ui'
 import type { WorkoutDay } from '../types'
 import { HE_DAYS, HE_DAYS_SHORT } from '../dates'
 import { runForecast } from '../forecast'
-import { runWeeks } from '../store'
+import { longestRun, runWeeks } from '../store'
 import { weekStart } from '../dates'
 import { today as todayISO } from '../dates'
 import { alive } from '../store'
 import { fieldVdot } from '../adapt'
 import {
   DEFAULT_GYM_DAYS, DEFAULT_RUNS_PER_WEEK, HALF_ANCHORS, HOME_TWIN, baseWeeklyKm, blockType,
-  checkWeek, paces, planWeek, splitWeek, staleDays, volumeRamp, weekChanges, weekKinds,
+  checkWeek, paces, planWeek, splitWeek, staleDays, volumeRamp, weekChanges, weekForLong, weekKinds,
   type CurrentDay,
 } from '../training'
 
@@ -49,14 +49,23 @@ export default function WeekPlanCard() {
     // הנפח מתחיל ממה שנרוץ בפועל — הגבוה מבין השבועות השלמים
     // האחרונים, ולא ממה שכתוב בתוכנית ולא מהשבוע החלקי שרץ עכשיו.
     const base = baseWeeklyKm(runWeeks(s), weekStart(todayISO()))
-    const startKm = Math.max(6, base)
+    // **הארוכה שכבר נרוץ היא קלט לנפח, לא תוצאה שלו.** בלי זה, שבוע קטן
+    // עם ריצה ארוכה אחת גדולה מייצר "ארוכה" קצרה ממנה — 42% מ-10.5 הם
+    // 4.4 ק״מ, כשהארוכה האחרונה הייתה 7. הנפח הוא זה שגדל, לא הארוכה
+    // שמתקצרת (`weekForLong` ב-training.ts).
+    const longest30 = longestRun(s, 30).km
+    const startKm = Math.max(6, weekForLong(base, longest30))
     const ramp = volumeRamp({ startKm, weeks })
     const now = ramp[0]
     // הקצבים נגזרים מהריצה המהירה ביותר ב-60 הימים האחרונים. זו לא ריצת
     // מבחן ולכן היא מזלזלת ביכולת — כלומר הטווח הקל שיוצא ממנה שמרני,
     // וזה הכיוון הנכון לטעות בו.
     const v = fieldVdot(s, todayISO())
-    const days = planWeek({ weekKm: now.km, week: 1, weeks, gymDays, runsPerWeek, paces: v ? paces(v) : undefined })
+    const days = planWeek({
+      weekKm: now.km, week: 1, weeks, gymDays, runsPerWeek, longest30Km: longest30,
+      paces: v ? paces(v) : undefined,
+    })
+    const split = splitWeek(now.km, runsPerWeek, longest30)
 
     const current: CurrentDay[] = alive(s.workoutPlan ?? []).map((d) => ({
       dow: d.dow,
@@ -64,7 +73,7 @@ export default function WeekPlanCard() {
       title: d.title,
       km: d.target?.km,
     }))
-    const { changes, fixes } = weekChanges(current, days)
+    const { changes, fixes } = weekChanges(current, days, longest30)
     const peak = Math.max(...ramp.filter((w) => w.kind === 'build').map((w) => w.km))
 
     // הכרטיס בודק את ההצעה של עצמו מול החוקים. אם משהו כאן אי פעם יידלק,
@@ -79,10 +88,13 @@ export default function WeekPlanCard() {
     const stale = staleDays(alive(s.workoutPlan ?? []), days, twinTitle)
 
     return {
-      weeks, startKm, ramp, now, days, changes, fixes, peak, broken, stale,
+      weeks, startKm, ramp, now, days, changes, fixes, peak, broken, stale, longest30,
+      // הנפח שהימים באמת מסתכמים בו — הוא יכול להיות גבוה משורת הסולם
+      // כשהארוכה גררה אותו למעלה
+      weekKm: split.weekKm,
       // מספר האיכויות **בפועל**, ולא מה שהנפח היה מאפשר: בשלוש ריצות
       // תמיד אחת, כי בלי ריצה קלה אחת לפחות חלוקת העצימות מתמוטטת.
-      quality: splitWeek(now.km, runsPerWeek).qualityDays,
+      quality: split.qualityDays,
       runs: runsPerWeek,
       block: blockType(1),
     }
@@ -129,7 +141,7 @@ export default function WeekPlanCard() {
 
       <div className="route-facts" style={{ margin: '10px 0 4px' }}>
         <span>
-          השבוע <b className="ltr">{view.now.km}</b> ק״מ
+          השבוע <b className="ltr">{view.weekKm}</b> ק״מ
         </span>
         <span>
           ארוכה <b className="ltr">{view.days.find((d) => d.dow === 6)?.km}</b> ק״מ
@@ -141,6 +153,15 @@ export default function WeekPlanCard() {
           שיא מתוכנן <b className="ltr">{view.peak}</b> ק״מ
         </span>
       </div>
+
+      {view.longest30 > 0 && view.weekKm > view.startKm + 0.05 && (
+        <div className="tiny faint">
+          הריצה הארוכה שלך בחודש האחרון היא <span className="ltr">{view.longest30}</span> ק״מ, ולכן הארוכה של
+          השבוע לא יורדת מתחתיה — אחוז מהשבוע לבדו היה מציע פחות מזה, וזו נסיגה באימון היחיד שקונה עמידוּת.
+          הקילומטרים שנוספו הלכו לריצות הקלות, ואף ריצה בודדת לא עברה את <span className="ltr">110%</span> ממה
+          שכבר נרוץ.
+        </div>
+      )}
 
       {view.quality === 1 && (
         <div className="tiny faint">
