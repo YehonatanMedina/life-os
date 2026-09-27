@@ -985,6 +985,22 @@ describe('קטלוג המיומנויות', () => {
     }
   })
 
+  /**
+   * 27.9.2026: "דחיפות על כיסא (מקבילים ביתיים)" מכיל "מקבילים" ולכן נספר
+   * כמקבילים — 16 חזרות עליו "סגרו" את 3×15 במקבילים בזמן שהמקבילים עצמם
+   * עמדו על 10/8/7/8. גרסה מוחלשת של תרגיל לא מודדת את התרגיל.
+   */
+  it('גרסה ביתית מוחלשת לא נספרת לסולם של התרגיל המלא', () => {
+    const dip = SKILL_LADDERS.find((l) => l.id === 'sk-dip')!
+    expect(matchesSkill(dip, 'מקבילים (Dips)')).toBe(true)
+    expect(matchesSkill(dip, 'דחיפות על כיסא (מקבילים ביתיים)')).toBe(false)
+    expect(matchesSkill(dip, 'דחיפות טריצפס על כיסא')).toBe(false)
+    // ואותו כלל בכיוון השני: שכיבות סמיכה בעמידת ידיים אינן החזקת עמידת ידיים
+    const hs = SKILL_LADDERS.find((l) => l.id === 'sk-handstand')!
+    expect(matchesSkill(hs, 'תרגול עמידת ידיים על הקיר')).toBe(true)
+    expect(matchesSkill(hs, 'שכיבות סמיכה בעמידת ידיים על הקיר')).toBe(false)
+  })
+
   it('סדר המטרות מכסה כל סולם בדיוק פעם אחת, ועוד הריצה', () => {
     expect(new Set(GOAL_ORDER).size).toBe(GOAL_ORDER.length)
     expect(GOAL_ORDER).toContain('run')

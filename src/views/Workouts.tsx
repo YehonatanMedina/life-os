@@ -15,13 +15,20 @@ import CoachCard from './CoachCard'
 import { PlanSheet, ProgressSheet, WorkoutSheet, KIND_EMOJI, setText, targetText } from './Workout'
 import {
   FOCUS_COUNT, RUN_MILESTONES, exerciseTutorial, focusLadders, isFocusGoal, laddersInOrder,
-  tutorial,
+  stageWeeks, tutorial,
 } from '../skills'
-import { sessionCapKm } from '../training'
+import { FOCUS_TOUCH_FLOOR, sessionCapKm } from '../training'
 import type { SkillLadder, SkillStage } from '../skills'
 import { basisText, etaText, fitnessForecast, runForecast, skillForecast } from '../forecast'
+import type { SkillForecast } from '../forecast'
 import type { ID, WorkoutLog } from '../types'
 import { WORKOUT_KIND_LABEL } from '../types'
+
+/**
+ * מעבר לכמה ימים בלי סט נרשם מיומנות נחשבת מוזנחת. שבועיים, כי שבוע
+ * אחד הוא חופשה, מחלה או יום שהוחלף — ושבועיים כבר דפוס.
+ */
+const STALE_SKILL_DAYS = 14
 
 // ---------------------------------------------------------------------------
 // עמוד האימונים.
@@ -318,7 +325,11 @@ function ForecastCard() {
   const from = todayISO()
   const skills = useMemo(() => fitnessForecast(s, from), [s.workouts, s.workoutPlan, s.skills, from])
   const run = useMemo(() => runForecast(s, from), [s.workouts, from])
-  const soonest = [...skills].sort((a, b) => a.next.weeks - b.next.weeks)[0]
+  // "הכי קרוב" הוא הבטחה, ולכן הוא נלקח רק ממה שבאמת מתאמנים עליו:
+  // מיומנות בלי תרגיל בתוכנית תמיד תיראה קרובה, כי אין נתונים שיסתרו את
+  // הידע הכללי — וזו בדיוק ההבטחה שאסור לתת.
+  const soonest = [...skills].filter((f) => f.basis !== 'cold').sort((a, b) => a.next.weeks - b.next.weeks)[0]
+  const cold = skills.filter((f) => f.basis === 'cold')
   const nextRun = run.items[0]
 
   return (
@@ -341,11 +352,13 @@ function ForecastCard() {
             <div className="txt">
               <div className="ttl">{f.name}</div>
               <div className="tiny faint">
-                השלב הבא: {etaText(f.next.weeks)} · המטרה: {etaText(f.goalWeeks)}
+                {f.basis === 'cold'
+                  ? 'לא בתוכנית השבועית — אין תאריך'
+                  : `השלב הבא: ${etaText(f.next.weeks)} · המטרה: ${etaText(f.goalWeeks)}`}
               </div>
             </div>
             <div className="tiny faint ltr" style={{ flexShrink: 0, minWidth: 52, textAlign: 'end' }}>
-              {shortDate(f.goalDate)}
+              {f.basis === 'cold' ? '—' : shortDate(f.goalDate)}
             </div>
           </div>
         ))}
@@ -364,9 +377,17 @@ function ForecastCard() {
           </div>
         </div>
       </div>
+      {cold.length > 0 && (
+        <div className="alert warn tiny" style={{ marginTop: 8 }}>
+          {cold.map((f) => f.name).join(', ')} — במוקד, אבל בלי תרגיל בתוכנית
+          השבועית. אין קצב למדוד, ולכן אין תאריך.
+        </div>
+      )}
       <div className="tiny faint" style={{ marginTop: 8 }}>
         התאריך זז רק בשבועות, גם אחרי אימון חזק במיוחד או חלש במיוחד — הוא נשען
-        על חלון של אימונים ועל זמן טיפוסי לשלב, לא על האימון האחרון.
+        על חלון של אימונים ועל זמן טיפוסי לשלב, לא על האימון האחרון. תדירות כן
+        מזיזה אותו: הזמן הטיפוסי לשלב מניח שתי נגיעות בשבוע, ונגיעה אחת מותחת
+        אותו בהתאם.
       </div>
     </div>
   )
@@ -484,9 +505,11 @@ function SkillCard({ lad }: { lad: SkillLadder }) {
 
       <div style={{ padding: '2px 13px 12px' }}>
         <StageBlock lad={lad} st={lad.stages[cur]} state="now" exIds={exIds} />
+        <CoverageLine fc={fc} />
         <div className="tiny faint" style={{ marginTop: 8 }}>
-          הערכה: השלב {etaText(fc.next.weeks)} ({shortDate(fc.next.date)}) · המטרה{' '}
-          {etaText(fc.goalWeeks)}
+          {fc.basis === 'cold'
+            ? `אין תאריך עד שיהיה תרגיל בתוכנית — הידע הכללי אומר ${etaText(stageWeeks(lad.id, lad.stages[cur].id))} לשלב הזה בשתי נגיעות בשבוע`
+            : `הערכה: השלב ${etaText(fc.next.weeks)} (${shortDate(fc.next.date)}) · המטרה ${etaText(fc.goalWeeks)}`}
         </div>
         {!open && cur + 1 < lad.stages.length && (
           <div className="tiny faint" style={{ marginTop: 4 }}>
@@ -519,6 +542,39 @@ function SkillCard({ lad }: { lad: SkillLadder }) {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * **האם המיומנות הזו בכלל מתאמנת.** בלי השורה הזו הכרטיס מראה שלב, פס
+ * התקדמות ותאריך — ונראה בדיוק אותו דבר בין מיומנות שמתאמנים עליה
+ * פעמיים בשבוע לבין אחת שלא נגעו בה חודש. זה מה שהפך "תקוע" לדבר שאפשר
+ * לראות רק בתחושה (27.9.2026).
+ *
+ * שני מספרים, ושניהם נחוצים: כמה ימים בשבוע **התוכנית** מודדת אותה (מה
+ * שאמור לקרות), וכמה ימים עברו מאז הסט האחרון **ביומן** (מה שקרה). אחד
+ * בלי השני משקר לכיוון ההפוך.
+ */
+function CoverageLine({ fc }: { fc: SkillForecast }) {
+  const planned = fc.planned
+  const stale = fc.daysSince !== undefined && fc.daysSince >= STALE_SKILL_DAYS
+  if (planned >= FOCUS_TOUCH_FLOOR.progress && !stale) return null
+
+  const what = planned === 0
+    ? 'אין תרגיל בתוכנית השבועית שמאמן את זה'
+    : planned < FOCUS_TOUCH_FLOOR.progress
+      ? `${plural(planned, 'יום אחד', 'ימים')} בשבוע בתוכנית — שתי נגיעות זה מה שמזיז שלב`
+      : ''
+  const when = fc.daysSince === undefined
+    ? 'ואף פעם לא נרשם סט'
+    : stale
+      ? `והסט האחרון נרשם לפני ${fc.daysSince} ימים`
+      : ''
+
+  return (
+    <div className="alert warn tiny" style={{ marginTop: 8 }}>
+      {[what, when].filter(Boolean).join(' ')}.
     </div>
   )
 }

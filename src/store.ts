@@ -2035,6 +2035,33 @@ export function skillExIds(s: AppState, lad: SkillLadder): ID[] {
 }
 
 /**
+ * **כמה ימים בשבוע התוכנית מודדת את המיומנות הזו.** לא כמה תרגילים —
+ * כמה **ימים בשבוע**: יום כושר והתאום הביתי שלו יושבים על אותו `dow`
+ * ורק אחד מהם יתקיים, ולכן לספור אותם כשניים זה לספור אימון שלא קורה.
+ *
+ * זה המספר שעונה על "למה זה תקוע": מיומנות במוקד שהמספר שלה 0 לא
+ * מתאמנת בכלל, וזו עובדה על התוכנית — אפשר לדעת אותה בלי לחכות שהיומן
+ * יוכיח אותה בדיעבד.
+ */
+export function skillDaysPerWeek(s: AppState, lad: SkillLadder): number {
+  const exIds = new Set(skillExIds(s, lad))
+  const dows = new Set<number>()
+  for (const day of alive(s.workoutPlan ?? [])) {
+    if (day.exercises.some((ex) => exIds.has(ex.id) || matchesSkill(lad, ex.name))) dows.add(day.dow)
+  }
+  return dows.size
+}
+
+/** מתי בפעם האחרונה נרשם סט בתרגיל שמודד את המיומנות */
+export function lastSkillDate(s: AppState, lad: SkillLadder): ISODate | undefined {
+  let out: ISODate | undefined
+  for (const exId of skillExIds(s, lad)) {
+    for (const h of exerciseHistory(s, exId)) if (!out || h.date > out) out = h.date
+  }
+  return out
+}
+
+/**
  * השלב הנוכחי בסולם. שלב שנקבע ידנית גובר; אחרת מחשבים מהיומן — השלב הראשון
  * שתנאי המעבר שלו עוד לא נסגר. שלב בלי יעד מדיד עוצר את החישוב, כי אין דרך
  * לדעת מהנתונים אם עברת אותו.

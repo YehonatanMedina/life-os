@@ -78,6 +78,9 @@ describe('ביצוע פקודות — יצירה', () => {
     { id: 'c-t', op: 'addTask', task: { title: 'משימה', due: '2026-09-15', est: 2, trackId: 'tr-c-tr' } },
     { id: 'c-wd', op: 'addWorkoutDay', day: { dow: 1, title: 'רגליים', kind: 'gym', exercises: [{ name: 'סקוואט', sets: 4 }, { name: 'לאנג׳', metric: 'bodyweight' }] } },
     { id: 'c-ex', op: 'addExercise', dayId: 'wd-c-wd', exercise: { name: 'מכרעים', reps: '12' } },
+    // `at` — סדר התרגילים הוא חוק אימון, ולכן אטלס חייב יכולת להכניס
+    // תרגיל למקום ולא רק לסוף (27.9.2026)
+    { id: 'c-ex2', op: 'addExercise', dayId: 'wd-c-wd', index: 0, exercise: { name: 'L-Sit', metric: 'time' } },
     { id: 'c-g', op: 'setWeekGoals', weekStart: '2026-09-06', goals: [{ text: 'מטרה א' }, { text: 'מטרה ב', trackId: 'trk-life' }] },
     { id: 'c-s', op: 'setSettings', patch: { wakeTime: '06:30', theme: 'dark', aiKey: 'HACKED', notifications: true } },
   ]
@@ -94,10 +97,11 @@ describe('ביצוע פקודות — יצירה', () => {
     expect(s.tasks.find((t) => t.id === 't-c-t')).toMatchObject({ title: 'משימה', due: '2026-09-15', est: 2, status: 'todo', trackId: 'tr-c-tr', createdAt: NOW })
     const wd = s.workoutPlan.find((d) => d.id === 'wd-c-wd')!
     expect(wd).toMatchObject({ dow: 1, title: 'רגליים', kind: 'gym' })
-    expect(wd.exercises.map((x) => x.id)).toEqual(['ex-c-wd-0', 'ex-c-wd-1', 'ex-c-ex'])
-    expect(wd.exercises[0]).toMatchObject({ name: 'סקוואט', sets: 4, metric: 'weight' })
-    expect(wd.exercises[1]).toMatchObject({ metric: 'bodyweight' })
-    expect(wd.exercises[2]).toMatchObject({ name: 'מכרעים', reps: '12', metric: 'weight' })
+    expect(wd.exercises.map((x) => x.id)).toEqual(['ex-c-ex2', 'ex-c-wd-0', 'ex-c-wd-1', 'ex-c-ex'])
+    expect(wd.exercises[0]).toMatchObject({ name: 'L-Sit', metric: 'time' })
+    expect(wd.exercises[1]).toMatchObject({ name: 'סקוואט', sets: 4, metric: 'weight' })
+    expect(wd.exercises[2]).toMatchObject({ metric: 'bodyweight' })
+    expect(wd.exercises[3]).toMatchObject({ name: 'מכרעים', reps: '12', metric: 'weight' })
     expect(S.weekLog(s, '2026-09-06').goals).toEqual([
       { id: 'g-c-g-0', text: 'מטרה א', trackId: undefined },
       { id: 'g-c-g-1', text: 'מטרה ב', trackId: 'trk-life' },
@@ -127,7 +131,7 @@ describe('ביצוע פקודות — יצירה', () => {
     expect(get().tasks.filter((t) => t.id === 't-c-t')).toHaveLength(1)
     expect(get().tasks.find((t) => t.id === 't-c-t')?.title).toBe('ערוך ידנית')
     expect(get().events.filter((e) => e.id === 'e-c-ev')).toHaveLength(1)
-    expect(get().workoutPlan.find((d) => d.id === 'wd-c-wd')?.exercises).toHaveLength(3)
+    expect(get().workoutPlan.find((d) => d.id === 'wd-c-wd')?.exercises).toHaveLength(4)
     expect(get().tracks.filter((t) => t.id === 'tr-c-tr')).toHaveLength(1)
     expect(Object.keys(get().atlasApplied ?? {})).toHaveLength(CREATE.length)
     expect(JSON.stringify({ ...get(), events: get().events.length, tasks: undefined })).toBe(JSON.stringify({ ...JSON.parse(snap), tasks: undefined }))

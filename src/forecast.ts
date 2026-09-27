@@ -25,11 +25,11 @@
 import type { AppState, ID, ISODate, SetLog } from './types'
 import { addDays, diffDays, today as todayISO, weekStart } from './dates'
 import {
-  currentStage, exerciseHistory, longestRun, runWeeks, skillExIds,
+  currentStage, exerciseHistory, lastSkillDate, longestRun, runWeeks, skillDaysPerWeek, skillExIds,
 } from './store'
 import { HALF_ANCHORS, HALF_TRAINING_LONG_KM, baseWeeklyKm, buildWeeksTo } from './training'
 import {
-  RUN_MILESTONES, RUN_WEEKLY_GROWTH, focusLadders, stageWeeks,
+  PRIOR_TOUCHES_PER_WEEK, RUN_MILESTONES, RUN_WEEKLY_GROWTH, focusLadders, stageWeeks,
 } from './skills'
 import type { SkillLadder, StageTarget } from './skills'
 
@@ -48,6 +48,11 @@ const PERSONAL_W = 0.7
 const MIN_SESSIONS = 2
 /** גג — מעבר לזה אין משמעות למספר, רק לכיוון */
 const MAX_WEEKS = 104
+/**
+ * עד כמה מותר למתיחה לפי תדירות להאריך את ההערכה. בלי תקרה, חצי נגיעה
+ * בשבוע הייתה מכפילה את הידע פי ארבעה והמספר היה חוזר להיות חסר משמעות.
+ */
+const FREQ_STRETCH_CAP = 3
 /** ברירת המחדל לצמיחת הריצה הארוכה: ק״מ בשבוע עם שבוע הפחתה אחת לארבעה */
 const DEFAULT_KM_WEEK = 0.75
 
@@ -151,7 +156,12 @@ export function touchesPerWeek(points: LevelPoint[], from: ISODate = todayISO())
 // התחזית
 // ---------------------------------------------------------------------------
 
-export type Basis = 'done' | 'log' | 'prior' | 'stuck' | 'none'
+/**
+ * `cold` — המיומנות לא מתאמנת: אין לה תרגיל בתוכנית השבועית. זה לא
+ * "מעט נתונים" ולא "תקוע", ולכן אסור לו להיראות כמוהם: אין קצב, ולכן
+ * אין תאריך. עד 27.9.2026 המצב הזה קיבל `prior` והוצג כתאריך אמיתי.
+ */
+export type Basis = 'done' | 'log' | 'prior' | 'stuck' | 'none' | 'cold'
 
 export interface StageEta {
   stageId: string
@@ -179,8 +189,14 @@ export interface SkillForecast {
   metric?: StageTarget['metric']
   /** קצב השיפור ליחידת שבוע, כפי שנמדד */
   perWeek: number | null
-  /** אימונים בשבוע שנוגעים במיומנות */
+  /** אימונים בשבוע שנוגעים במיומנות, כפי שנמדד ביומן */
   freq: number
+  /** כמה ימים בשבוע התוכנית מודדת אותה — עובדה על התוכנית, לא על היומן */
+  planned: number
+  /** מתי נרשם סט אחרון בתרגיל שמודד אותה */
+  lastDate?: ISODate
+  /** כמה ימים עברו מאז. undefined כשאף פעם לא נרשם */
+  daysSince?: number
   /** סגירת השלב הנוכחי */
   next: StageEta
   /** כל הדרך עד המטרה */
@@ -227,11 +243,25 @@ export function skillForecast(s: AppState, lad: SkillLadder, from: ISODate = tod
   const need = st.target?.value ?? 0
   const freq = Math.max(0, touchesPerWeek(points, from))
   const slope = slopePerWeek(points)
+  // התדירות שהמיומנות באמת מקבלת: מה שנרשם ביומן, ואם התוכנית מבטיחה
+  // יותר — מה שהתוכנית מבטיחה. התוכנית היא הצפי קדימה, היומן הוא מה
+  // שקרה, והגבוה מביניהם הוא ההערכה ההוגנת לשבוע הבא.
+  const planned = skillDaysPerWeek(s, lad)
+  const touches = Math.max(freq, planned)
+  const lastDate = lastSkillDate(s, lad)
+  const daysSince = lastDate ? diffDays(lastDate, from) : undefined
 
   let weeks = prior
   let basis: Basis = 'prior'
-  if (!st.target || !exIds.length) {
-    // אין מדידה אוטומטית — רק הידע הכללי, בלי להעמיד פנים שיש נתונים
+  if (st.target && touches <= 0 && level < need) {
+    // אין תרגיל בתוכנית שמאמן את זה ואין נגיעה ביומן. אין קצב, ולכן אין
+    // תאריך — המספר כאן הוא כיוון בלבד, והמסך אומר את זה במילים.
+    // הבדיקה הזו קודמת ל-`none` בכוונה: "אין תרגיל שמודד" ו"לא מתאמנים
+    // על זה" נראו אותו דבר על המסך, והשני הוא הרבה יותר חמור.
+    basis = 'cold'
+    weeks = prior * FREQ_STRETCH_CAP
+  } else if (!st.target || !exIds.length) {
+    // השלב עצמו בלי יעד מדיד — רק הידע הכללי, בלי להעמיד פנים שיש נתונים
     basis = 'none'
   } else if (level >= need) {
     weeks = 0
@@ -250,8 +280,17 @@ export function skillForecast(s: AppState, lad: SkillLadder, from: ISODate = tod
     basis = 'prior'
   }
 
+  // **מתיחה לפי תדירות.** `STAGE_WEEKS` מניח שתי נגיעות בשבוע
+  // (`PRIOR_TOUCHES_PER_WEEK`), ולכן המספר שלו נכון רק למי שבאמת נוגע
+  // פעמיים. כשנוגעים פעם אחת — זה לוקח בערך פי שניים. זה חל רק על
+  // הערכות שמקורן בידע הכללי: ב-`log` הקצב כבר נמדד על ציר זמן אמיתי,
+  // והוא סופג את התדירות בתוכו.
+  if ((basis === 'prior' || basis === 'none') && touches > 0 && touches < PRIOR_TOUCHES_PER_WEEK) {
+    weeks *= Math.min(FREQ_STRETCH_CAP, PRIOR_TOUCHES_PER_WEEK / touches)
+  }
+
   // רצפה: גם מי שקרוב מאוד צריך עוד שני אימונים כדי שזה ייספר
-  if (weeks > 0) weeks = Math.max(weeks, MIN_SESSIONS / Math.max(0.5, freq || 1))
+  if (weeks > 0) weeks = Math.max(weeks, MIN_SESSIONS / Math.max(0.5, touches || 1))
 
   const speed = basis === 'log' || basis === 'stuck' ? clamp(weeks / Math.max(1, prior), 0.6, 1.6) : 1
   let rest = 0
@@ -271,6 +310,9 @@ export function skillForecast(s: AppState, lad: SkillLadder, from: ISODate = tod
     metric: st.target?.metric,
     perWeek: slope,
     freq: Math.round(freq * 10) / 10,
+    planned,
+    lastDate,
+    daysSince,
     next,
     goalWeeks,
     goalLo: Math.round(goalWeeks * 0.75),
@@ -394,6 +436,7 @@ export function basisText(b: Basis): string {
   if (b === 'done') return 'התנאי כבר נסגר — השלב הבא'
   if (b === 'log') return 'לפי הקצב שלך ביומן'
   if (b === 'stuck') return 'הרמה לא עלתה לאחרונה — ההערכה שמרנית'
+  if (b === 'cold') return 'אין תרגיל בתוכנית שמאמן את זה — אין קצב ואין תאריך'
   if (b === 'none') return 'אין תרגיל שמודד — הערכה כללית'
   return 'עוד מעט נתונים — הערכה כללית'
 }

@@ -165,7 +165,7 @@ export const PERSONA = `אתה אטלס — מנהל החיים של המשתמ�
 // warmup/cooldown — רשימת מתיחות לפני ואחרי האימון, שורה לכל תנועה. זו רשימה ולא תרגילים: בלי סטים, בלי רישום ביומן. הרשימה מוחלפת כולה.
 // target — היעד של יום ריצה/הליכה: { "km"?, "minutes"?, "pace"? ("6:40-7:10"), "how"? }. זה מה שמוצג במסך האימון.
 { "op": "deleteWorkoutDay", "dayId" }
-{ "op": "addExercise", "dayId", "exercise": { "name", "sets"?, "reps"?, "metric", "note"?, "rest"? (שניות), "cues"? (דגשי ביצוע), "video"? (קישור) } }
+{ "op": "addExercise", "dayId", "index"? (מקום ברשימה, 0 = ראשון; בלעדיו בסוף), "exercise": { "name", "sets"?, "reps"?, "metric", "note"?, "rest"? (שניות), "cues"? (דגשי ביצוע), "video"? (קישור) } }
 { "op": "patchExercise", "dayId", "exerciseId", "patch": { … } }
 { "op": "deleteExercise", "dayId", "exerciseId" }
 // להחליף או לתקן תרגיל באימון של יום מסוים: patchExercise עם dayId של אותו יום ו-exerciseId — שניהם מופיעים ב-workoutPlan שבהקשר. לשנות שם של תרגיל = patch עם name.

@@ -12,7 +12,7 @@
 // חריג אחד לא הופך חודשיים ליומיים.
 import { describe, it, expect } from 'vitest'
 import { blankState } from './helpers'
-import { currentStage } from '../../../src/store'
+import { currentStage, lastSkillDate, skillDaysPerWeek } from '../../../src/store'
 import { ladder, stageWeeks } from '../../../src/skills'
 import { sessionLevel, skillForecast, slopePerWeek, runForecast } from '../../../src/forecast'
 import type { AppState, WorkoutDay, WorkoutLog } from '../../../src/types'
@@ -135,6 +135,57 @@ describe('skillForecast', () => {
     expect(f.next.hi).toBeGreaterThanOrEqual(f.next.weeks)
     expect(f.goalLo).toBeLessThanOrEqual(f.goalWeeks)
     expect(f.goalHi).toBeGreaterThanOrEqual(f.goalWeeks)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// כיסוי: האם המיומנות בכלל מתאמנת (27.9.2026)
+//
+// האירוע: ה-L-Sit ישב בתפקיד אחד בתוכנית, אותו יום הוחלף בריצה, והוא לא
+// אומן שמונה ימים — בזמן שהכרטיס הבטיח "עוד 4 שבועות" באותה נימה בדיוק
+// כמו מיומנות שמתאמנים עליה פעמיים בשבוע. אפס נגיעות היה בלתי נראה.
+// ---------------------------------------------------------------------------
+describe('כיסוי המיומנות בתוכנית', () => {
+  const from = '2026-09-27'
+  /** אותה תוכנית בלי התרגיל שמודד — כמו שבוע שבו יום הסטטיים הוחלף */
+  const empty = blankState({
+    workoutPlan: [{ id: 'wd-sun', updatedAt: 1, dow: 0, title: 'משיכה', kind: 'gym', exercises: [] } as unknown as WorkoutDay],
+    workouts: [],
+    skills: [{ id: 'sk-lsit', updatedAt: 1, done: ['pseudo'] } as AppState['skills'][number]],
+  })
+
+  it('skillDaysPerWeek סופר ימים ולא תרגילים — יום כושר והתאום הביתי שלו הם יום אחד', () => {
+    const twin = { ...plan[0], id: 'wd-sat-home', title: 'בבית' } as WorkoutDay
+    expect(skillDaysPerWeek(blankState({ workoutPlan: [...plan, twin] }), lsit)).toBe(1)
+    expect(skillDaysPerWeek(empty, lsit)).toBe(0)
+  })
+
+  it('אין תרגיל בתוכנית ואין יומן — basis cold, ולא תאריך שנראה כמו נתון', () => {
+    const f = skillForecast(empty, lsit, from)
+    expect(f.basis).toBe('cold')
+    expect(f.planned).toBe(0)
+    expect(f.daysSince).toBeUndefined()
+    // ההערכה נמתחת ולא מתחזה לקרובה
+    expect(f.next.weeks).toBeGreaterThan(stageWeeks('sk-lsit', 'foot-support'))
+  })
+
+  it('נגיעה אחת בשבוע מותחת את ההערכה מול שתיים — הזמן הטיפוסי מניח שתיים', () => {
+    const one = state([])
+    const two = blankState({
+      workoutPlan: [plan[0], { ...plan[0], id: 'wd-wed', dow: 3 } as WorkoutDay],
+      workouts: [],
+      skills: [{ id: 'sk-lsit', updatedAt: 1, done: ['pseudo'] } as AppState['skills'][number]],
+    })
+    expect(skillDaysPerWeek(one, lsit)).toBe(1)
+    expect(skillDaysPerWeek(two, lsit)).toBe(2)
+    expect(skillForecast(one, lsit, from).next.weeks)
+      .toBeGreaterThan(skillForecast(two, lsit, from).next.weeks)
+  })
+
+  it('daysSince נמדד מהסט האחרון שנרשם, גם כשהוא בתרגיל של יום אחר', () => {
+    const s = state([log('2026-09-19', [20, 35, 50])])
+    expect(lastSkillDate(s, lsit)).toBe('2026-09-19')
+    expect(skillForecast(s, lsit, from).daysSince).toBe(8)
   })
 })
 

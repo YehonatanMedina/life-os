@@ -3,6 +3,7 @@
 // במספר כזה ייפול, ומי שמשנה ייאלץ להסביר למה.
 // ---------------------------------------------------------------------------
 import { describe, expect, it } from 'vitest'
+import { focusLadders, matchesSkill } from '../../../src/skills'
 import {
   DEFAULT_GYM_DAYS,
   DEFAULT_RUNS_PER_WEEK,
@@ -13,6 +14,8 @@ import {
   LONG_RUN_WEEKLY_GROWTH,
   buildWeeksTo,
   halfPlanWeeks,
+  HOME_TWIN,
+  SKILL_FREQUENCY,
   TENDON_BUDGET,
   WEEKLY_SETS,
   blockType,
@@ -608,6 +611,32 @@ describe('תקציב הגיד ומינון הסקילים', () => {
       const hs = d.exercises.find((e) => /עמידת ידיים על הקיר/.test(e.name))
       expect(hs, `יום ${d.dow}`).toBeTruthy()
       expect(hs!.home).toBe(true)
+    }
+  })
+
+  /**
+   * 27.9.2026: ה-L-Sit ישב בתפקיד `statics` בלבד, ולכן שבוע של שלושה ימי
+   * כוח לא אימן אותו כלל — והמטרה השלישית בסדר נראתה "תקועה" בלי שאף
+   * מספר במערכת אמר למה. מטרה במוקד לא יכולה להיות תלויה ביום יחיד.
+   */
+  it('L-Sit מקבל שתי נגיעות בשבוע, ולא יום אחד שאפשר להחליף', () => {
+    const days = week.filter((d) => d.exercises.some((e) => /L-Sit/i.test(e.name)))
+    expect(days.length).toBeGreaterThanOrEqual(SKILL_FREQUENCY.supportHold.perWeek[0])
+    // שני הימים לא זהים — שתי נגיעות ביום אחד הן נגיעה אחת
+    expect(new Set(days.map((d) => d.dow)).size).toBe(days.length)
+  })
+
+  it('L-Sit נמצא גם בשבוע של שלושה ימי כוח', () => {
+    // רק ראשון, שלישי ורביעי — שלושה ימי כוח, ולכן אין תפקיד statics
+    const three = planWeek({ weekKm: 15, week: 1, weeks: 20, gymDays: [0, 2, 3] })
+    expect(three.some((d) => d.exercises.some((e) => /L-Sit/i.test(e.name)))).toBe(true)
+  })
+
+  it('כל מיומנות שבמוקד מאומנת בשבוע שהמחולל מייצר', () => {
+    const twins = week.filter((d) => d.kind === 'gym' && d.role).map((d) => HOME_TWIN[d.role!])
+    const names = [...week.flatMap((d) => d.exercises), ...twins.flatMap((t) => t.exercises)].map((e) => e.name)
+    for (const lad of focusLadders()) {
+      expect(names.some((n) => matchesSkill(lad, n)), lad.name).toBe(true)
     }
   })
 
