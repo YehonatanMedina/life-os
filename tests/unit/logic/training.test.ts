@@ -7,7 +7,12 @@ import {
   DEFAULT_GYM_DAYS,
   DEFAULT_RUNS_PER_WEEK,
   HALF_ANCHORS,
+  HALF_TRAINING_LONG_KM,
+  HALF_WEEKLY_CAP_KM,
   INTENSITY,
+  LONG_RUN_WEEKLY_GROWTH,
+  buildWeeksTo,
+  halfPlanWeeks,
   TENDON_BUDGET,
   WEEKLY_SETS,
   blockType,
@@ -127,12 +132,80 @@ describe('סולם הנפח', () => {
     }
   })
 
-  it('בשבועות האחרונים הארוכה גדלה יחסית — כמו בתוכניות למתחילים', () => {
-    const builds = ramp.filter((w) => w.kind === 'build')
-    const early = builds[1]
-    const late = builds[builds.length - 1]
-    expect(early.longKm / early.km).toBeLessThan(0.44)
+  // -- הארוכה בתוך הסולם -------------------------------------------------
+  //
+  // עד 27.9.2026 `volumeRamp` גזר את הארוכה כאחוז מהנפח בלבד, ומזה יצאו
+  // ארבע תקלות שכל אחת מהן הפרה חוק שהקובץ עצמו מצטט. ארבע הבדיקות הבאות
+  // הן בדיוק הן.
+
+  it('הארוכה לא קופצת יותר מ-10% בשבוע — התקרה שהסולם עצמו מצטט', () => {
+    // זו הייתה התקלה הכי חמורה: `left <= 5` הקפיץ את הארוכה מ-38% ל-45%
+    // מנפח גדול יותר, כלומר כ-30% בריצה אחת — הפרה של `sessionCapKm`.
+    for (const r of [ramp, volumeRamp({ startKm: 13.5, weeks: 23, startLongKm: 7.01 })]) {
+      const builds = r.filter((w) => w.kind === 'build')
+      for (let i = 1; i < builds.length; i++) {
+        // התקרה חלה על הערך האמיתי, והתצוגה מעוגלת ל-100 מטר בשני הקצוות —
+        // ומכאן הסבילות: 0.05 על כל קצה, והראשון מוכפל ב-1.1.
+        expect(builds[i].longKm, `שבוע ${builds[i].n}`)
+          .toBeLessThanOrEqual(builds[i - 1].longKm * (1 + LONG_RUN_WEEKLY_GROWTH) + 0.11)
+      }
+    }
+  })
+
+  it('שבוע ירידה מוריד נפח ולא מוחק את הארוכה', () => {
+    // קודם: `down * 0.3` — 30% מנפח שכבר ירד 30%, כלומר ארוכה של 2.4 ק״מ
+    // בשבוע הרביעי. זה שובר את WEEK_FLOOR.longRuns.
+    const r = volumeRamp({ startKm: 13.5, weeks: 23, startLongKm: 7.01 })
+    for (const d of r.filter((w) => w.kind === 'down')) {
+      const prevLong = r[d.n - 2].longKm
+      expect(d.km, `שבוע ${d.n}`).toBeLessThan(r[d.n - 2].km)
+      expect(d.longKm, `שבוע ${d.n}`).toBeGreaterThanOrEqual(prevLong * 0.7 - 0.05)
+    }
+  })
+
+  it('התחדדות שומרת על הארוכה — מורידים נפח, לא עצימות ותדירות', () => {
+    // קודם: 25% מהנפח האחרון — ארוכה של 5 ק״מ שבוע לפני חצי מרתון.
+    const r = volumeRamp({ startKm: 13.5, weeks: 23, startLongKm: 7.01 })
+    const taper = r.find((w) => w.kind === 'taper')!
+    const lastBuild = [...r].reverse().find((w) => w.kind === 'build')!
+    expect(taper.longKm / lastBuild.longKm).toBeGreaterThan(0.5)
+    expect(taper.km / lastBuild.km).toBeLessThan(0.75)
+  })
+
+  it('הסולם מגיע למה שחצי מרתון דורש — 18 ק״מ בארוכה ו-32 בשבוע', () => {
+    const startKm = weekForLong(10.5, 7.01)
+    const weeks = halfPlanWeeks({ startKm, startLongKm: 7.01 })
+    const r = volumeRamp({ startKm, weeks, startLongKm: 7.01 })
+    const builds = r.filter((w) => w.kind === 'build')
+    expect(Math.max(...builds.map((w) => w.longKm))).toBeCloseTo(HALF_TRAINING_LONG_KM, 1)
+    expect(Math.max(...builds.map((w) => w.km))).toBeGreaterThanOrEqual(HALF_ANCHORS.weeklyKm)
+    // ולא מעל תקרת הנפח — מעבר ל-40 אין תשואה נמדדת לחצי מרתון
+    expect(Math.max(...builds.map((w) => w.km))).toBeLessThanOrEqual(HALF_WEEKLY_CAP_KM + 0.05)
+  })
+
+  it('ארוכה שהיא כבר חלק גדול מהשבוע עומדת במקום — לא מתקצרת ולא גדלה', () => {
+    // 7 ק״מ מתוך שבוע של 13.5 הם 52%. מה שצריך לגדול הוא השבוע, ולכן
+    // הארוכה מחזיקה עד שהחלק שלה חוזר לטווח — וזו בדיוק ההוראה הנכונה.
+    const r = volumeRamp({ startKm: 13.5, weeks: 23, startLongKm: 7.01 })
+    expect(r[0].longKm).toBeGreaterThanOrEqual(7)
+    expect(r[1].longKm).toBe(r[0].longKm)
+    // ובסוף היא כן מגיעה לחלק שתוכניות למתחילים נותנות
+    const late = [...r].reverse().find((w) => w.kind === 'build')!
     expect(late.longKm / late.km).toBeGreaterThan(0.44)
+  })
+
+  it('אורך התוכנית נגזר מהסולם עצמו, ולא מנוסחה שנייה', () => {
+    // הבאג: התחזית חישבה log(יעד/נפח)/log(1.1) ואמרה 14 שבועות, בזמן
+    // שהסולם מגיע באותם 14 שבועות ל-20 ק״מ בשבוע ולארוכה של 9.
+    const from = { startKm: 13.5, startLongKm: 7.01 }
+    const weeks = halfPlanWeeks(from)
+    const r = volumeRamp({ startKm: from.startKm, weeks, startLongKm: from.startLongKm })
+    expect(r[weeks - 1].kind).toBe('race')
+    expect(r[weeks - 2].kind).toBe('taper')
+    // שבוע הבנייה האחרון הוא זה שמגיע ליעד, ולא שבוע לפני או אחרי
+    const lastBuild = [...r].reverse().find((w) => w.kind === 'build')!
+    expect(lastBuild.n).toBe(weeks - 2)
+    expect(buildWeeksTo({ longKm: HALF_TRAINING_LONG_KM, weekKm: HALF_ANCHORS.weeklyKm }, from)).toBe(weeks - 2)
   })
 
   it('הריצה הארוכה בשיא מגיעה לטווח שתוכניות אמיתיות נותנות', () => {

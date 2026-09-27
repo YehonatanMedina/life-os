@@ -17,7 +17,7 @@ import { actions, useApp } from '../store'
 import { useToast } from '../ui'
 import type { WorkoutDay } from '../types'
 import { HE_DAYS, HE_DAYS_SHORT } from '../dates'
-import { runForecast } from '../forecast'
+
 import { longestRun, runWeeks } from '../store'
 import { weekStart } from '../dates'
 import { today as todayISO } from '../dates'
@@ -25,7 +25,9 @@ import { alive } from '../store'
 import { fieldVdot } from '../adapt'
 import {
   DEFAULT_GYM_DAYS, DEFAULT_RUNS_PER_WEEK, HALF_ANCHORS, HOME_TWIN, baseWeeklyKm, blockType,
-  checkWeek, paces, planWeek, splitWeek, staleDays, volumeRamp, weekChanges, weekForLong, weekKinds,
+  HALF_WEEKLY_CAP_KM, checkWeek, halfPlanWeeks, paces, planWeek, splitWeek, staleDays, volumeRamp,
+  weekChanges, weekForLong,
+  weekKinds,
   type CurrentDay,
 } from '../training'
 
@@ -43,9 +45,6 @@ export default function WeekPlanCard() {
   const runsPerWeek = s.settings.runsPerWeek ?? DEFAULT_RUNS_PER_WEEK
 
   const view = useMemo(() => {
-    const f = runForecast(s)
-    const goal = f.items.find((i) => i.km >= 21)
-    const weeks = Math.max(4, goal?.weeks ?? 20)
     // הנפח מתחיל ממה שנרוץ בפועל — הגבוה מבין השבועות השלמים
     // האחרונים, ולא ממה שכתוב בתוכנית ולא מהשבוע החלקי שרץ עכשיו.
     const base = baseWeeklyKm(runWeeks(s), weekStart(todayISO()))
@@ -55,7 +54,11 @@ export default function WeekPlanCard() {
     // שמתקצרת (`weekForLong` ב-training.ts).
     const longest30 = longestRun(s, 30).km
     const startKm = Math.max(6, weekForLong(base, longest30))
-    const ramp = volumeRamp({ startKm, weeks })
+    // **אורך התוכנית נגזר מהסולם עצמו, לא מתחזית שרצה מודל אחר.**
+    // `halfPlanWeeks` מריץ את אותם שבועות ירידה ואת אותה פתיחה שמרנית,
+    // ולכן מסך "הדרך" והכרטיס הזה כבר לא נותנים שני תאריכים לאותה שאלה.
+    const weeks = Math.max(4, halfPlanWeeks({ startKm, startLongKm: longest30 }))
+    const ramp = volumeRamp({ startKm, weeks, startLongKm: longest30, capKm: HALF_WEEKLY_CAP_KM })
     const now = ramp[0]
     // הקצבים נגזרים מהריצה המהירה ביותר ב-60 הימים האחרונים. זו לא ריצת
     // מבחן ולכן היא מזלזלת ביכולת — כלומר הטווח הקל שיוצא ממנה שמרני,
