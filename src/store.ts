@@ -1934,6 +1934,28 @@ export function skillOf(s: AppState, id: string): SkillProgress | undefined {
 }
 
 /**
+ * אימוני המיומנות לפי סדר כרונולוגי — כל תאריך שבו נרשם אחד מהתרגילים
+ * שמודדים אותה, עם כל הסטים של אותו יום יחד. **שני תרגילים שמודדים את
+ * אותה מיומנות באותו יום הם אימון אחד, לא שניים.** זו היחידה שבה שלב
+ * נסגר, ולכן היא במקום אחד ולא נכתבת שוב בכל מי שצריך אותה.
+ */
+export function skillSessions(
+  s: AppState,
+  exIds: ID[] | undefined,
+): Array<{ date: ISODate; sets: SetLog[] }> {
+  if (!exIds?.length) return []
+  const byDate = new Map<ISODate, SetLog[]>()
+  for (const exId of exIds) {
+    for (const h of exerciseHistory(s, exId)) {
+      byDate.set(h.date, [...(byDate.get(h.date) ?? []), ...h.sets])
+    }
+  }
+  return [...byDate.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, sets]) => ({ date, sets }))
+}
+
+/**
  * כמה סטים בתרגילים שמודדים את המיומנות עמדו ביעד של השלב, באימון האחרון
  * שבו התרגיל בוצע. מחזיר גם את הסט הטוב ביותר אי־פעם, כדי להראות פער.
  *
@@ -1953,15 +1975,7 @@ export function stageProgress(
   const heavy = (v: SetLog) => (v.kg ?? 0) >= (target.kg ?? 0)
   const okOf = (sets: SetLog[]) => sets.filter((v) => heavy(v) && value(v) >= target.value).length
 
-  // כל הסשנים של כל התרגילים שמודדים את השלב, מאוחדים לפי תאריך: שני
-  // תרגילים שמודדים את אותה מיומנות באותו יום הם אימון אחד, לא שניים.
-  const byDate = new Map<ISODate, SetLog[]>()
-  for (const exId of exIds) {
-    for (const h of exerciseHistory(s, exId)) {
-      byDate.set(h.date, [...(byDate.get(h.date) ?? []), ...h.sets])
-    }
-  }
-  const sessions = [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  const sessions = skillSessions(s, exIds).map((x) => [x.date, x.sets] as const)
   const best = Math.max(0, ...sessions.flatMap(([, sets]) => sets.filter(heavy).map(value)))
   const last = sessions[sessions.length - 1]
   const prev = sessions[sessions.length - 2]
@@ -2078,29 +2092,60 @@ export function lastSkillDate(s: AppState, lad: SkillLadder): ISODate | undefine
  * **והכלל השני (27.9.2026): שני אימונים, לא אחד.** מעבר שלב הוא שינוי מבני,
  * ו-`adapt.ts` דורש ממנו תנאי מעבר שנסגר בשני אימונים רצופים. כשהמסך קפץ שלב
  * על אימון אחד, המסך והמאמן אמרו שני דברים שונים על אותם נתונים — ולכן גם
- * כאן התנאי הוא `metTwice`. השלב מסומן כ"נסגר" כבר באימון הראשון (`met`),
- * אבל זז רק אחרי השני.
+ * כאן התנאי הוא שני אימונים רצופים. השלב מסומן כ"נסגר" כבר באימון הראשון
+ * (`met` ב-`stageProgress`), אבל זז רק אחרי השני.
+ *
+ * **והכלל השלישי (27.9.2026, אחרי השני): "שלב אחד לכל זוג אימונים" — ולא
+ * "שלב אחד לכל הזמנים".** קודם המדידה סגרה שלב אחד מעל מה שסומן ידנית ואז
+ * עצרה, וזה נראה כמו אותה הגנה מפני קפיצה — אבל זו הגנה אחרת לגמרי: סולם
+ * שאף אחד לא לוחץ בו נעצר לנצח שלב אחד מעל הסימון האחרון, גם כשהיומן מראה
+ * חודש של אימונים שסגרו את התנאי. וזה בדיוק מה שנראה מבחוץ כמו "המיומנות
+ * נתקעה". לכן החישוב כאן הוא **הרצה של היומן קדימה בזמן**: כל שני אימונים
+ * רצופים שסוגרים את תנאי המעבר של השלב שעמדת בו אז מעלים שלב אחד, ואימון
+ * שלא סגר מאפס את הרצף. ההגנה מפני קפיצה נשמרת — היא תלויה באימונים ולא
+ * בזמן שעבר מהלחיצה האחרונה.
  */
-export function currentStage(s: AppState, lad: SkillLadder): number {
+export function currentStageAt(s: AppState, lad: SkillLadder): {
+  index: number
+  /** היום שממנו התחיל השלב הנוכחי — מה שלפניו מדד תנוחה אחרת */
+  since?: ISODate
+} {
   const prog = skillOf(s, lad.id)
   if (prog?.stageId) {
     const i = lad.stages.findIndex((x) => x.id === prog.stageId)
-    if (i !== -1) return i
+    if (i !== -1) return { index: i }
   }
-  const exIds = skillExIds(s, lad)
   const done = new Set(prog?.done ?? [])
-  let i = 0
-  let auto = false
-  while (i < lad.stages.length - 1) {
-    const st = lad.stages[i]
-    if (done.has(st.id)) { i++; continue }
-    if (auto) break
-    const p = stageProgress(s, exIds, st.target)
-    if (!p?.metTwice) break
-    auto = true
-    i++
+  const last = Math.max(0, lad.stages.length - 1)
+  const skip = (i: number) => {
+    while (i < last && done.has(lad.stages[i].id)) i++
+    return i
   }
-  return i
+  let i = skip(0)
+  let streak = 0
+  let since: ISODate | undefined
+  for (const ses of skillSessions(s, skillExIds(s, lad))) {
+    if (i >= last) break
+    const st = lad.stages[i]
+    // שלב בלי יעד מדיד עוצר את החישוב — אין דרך לדעת מהנתונים אם עבר
+    if (!st.target) break
+    const ok = ses.sets.filter((v) => {
+      const value = st.target!.metric === 'time' ? (v.sec ?? 0) : (v.reps ?? 0)
+      return (v.kg ?? 0) >= (st.target!.kg ?? 0) && value >= st.target!.value
+    }).length
+    if (ok < Math.max(1, st.target.sets)) { streak = 0; continue }
+    if (++streak < 2) continue
+    i = skip(i + 1)
+    streak = 0
+    // היום **שאחרי** האימון שסגר: האימון עצמו מדד את התנוחה הקודמת
+    since = addDays(ses.date, 1)
+  }
+  return { index: i, since }
+}
+
+/** השלב שאתה בו עכשיו */
+export function currentStage(s: AppState, lad: SkillLadder): number {
+  return currentStageAt(s, lad).index
 }
 
 /**
