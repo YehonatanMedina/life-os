@@ -3,7 +3,7 @@
 // בלי לאבד שלבים שהמשתמש הוסיף, ושיבוץ משימה מוצא חלון פנוי אמיתי.
 // ---------------------------------------------------------------------------
 import { describe, expect, it } from 'vitest'
-import { journalBetween, mergeStates, migrateNightSteps } from '../../../src/store'
+import { dedupeNightSteps, journalBetween, mergeStates, migrateNightSteps } from '../../../src/store'
 import { freeSlot, nightHabit, resumeStage, stageOfStep } from '../../../src/views/NightFlow'
 import { NIGHT_STEPS, seedState } from '../../../src/seed'
 import type { AppState, CalEvent, DayLog, HabitDef } from '../../../src/types'
@@ -85,6 +85,42 @@ describe('מעבר ההרגל הישן לחלונות', () => {
 
   it('התקנה חדשה כבר באה עם החלונות', () => {
     expect(nightHabit(seedState())!.steps).toEqual(NIGHT_STEPS)
+  })
+})
+
+describe('שלבים ישנים עם מזהים אחרים', () => {
+  // המצב מצילום המסך: השלבים הישנים נשמרו עם מזהים שאינם hn1–hn4, ולכן
+  // המעבר הראשון השאיר אותם לצד החדשים
+  const legacy = [
+    { id: 'hb-night-s0', text: 'לסדר איזור' },
+    { id: 'hb-night-s1', text: 'לארגן את מחר — מטרות ויומן' },
+    { id: 'hb-night-s2', text: 'לצחצח שיניים' },
+    { id: 'hb-night-s3', text: 'לקרוא' },
+  ]
+  const broken: HabitDef = {
+    id: 'hb-night', updatedAt: 5, name: 'שגרת ערב', emoji: '🌙', minutes: 40, order: 2,
+    steps: [...NIGHT_STEPS.slice(0, -1), ...legacy, NIGHT_STEPS[NIGHT_STEPS.length - 1]],
+  }
+
+  it('הניקוי משאיר חמישה שלבים: ארבעה חלונות והצ׳קליסט', () => {
+    const s = dedupeNightSteps(state({ habits: [broken] }))
+    const h = s.habits.find((x) => x.id === 'hb-night')!
+    expect(h.steps!.map((x) => x.text)).toEqual(NIGHT_STEPS.map((x) => x.text))
+    expect(h.updatedAt).toBeGreaterThan(5)
+    expect(dedupeNightSteps(s)).toBe(s)
+  })
+
+  it('שלב שהוסיף בעצמו שורד את הניקוי', () => {
+    const mine = { ...broken, steps: [...broken.steps!, { id: 'hs-x', text: 'להכין בגדים למחר' }] }
+    const h = dedupeNightSteps(state({ habits: [mine] })).habits.find((x) => x.id === 'hb-night')!
+    expect(h.steps!.map((x) => x.id)).toContain('hs-x')
+    expect(h.steps!).toHaveLength(6)
+  })
+
+  it('המעבר הראשון עצמו לא משאיר כפילויות גם כשהמזהים לא מוכרים', () => {
+    const old: HabitDef = { ...broken, steps: legacy }
+    const h = migrateNightSteps(state({ habits: [old] })).habits.find((x) => x.id === 'hb-night')!
+    expect(h.steps!.map((x) => x.text)).toEqual(NIGHT_STEPS.map((x) => x.text))
   })
 })
 

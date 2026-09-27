@@ -1,7 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import type {
   AppState, CalEvent, DayLog, Exercise, ID, ISODate, NewsRating, Rec, RecurRule, Session, SetLog,
-  SkillProgress, Task, WeekGoal, WeekLog, WorkoutDay, WorkoutLog,
+  HabitStep, SkillProgress, Task, WeekGoal, WeekLog, WorkoutDay, WorkoutLog,
 } from './types'
 import { addDays, iso, logicalDate, parseISO, today, weekStart } from './dates'
 import {
@@ -348,6 +348,9 @@ const MIGRATIONS: Array<{ id: string; run: (s: AppState) => AppState }> = [
   // שגרת הערב הפכה למסלול של חלונות: כתיבה על היום, בניית מחר, צ׳קליסט וקריאה.
   // שלבים שהמשתמש הוסיף בעצמו נשארים בצ׳קליסט, לפני הקריאה.
   { id: 'night-flow-2026-09', run: migrateNightSteps },
+  // המעבר הראשון זיהה את השלבים הישנים רק לפי מזהה, ושגרה שהשלבים שלה נשמרו
+  // עם מזהים אחרים (עריכה בהגדרות, אטלס) קיבלה את הישנים לצד החדשים
+  { id: 'night-flow-dedupe-2026-09', run: dedupeNightSteps },
 ]
 
 export function migrateNightSteps(s: AppState): AppState {
@@ -356,8 +359,42 @@ export function migrateNightSteps(s: AppState): AppState {
   const seeded = new Set(['hn1', 'hn2', 'hn3', 'hn4'])
   const extra = (h.steps ?? []).filter((x) => !seeded.has(x.id))
   const read = NIGHT_STEPS[NIGHT_STEPS.length - 1]
-  const steps = [...NIGHT_STEPS.slice(0, -1), ...extra, read].map((x) => ({ ...x }))
+  const steps = cleanNightSteps([...NIGHT_STEPS.slice(0, -1), ...extra, read].map((x) => ({ ...x })))
   const next = { ...h, steps, minutes: Math.max(h.minutes ?? 0, 40), updatedAt: Date.now() }
+  return { ...s, habits: s.habits.map((x) => (x === h ? next : x)) }
+}
+
+/**
+ * שלבים ששגרת הערב כבר מכסה: כפילות של שלב קיים, "לארגן/לתכנן את מחר"
+ * (החלון "בונים את מחר"), "לקרוא" (החלון האחרון) ו"לסדר איזור" (שהפך ל"לסדר חדר").
+ * שלבים חלונות לא נוגעים בהם; שלב אחר שהמשתמש הוסיף נשאר.
+ */
+function cleanNightSteps(steps: HabitStep[]): HabitStep[] {
+  const norm = (t: string) => t.replace(/\s+/g, ' ').trim()
+  const has = (f: HabitStep['flow']) => steps.some((x) => x.flow === f)
+  const seen = new Set<string>()
+  const out: HabitStep[] = []
+  for (const x of steps) {
+    const t = norm(x.text)
+    if (!x.flow) {
+      if (seen.has(t)) continue
+      if (has('plan') && /^(לארגן|לתכנן|לבנות) את מחר/.test(t)) continue
+      if (has('read') && /^לקרוא/.test(t)) continue
+      if (has('journal') && /^לכתוב על היום/.test(t)) continue
+      if (t === 'לסדר איזור' && steps.some((y) => norm(y.text) === 'לסדר חדר')) continue
+    }
+    seen.add(t)
+    out.push(x)
+  }
+  return out
+}
+
+export function dedupeNightSteps(s: AppState): AppState {
+  const h = s.habits.find((x) => x.id === 'hb-night' && !x.deleted && (x.steps ?? []).some((y) => y.flow))
+  if (!h) return s
+  const steps = cleanNightSteps(h.steps ?? [])
+  if (steps.length === (h.steps ?? []).length) return s
+  const next = { ...h, steps, updatedAt: Date.now() }
   return { ...s, habits: s.habits.map((x) => (x === h ? next : x)) }
 }
 
