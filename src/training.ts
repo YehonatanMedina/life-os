@@ -151,6 +151,42 @@ export const HALF_ANCHORS = { weeklyKm: 32, longKm: 21 }
  */
 export const LONG_RUN_MIN_MINUTES = 70
 
+/**
+ * הריצה הארוכה שאליה התוכנית בונה. **לא** 21.1 — אין צורך לרוץ את המרחק
+ * באימון, וזה גם מה שהמיילסטונים אומרים: 18 ק״מ היא הריצה שממנה כבר יודעים
+ * שחצי מרתון יקרה. תוכניות המתחילים הנפוצות מגיעות ל-16–18.
+ */
+export const HALF_TRAINING_LONG_KM = 18
+
+/**
+ * תקרת הנפח השבועי לחצי מרתון. העוגן שנמדד הוא 32 ק״מ (HALF_ANCHORS), והתקרה
+ * מעט מעליו — מעבר לזה אין תשואה נמדדת לחצי מרתון, ויש עלות זמן.
+ */
+export const HALF_WEEKLY_CAP_KM = 40
+
+/**
+ * **הריצה הארוכה לא גדלה יותר מ-10% משבוע לשבוע.** זו אותה תקרה של 110%
+ * שחלה על אימון בודד (`sessionCapKm`) — הכלל היחיד בריצה עם דוז-רספונס
+ * שנמדד, על 5,205 רצים. לכן היא חלה גם על מה שהתוכנית **מציעה** ולא רק על
+ * מה שנרשם בדיעבד: תוכנית שמציעה קפיצה של 30% בארוכה מפרה את החוק של עצמה.
+ * pmc.ncbi.nlm.nih.gov/articles/PMC12421110/
+ */
+export const LONG_RUN_WEEKLY_GROWTH = 0.1
+
+/**
+ * חלק הארוכה מהשבוע כשהנפח כבר בתקרה. כשהשבוע לא גדל יותר, הדרך היחידה
+ * להמשיך לבנות את הארוכה היא חלק גדול יותר מאותו שבוע — וזה בדיוק מה
+ * שתוכניות המתחילים עושות (43–52%).
+ */
+const LONG_SHARE_AT_CAP = 0.45
+
+/**
+ * הרצפה לריצה שאינה הארוכה. ריצה של קילומטר וחצי היא חימום, לא אימון —
+ * ובשבועות הראשונים, כשהארוכה לוקחת חלק גדול מנפח קטן, החלוקה החשבונית
+ * מייצרת בדיוק את זה. 2.5 ק״מ הם כ-20 דקות בקצב קל.
+ */
+export const MIN_RUN_KM = 2.5
+
 /** קילומטרים בספרה אחת — עיגול לשלם בנפח נמוך מעוות את קצב הגידול */
 const r1 = (n: number) => Math.round(n * 10) / 10
 
@@ -178,13 +214,22 @@ export function volumeRamp(opts: {
   growth?: number
   /** תקרת נפח שבועי */
   capKm?: number
+  /**
+   * הריצה הארוכה שהגוף **כבר** עשה (30 הימים האחרונים). הארוכה של התוכנית
+   * לא יורדת מתחתיה, ולכן היא הנתון הכי חשוב כאן: בלעדיו הסולם גוזר את
+   * הארוכה כאחוז מנפח שבועי קטן ומציע פחות ממה שנרוץ בפועל.
+   */
+  startLongKm?: number
+  /** הארוכה שהתוכנית בונה אליה */
+  goalLongKm?: number
 }): WeekPlan[] {
   const downEvery = opts.downEvery ?? 4
   const growth = opts.growth ?? 0.1
   const cap = opts.capKm ?? 60
+  const goalLong = opts.goalLongKm ?? HALF_TRAINING_LONG_KM
   const out: WeekPlan[] = []
-  let km = Math.max(1, opts.startKm)
-  let lastBuild = km
+  let lastBuild = Math.max(1, opts.startKm)
+  let lastLong = Math.max(opts.startLongKm ?? 0, longShare(lastBuild))
 
   for (let n = 1; n <= opts.weeks; n++) {
     const left = opts.weeks - n
@@ -192,26 +237,103 @@ export function volumeRamp(opts: {
       out.push({ n, km: r1(lastBuild * 0.5), kind: 'race', longKm: 0, note: 'שבוע המרוץ' })
       continue
     }
+    // **התחדדות שומרת על הארוכה, לא מוחקת אותה.** מטא-אנליזה של 27 מחקרים:
+    // מורידים נפח 41–60% ושומרים על העצימות והתדירות. ריצה ארוכה של 25%
+    // מהנפח שבוע לפני חצי מרתון היא מספר של שבוע מרוץ, לא של התחדדות.
     if (left === 1) {
-      out.push({ n, km: r1(lastBuild * 0.69), kind: 'taper', longKm: r1(lastBuild * 0.25), note: 'התחדדות' })
+      out.push({ n, km: r1(lastBuild * 0.69), kind: 'taper', longKm: r1(lastLong * 0.6), note: 'התחדדות' })
       continue
     }
+    // שבוע ירידה: הנפח יורד 30%, **והארוכה כמעט לא** — מה שנחתך הוא הנפח
+    // הקל. ארוכה שנחתכת לחצי בשבוע ירידה שוברת את רצפת השבוע (ריצה ארוכה
+    // אחת), וזה בדיוק מה שהיה כאן קודם.
     if (n % downEvery === 0) {
       const down = r1(lastBuild * 0.7)
-      out.push({ n, km: down, kind: 'down', longKm: r1(down * 0.3), note: 'שבוע ירידה' })
+      out.push({ n, km: down, kind: 'down', longKm: r1(Math.min(lastLong * 0.85, down * 0.6)), note: 'שבוע ירידה' })
       continue
     }
-    // שלושת השבועות הראשונים — חצי מקצב הגידול
-    const g = n <= 3 ? growth / 2 : growth
-    km = Math.min(cap, n === 1 ? km : lastBuild * (1 + g))
-    lastBuild = km
-    // בשלושת שבועות הבנייה האחרונים הארוכה לוקחת חלק גדול יותר — ככה
-    // עושות תוכניות למתחילים (43–52% מהשבוע), וזה מה שמקרב את הארוכה
-    // למרחק שבאמת מכין למרוץ.
-    const finalBuild = left <= 5
-    out.push({ n, km: r1(km), kind: 'build', longKm: r1(finalBuild ? km * 0.45 : longShare(km)) })
+    lastBuild = nextWeekKm(lastBuild, n, growth, cap)
+    // בשלושת שבועות הבנייה האחרונים, ובכל שבוע שבו הנפח כבר בתקרה, הארוכה
+    // לוקחת חלק גדול יותר — ככה עושות תוכניות למתחילים (43–52%).
+    lastLong = nextLongKm(lastLong, lastBuild, goalLong, left <= 5 || lastBuild >= cap - 0.05)
+    out.push({ n, km: r1(lastBuild), kind: 'build', longKm: r1(lastLong) })
   }
   return out
+}
+
+/**
+ * הנפח השבועי של שבוע הבנייה הבא. שלושת השבועות הראשונים בחצי הקצב — זה
+ * החלון שנמדד כפגיע (pubmed.ncbi.nlm.nih.gov/30526231/).
+ */
+function nextWeekKm(lastBuild: number, n: number, growth: number, cap: number): number {
+  const g = n <= 3 ? growth / 2 : growth
+  return Math.min(cap, n === 1 ? lastBuild : lastBuild * (1 + g))
+}
+
+/**
+ * הארוכה של שבוע הבנייה הבא — **הפונקציה שכל הבעיה הייתה בה.**
+ *
+ * שלושה חוקים, וכולם נדרשים:
+ *   1. **היא לא קטנה.** ארוכה שהגוף כבר עשה היא הבסיס, ולא אחוז מנפח שבועי
+ *      קטן. הגרסה הקודמת גזרה 42% מהנפח בלבד, וכך הציעה 4.4 ק״מ למי שרץ
+ *      7 — כלומר תוכנית שמחזירה אחורה.
+ *   2. **היא לא קופצת.** עד 10% בשבוע, אותה תקרה של אימון בודד.
+ *   3. **היא לא עוברת את היעד.** 18 ק״מ, ואין צורך ב-21 באימון.
+ *
+ * מה שיוצא מזה הוא ההתנהגות הנכונה גם כשהארוכה גדולה מדי ביחס לשבוע (7 מתוך
+ * 10): הארוכה **עומדת במקום** והנפח שנוסף הולך לשאר הריצות, עד שהחלק שלה
+ * חוזר לטווח. זו בדיוק ההוראה שמאמן היה נותן.
+ */
+function nextLongKm(lastLong: number, weekKm: number, goalLongKm: number, atCapShare: boolean): number {
+  const target = atCapShare ? weekKm * LONG_SHARE_AT_CAP : longShare(weekKm)
+  return Math.min(goalLongKm, Math.max(lastLong, Math.min(target, lastLong * (1 + LONG_RUN_WEEKLY_GROWTH))))
+}
+
+/**
+ * כמה שבועות בנייה לוקח להגיע ליעד — **לפי אותו סולם שהתוכנית בונה בפועל**,
+ * כולל שבועות הירידה והפתיחה השמרנית.
+ *
+ * זה קיים כדי לסגור את הפער שהיה בין שני מודלים: התחזית חישבה
+ * `log(יעד/נפח)/log(1.1)` — כלומר 10% בשבוע בלי הפסקה — ואמרה 14 שבועות
+ * לחצי מרתון, בזמן שהסולם שבונה את השבוע מגיע באותם 14 שבועות ל-20 ק״מ
+ * בשבוע ולארוכה של 9. שני מספרים לאותה שאלה, ואחד מהם היה לא נכון.
+ */
+export function buildWeeksTo(
+  want: { weekKm?: number; longKm?: number },
+  from: { startKm: number; startLongKm?: number },
+  opts?: { growth?: number; downEvery?: number; capKm?: number; goalLongKm?: number; maxWeeks?: number },
+): number {
+  const growth = opts?.growth ?? 0.1
+  const downEvery = opts?.downEvery ?? 4
+  const cap = opts?.capKm ?? HALF_WEEKLY_CAP_KM
+  const goalLong = opts?.goalLongKm ?? HALF_TRAINING_LONG_KM
+  const maxWeeks = opts?.maxWeeks ?? 104
+  let lastBuild = Math.max(1, from.startKm)
+  let lastLong = Math.max(from.startLongKm ?? 0, longShare(lastBuild))
+  const reached = () =>
+    (want.weekKm === undefined || lastBuild >= want.weekKm - 1e-9) &&
+    (want.longKm === undefined || lastLong >= want.longKm - 1e-9)
+  if (reached()) return 0
+  for (let n = 1; n <= maxWeeks; n++) {
+    if (n % downEvery === 0) continue
+    lastBuild = nextWeekKm(lastBuild, n, growth, cap)
+    lastLong = nextLongKm(lastLong, lastBuild, goalLong, lastBuild >= cap - 0.05)
+    if (reached()) return n
+  }
+  return maxWeeks
+}
+
+/**
+ * אורך התוכנית עד המרוץ: שבועות הבנייה עד שהארוכה והנפח מגיעים למה שחצי
+ * מרתון דורש, ועוד שבוע התחדדות ושבוע מרוץ.
+ */
+export function halfPlanWeeks(from: { startKm: number; startLongKm?: number }, opts?: { capKm?: number }): number {
+  const build = buildWeeksTo(
+    { longKm: HALF_TRAINING_LONG_KM, weekKm: HALF_ANCHORS.weeklyKm },
+    from,
+    { capKm: opts?.capKm },
+  )
+  return build + 2
 }
 
 /**
@@ -697,19 +819,35 @@ export type WeekProposal = {
  * הארוכה לוקחת את החלק שלה (`longShare`), ומה שנשאר מתחלק בין האיכות
  * לקלות — האיכות מעט ארוכה יותר, כי חימום ושחרור נספרים בתוכה.
  */
-export function splitWeek(weekKm: number, runs = 3): { long: number; quality: number; easy: number; qualityDays: 1 | 2 } {
-  const long = Math.round(longShare(weekKm) * 10) / 10
+export function splitWeek(
+  weekKm: number,
+  runs = 3,
+  /**
+   * הארוכה, כשהיא נקבעה בסולם ולא נגזרת מהנפח. **כמעט תמיד צריך להעביר
+   * אותה:** הסולם יודע מה הגוף כבר עשה, והחלוקה החשבונית לא.
+   */
+  longKm?: number,
+): { long: number; quality: number; easy: number; qualityDays: 1 | 2; total: number } {
+  const long = Math.round((longKm ?? longShare(weekKm)) * 10) / 10
   const rest = Math.max(0, weekKm - long)
   const others = Math.max(1, runs - 1)
   const qualityDays = Math.min(qualityRuns(weekKm), Math.max(1, others - 1)) as 1 | 2
   const easyDays = Math.max(0, others - qualityDays)
   // האיכות מקבלת פי 1.2 מריצה קלה — זה בערך מה שחימום ושחרור מוסיפים
   const unit = rest / (qualityDays * 1.2 + easyDays)
+  // רצפה לריצה שאינה הארוכה. כשהארוכה גדולה ביחס לשבוע, מה שנשאר מתחלק
+  // לריצות של קילומטר וחצי — וזה חימום ולא אימון. הרצפה מעלה את סך השבוע
+  // מעל מה שהסולם אמר, וזה נכון: זה הנפח שמופיע בפועל ביומן.
+  const quality = Math.max(MIN_RUN_KM * 1.2, Math.round(unit * 1.2 * 10) / 10)
+  const easy = Math.max(MIN_RUN_KM, Math.round(unit * 10) / 10)
   return {
     long,
-    quality: Math.round(unit * 1.2 * 10) / 10,
-    easy: Math.round(unit * 10) / 10,
+    quality: Math.round(quality * 10) / 10,
+    easy: Math.round(easy * 10) / 10,
     qualityDays,
+    // הסכום בפועל של שבעת הימים — ולא מה שהסולם ביקש. כשהרצפה נכנסת לפעולה
+    // השניים נבדלים, והמסך מראה את מה שירוץ.
+    total: Math.round((long + quality * qualityDays + easy * easyDays) * 10) / 10,
   }
 }
 
@@ -791,6 +929,8 @@ export function planWeek(opts: {
   weekKm: number
   week: number
   weeks: number
+  /** הארוכה מהסולם. בלעדיה היא נגזרת מהנפח, וזה נכון רק כשאין היסטוריה */
+  longKm?: number
   longRunMinutes?: number
   /** הימים שבהם יש חדר כושר. ברירת מחדל: ראשון עד חמישי */
   gymDays?: number[]
@@ -806,7 +946,7 @@ export function planWeek(opts: {
 }): ProposedDay[] {
   const runs = Math.max(1, Math.min(6, opts.runsPerWeek ?? DEFAULT_RUNS_PER_WEEK))
   const gym = opts.gymDays ?? DEFAULT_GYM_DAYS
-  const s = splitWeek(opts.weekKm, runs)
+  const s = splitWeek(opts.weekKm, runs, opts.longKm)
   const polar = blockType(opts.week) === 'polarized'
 
   const mmss = (m: number) => {
@@ -820,6 +960,8 @@ export function planWeek(opts: {
   }
   const p = opts.paces
   const easyPace = p ? `${mmss(p.easy[0])}-${mmss(p.easy[1])}` : undefined
+  /** אורך הארוכה בדקות, בקצב הקל — כדי לא להבטיח 70 דקות כשזה 35 */
+  const longMinutes = p ? Math.round(s.long * ((p.easy[0] + p.easy[1]) / 2)) : undefined
 
   // -- מי רץ מתי -------------------------------------------------------------
   //
@@ -906,8 +1048,16 @@ export function planWeek(opts: {
           focus: 'הדבר היחיד שאימון אינטרוולים לא קונה — עמידוּת',
           km: s.long,
           pace: easyPace,
-          minutes: opts.longRunMinutes,
-          how: 'קצב נוח לכל האורך, 70 דקות ומעלה. אין עליה תקרת זמן.',
+          minutes: opts.longRunMinutes ?? longMinutes,
+          // **לא מבטיחים 70 דקות כשהארוכה קצרה מזה.** הרצפה שקונה עמידוּת
+          // היא 70 דקות, והמשפט הזה אומר איפה הארוכה הזו עומדת מולה במקום
+          // להצהיר שהיא עומדת בה.
+          how:
+            longMinutes === undefined
+              ? 'קצב נוח לכל האורך, מבחן הדיבור. אין עליה תקרת זמן.'
+              : longMinutes >= LONG_RUN_MIN_MINUTES
+                ? `קצב נוח לכל האורך, כ-${longMinutes} דקות. אין עליה תקרת זמן.`
+                : `קצב נוח לכל האורך, כ-${longMinutes} דקות — בדרך ל-${LONG_RUN_MIN_MINUTES}, שזו הרצפה שקונה עמידוּת.`,
           hard: true,
           exercises: runHomeBlock('long'),
         })
@@ -1063,10 +1213,18 @@ export function weekChanges(current: CurrentDay[], proposed: ProposedDay[]): { c
   }
   const runDays = current.filter((d) => d.kind === 'run').length
   if (runDays < WEEK_FLOOR.runDays) fixes.push(`${runDays} ימי ריצה בשבוע — בתקרה של 45 דקות התדירות היא הדרך היחידה להעלות נפח`)
-  // ריצה ארוכה שאינה ארוכה: מתחת ל-70 דקות היא לא קונה עמידוּת
+  // ריצה ארוכה שאינה ארוכה: מתחת ל-70 דקות היא לא קונה עמידוּת.
+  //
+  // **וזה נסמן רק כשזו באמת תקלה בתוכנית** — כלומר כשהארוכה קצרה גם
+  // מהרצפה וגם ממה שהנפח שלו כבר מחזיק. מי שרץ 10 ק״מ בשבוע עוד לא מגיע
+  // ל-70 דקות, ולהגיד לו את זה בכל שבוע זה לא תיקון אלא רעש: הכרטיס אומר
+  // לו בנפרד כמה דקות הארוכה שלו וכמה שבועות עד הרצפה.
   const longest = Math.max(0, ...current.filter((d) => d.kind === 'run').map((d) => d.km ?? 0))
-  if (longest > 0 && longest * 7 < LONG_RUN_MIN_MINUTES) {
-    fixes.push(`הארוכה בשבוע היא ${longest} ק״מ — בקצב שלך זה פחות מ-70 דקות, ומתחת לזה היא ריצה רגילה ולא ארוכה`)
+  const proposedLong = Math.max(0, ...proposed.filter((p) => p.dow === 6 && p.kind === 'run').map((p) => p.km ?? 0))
+  if (longest > 0 && longest * 7 < LONG_RUN_MIN_MINUTES && longest < proposedLong - 0.5) {
+    fixes.push(
+      `הארוכה בתוכנית היא ${longest} ק״מ — פחות מ-70 דקות, וגם פחות מ-${r1(proposedLong)} שהנפח שלך כבר מחזיק`,
+    )
   }
 
   for (const p of proposed) {

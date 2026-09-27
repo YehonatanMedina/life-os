@@ -7,7 +7,11 @@ import {
   DEFAULT_GYM_DAYS,
   DEFAULT_RUNS_PER_WEEK,
   HALF_ANCHORS,
+  HALF_TRAINING_LONG_KM,
   INTENSITY,
+  MIN_RUN_KM,
+  buildWeeksTo,
+  halfPlanWeeks,
   TENDON_BUDGET,
   WEEKLY_SETS,
   blockType,
@@ -119,12 +123,72 @@ describe('סולם הנפח', () => {
     }
   })
 
-  it('בשבועות האחרונים הארוכה גדלה יחסית — כמו בתוכניות למתחילים', () => {
+  it('הארוכה לא קופצת יותר מ-10% משבוע לשבוע — אותה תקרה של אימון בודד', () => {
+    // זה מה שהיה שבור: בשלושת שבועות הבנייה האחרונים הארוכה קיבלה 45%
+    // מהנפח במקום 38%, כלומר קפיצה של כ-30% בריצה אחת — הפרה של החוק
+    // היחיד בריצה עם דוז-רספונס שנמדד, בתוכנית שמצטטת אותו.
     const builds = ramp.filter((w) => w.kind === 'build')
-    const early = builds[1]
+    for (let i = 1; i < builds.length; i++) {
+      // 0.05 הוא עיגול לספרה אחת, לא הקלה בחוק
+      expect(builds[i].longKm, `שבוע ${builds[i].n}`).toBeLessThanOrEqual(builds[i - 1].longKm * 1.1 + 0.05)
+    }
+  })
+
+  it('הארוכה רק גדלה בשבועות בנייה — תוכנית לא מחזירה אחורה', () => {
+    const builds = ramp.filter((w) => w.kind === 'build')
+    for (let i = 1; i < builds.length; i++) {
+      expect(builds[i].longKm, `שבוע ${builds[i].n}`).toBeGreaterThanOrEqual(builds[i - 1].longKm)
+    }
+  })
+
+  it('הארוכה לא יורדת מתחת למה שכבר נרוץ', () => {
+    // הבאג שנתפס ב-27.9.2026: ארוכה של 7.01 ק״מ ביומן, נפח שבועי של 10.5,
+    // והסולם הציע 4.4 ק״מ — 42% מהנפח, כלומר פחות ממה שהגוף עשה בשבוע שעבר.
+    const r = volumeRamp({ startKm: 10.5, weeks: 25, startLongKm: 7.01 })
+    expect(r[0].longKm).toBeGreaterThanOrEqual(7)
+    for (const w of r.filter((x) => x.kind === 'build')) expect(w.longKm).toBeGreaterThanOrEqual(7)
+  })
+
+  it('כשהארוכה גדולה מדי ביחס לשבוע — היא עומדת והנפח מדביק אותה', () => {
+    const r = volumeRamp({ startKm: 10.5, weeks: 25, startLongKm: 7.01 })
+    const builds = r.filter((w) => w.kind === 'build')
+    // בשבועות הראשונים הארוכה לא זזה: היא כבר 67% מהשבוע
+    expect(builds[2].longKm).toBeCloseTo(builds[0].longKm, 1)
+    // וחלקה מהשבוע יורד, כי מה שנוסף הולך לשאר הריצות
+    expect(builds[2].longKm / builds[2].km).toBeLessThan(builds[0].longKm / builds[0].km)
+    // וכשהחלק חוזר לטווח — היא ממשיכה לגדול
     const late = builds[builds.length - 1]
-    expect(early.longKm / early.km).toBeLessThan(0.44)
-    expect(late.longKm / late.km).toBeGreaterThan(0.44)
+    expect(late.longKm).toBeGreaterThan(builds[0].longKm * 2)
+  })
+
+  it('שבוע ירידה חותך נפח ולא את הארוכה', () => {
+    // קודם היה כאן 30% מנפח שכבר ירד 30% — ארוכה של 2.4 ק״מ, שהיא לא
+    // ריצה ארוכה בשום הגדרה, ולכן שוברת את רצפת השבוע.
+    for (const d of ramp.filter((w) => w.kind === 'down')) {
+      const prevBuild = [...ramp].filter((w) => w.n < d.n && w.kind === 'build').pop()!
+      expect(d.longKm / prevBuild.longKm, `שבוע ${d.n}`).toBeGreaterThan(0.7)
+      expect(d.km / prevBuild.km, `שבוע ${d.n}`).toBeLessThan(0.75)
+    }
+  })
+
+  it('התחדדות שומרת על הארוכה — מורידים נפח, לא את האימון', () => {
+    const taper = ramp.find((w) => w.kind === 'taper')!
+    const lastBuild = [...ramp].reverse().find((w) => w.kind === 'build')!
+    expect(taper.longKm / lastBuild.longKm).toBeGreaterThan(0.5)
+  })
+
+  it('אורך התוכנית נגזר מהסולם ולא מנוסחה נפרדת', () => {
+    const from = { startKm: 10.5, startLongKm: 7.01 }
+    const weeks = halfPlanWeeks(from)
+    const r = volumeRamp({ startKm: from.startKm, weeks, startLongKm: from.startLongKm, capKm: 40 })
+    const peakLong = Math.max(...r.map((w) => w.longKm))
+    const peakKm = Math.max(...r.filter((w) => w.kind === 'build').map((w) => w.km))
+    // התוכנית מגיעה למה שהמרוץ דורש **לפני** ההתחדדות. קודם היא לא הגיעה:
+    // 14 שבועות, שיא של 20.5 ק״מ בשבוע וארוכה של 9.2 — ואז שבוע מרוץ.
+    expect(peakLong).toBeGreaterThanOrEqual(HALF_TRAINING_LONG_KM - 0.1)
+    expect(peakKm).toBeGreaterThanOrEqual(HALF_ANCHORS.weeklyKm)
+    // ושבועות הבנייה שנדרשים לכך אינם פחות ממה שהסולם באמת לוקח
+    expect(weeks).toBeGreaterThan(buildWeeksTo({ longKm: HALF_TRAINING_LONG_KM }, from))
   })
 
   it('הריצה הארוכה בשיא מגיעה לטווח שתוכניות אמיתיות נותנות', () => {
@@ -299,9 +363,34 @@ describe('השבוע שהחוקים מייצרים', () => {
   it('נפח קטן מייצר ריצות קצרות ולא שליליות', () => {
     for (const km of [6, 10.5, 15]) {
       const sp = splitWeek(km, 3)
-      expect(sp.easy).toBeGreaterThan(0)
-      expect(sp.long).toBeGreaterThan(sp.easy)
+      expect(sp.easy).toBeGreaterThanOrEqual(MIN_RUN_KM)
+      expect(sp.long).toBeGreaterThanOrEqual(sp.easy)
     }
+  })
+
+  it('שאר הריצות לא מתכווצות לחימום כשהארוכה לוקחת את השבוע', () => {
+    // 10.5 ק״מ בשבוע עם ארוכה של 7 משאירים 3.5 לשתי ריצות — כלומר 1.6 ק״מ,
+    // שזה 12 דקות. הרצפה מעלה את סך השבוע, וזה הנפח שבאמת ירוץ.
+    const sp = splitWeek(10.5, 3, 7)
+    expect(sp.easy).toBeGreaterThanOrEqual(MIN_RUN_KM)
+    expect(sp.quality).toBeGreaterThanOrEqual(MIN_RUN_KM)
+    expect(sp.total).toBeGreaterThan(10.5)
+    // ולא יותר מ-30% מעל הבסיס — זה הסף שנמדד על 874 רצים
+    expect(sp.total).toBeLessThan(10.5 * 1.3)
+  })
+
+  it('הארוכה שמועברת לחלוקה היא זו שיוצאת, ולא אחוז מהנפח', () => {
+    expect(splitWeek(10.5, 3, 7).long).toBe(7)
+    expect(planWeek({ weekKm: 10.5, longKm: 7, week: 1, weeks: 25 }).find((d) => d.dow === 6)?.km).toBe(7)
+  })
+
+  it('ההסבר של הארוכה לא מבטיח 70 דקות כשהיא קצרה מזה', () => {
+    const p = paces(vdot(5000, 1800))
+    const short = planWeek({ weekKm: 10.5, longKm: 5, week: 1, weeks: 25, paces: p })
+    const how = short.find((d) => d.dow === 6)!.how!
+    expect(how).toContain('בדרך ל-70')
+    const long = planWeek({ weekKm: 36, longKm: 16, week: 1, weeks: 25, paces: p })
+    expect(long.find((d) => d.dow === 6)!.how!).not.toContain('בדרך ל-70')
   })
 
   it('כשיש קצבים — לכל ריצה טווח, והקל איטי מהאיכותי', () => {

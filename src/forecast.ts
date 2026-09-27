@@ -27,6 +27,7 @@ import { addDays, diffDays, today as todayISO, weekStart } from './dates'
 import {
   currentStage, exerciseHistory, longestRun, runWeeks, skillExIds,
 } from './store'
+import { HALF_TRAINING_LONG_KM, baseWeeklyKm, buildWeeksTo } from './training'
 import {
   RUN_MILESTONES, RUN_WEEKLY_GROWTH, focusLadders, stageWeeks,
 } from './skills'
@@ -306,7 +307,7 @@ export interface RunForecast {
   best: number
   /** הקצב שבו הריצה הארוכה גדלה בפועל, ק״מ לשבוע */
   growth: number
-  /** הנפח השבועי האחרון שנסגר */
+  /** הנפח שממנו בונים: הגבוה מבין השבועות השלמים האחרונים */
   weekKm: number
   items: RunEta[]
   goalDate?: ISODate
@@ -315,20 +316,31 @@ export interface RunForecast {
 /**
  * מתי כל מרחק ייפול.
  *
- * שני חסמים, והמאוחר שבהם הוא התשובה:
- * 1. **הריצה הארוכה.** נמדדת שבוע־שבוע (הארוכה של כל שבוע), ולא ריצה מול
- *    ריצה — אחרת הריצה הקצרה של שני והארוכה של שישי נראות כמו קפיצה של
- *    שני ק״מ בשבוע. הצמיחה נחתכת לכלל ה-10% מהנפח השבועי ולכל היותר ק״מ
- *    אחד בשבוע, כי מי שמוסיף יותר מזה נפצע לפני המרוץ.
- * 2. **הנפח השבועי.** לכל מיילסטון יש נפח שמחזיק אותו (`weekKm`), והנפח
- *    עצמו יכול לגדול רק ב-10% בשבוע. זה מה שמונע תחזית שבה הריצה הארוכה
- *    מגיעה ל-18 ק״מ בזמן שהשבוע כולו עומד על 12.
+ * **התחזית מריצה את הסולם שהתוכנית בונה בפועל** (`buildWeeksTo` ב-training.ts),
+ * ולא נוסחה משלה. לכל מיילסטון שני תנאים, ושניהם נדרשים: הריצה הארוכה
+ * שמגיעה למרחק, והנפח השבועי שמחזיק אותו (`weekKm` בטבלת המיילסטונים).
+ *
+ * למה זה חשוב, ולמה זה היה שבור: קודם חושב כאן `log(יעד/נפח)/log(1.1)` —
+ * כלומר 10% בשבוע בלי הפסקה — ויצא "חצי מרתון בעוד 14 שבועות", בזמן
+ * שהסולם שמייצר את השבוע מגיע באותם 14 שבועות ל-20 ק״מ בשבוע ולארוכה של
+ * 9 ק״מ. הסולם האמיתי כולל שבוע ירידה אחד לארבעה ושלושה שבועות פתיחה
+ * בחצי הקצב, ולכן הוא איטי בכשליש מהנוסחה.
+ *
+ * **המרוץ עצמו הוא שבועיים אחרי שבוע הבנייה האחרון** — התחדדות ושבוע מרוץ.
+ * ולארוכה אין צורך להגיע ל-21.1 באימון: היעד הוא
+ * `HALF_TRAINING_LONG_KM` (18 ק״מ), כמו שכתוב בטבלת המיילסטונים עצמה.
  */
 export function runForecast(s: AppState, from: ISODate = todayISO()): RunForecast {
   const best = longestRun(s).km
-  const weeks = runWeeks(s)
-  const weekKm = weeks.length ? weeks[weeks.length - 1][1] : 0
-  // הארוכה של כל שבוע — נקודה אחת לשבוע
+  // הארוכה שהגוף עשה בחודש האחרון — היא הבסיס שהסולם מתחיל ממנו, ולא שיא
+  // מלפני חצי שנה.
+  const startLongKm = longestRun(s, 30).km || best
+  // הנפח שממנו בונים הוא **אותו נפח שהתוכנית בונה ממנו**: הגבוה מבין
+  // השבועות השלמים האחרונים. השבוע הנוכחי חלקי, וביום ראשון בבוקר הוא אפס.
+  const weekKm = baseWeeklyKm(runWeeks(s), weekStart(from))
+  // הקצב שנמדד בפועל נשאר מוצג — הוא אומר משהו על החודשיים האחרונים — אבל
+  // הוא כבר לא זה שקובע את התאריך: ריצה אחת שגדלה ב-3 ק״מ מייצרת שיפוע של
+  // ק״מ בשבוע, ואי אפשר להחזיק אותו לחצי שנה.
   const byWeek = new Map<ISODate, number>()
   for (const w of s.workouts ?? []) {
     if (w.deleted || w.kind !== 'run' || !w.km) continue
@@ -340,16 +352,15 @@ export function runForecast(s: AppState, from: ISODate = todayISO()): RunForecas
     .map(([date, level]) => ({ date, level }))
     .sort((a, b) => a.date.localeCompare(b.date))
   const measured = slopePerWeek(pts)
-  // התקרה: 10% מהנפח השבועי, ולעולם לא יותר מק״מ בשבוע
   const cap = Math.min(1, Math.max(0.5, (weekKm || best) * RUN_WEEKLY_GROWTH))
   const growth = clamp(measured ?? DEFAULT_KM_WEEK, 0.25, cap)
+  const from2 = { startKm: weekKm || best, startLongKm }
   const items = RUN_MILESTONES.filter((m) => m.km > best).map((m) => {
-    const byLong = (m.km - best) / growth
-    // כמה שבועות לוקח לנפח השבועי להגיע למה שהמרחק דורש, ב-10% לשבוע
-    const byVolume = weekKm > 0 && m.weekKm > weekKm
-      ? Math.log(m.weekKm / weekKm) / Math.log(1 + RUN_WEEKLY_GROWTH)
-      : 0
-    const w = Math.round(clamp(Math.max(byLong, byVolume), 1, MAX_WEEKS))
+    // לחצי מרתון אין צורך לרוץ 21 באימון — היעד הוא 18, ואחריו התחדדות
+    // ושבוע מרוץ.
+    const race = m.km >= 21
+    const build = buildWeeksTo({ longKm: Math.min(m.km, HALF_TRAINING_LONG_KM), weekKm: m.weekKm }, from2)
+    const w = Math.round(clamp(build + (race ? 2 : 0), 1, MAX_WEEKS))
     return { km: m.km, name: m.name, weeks: w, date: addDays(from, w * 7) }
   })
   return {

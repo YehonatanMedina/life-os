@@ -5,7 +5,7 @@ import {
   homeMinutes, workoutMinutes, workoutOn,
 } from '../store'
 import {
-  HE_DAYS, HE_DAYS_SHORT, diffDays, dow, minutesToHM, plural, shortDate, today as todayISO,
+  HE_DAYS, HE_DAYS_SHORT, dow, minutesToHM, plural, shortDate, today as todayISO,
   weekDates, weekStart,
 } from '../dates'
 import { Ring, Sheet } from '../ui'
@@ -639,15 +639,7 @@ function RunJourney() {
   //   * אימון בודד שחורג מ-110% מהארוך ביותר ב-30 הימים האחרונים —
   //     10–30% חריגה = סיכון ×1.64, מעל 100% = ×2.28, על 5,205 רצים.
   //   * עלייה של מעל 30% בנפח על פני שבועיים, על 874 רצים.
-  const longest30 = useMemo(() => {
-    let km = 0
-    for (const w of s.workouts ?? []) {
-      if (w.deleted || (w.kind !== 'run' && !w.run) || !w.km) continue
-      if (diffDays(w.date, todayISO()) > 30) continue
-      km = Math.max(km, w.km)
-    }
-    return km
-  }, [s.workouts])
+  const longest30 = useMemo(() => longestRun(s, 30).km, [s.workouts])
   const sessionCap = longest30 ? sessionCapKm(longest30) : 0
   // שתי נקודות אחורה — זה החלון שנמדד
   const twoBack = weeks[weeks.length - (weeks[weeks.length - 1]?.[0] === weekStart(todayISO()) ? 4 : 3)]?.[1] ?? 0

@@ -17,15 +17,15 @@ import { actions, useApp } from '../store'
 import { useToast } from '../ui'
 import type { WorkoutDay } from '../types'
 import { HE_DAYS, HE_DAYS_SHORT } from '../dates'
-import { runForecast } from '../forecast'
 import { runWeeks } from '../store'
 import { weekStart } from '../dates'
 import { today as todayISO } from '../dates'
-import { alive } from '../store'
+import { alive, longestRun } from '../store'
 import { fieldVdot } from '../adapt'
 import {
-  DEFAULT_GYM_DAYS, DEFAULT_RUNS_PER_WEEK, HALF_ANCHORS, HOME_TWIN, baseWeeklyKm, blockType,
-  checkWeek, paces, planWeek, splitWeek, staleDays, volumeRamp, weekChanges, weekKinds,
+  DEFAULT_GYM_DAYS, DEFAULT_RUNS_PER_WEEK, HALF_ANCHORS, HALF_TRAINING_LONG_KM, HALF_WEEKLY_CAP_KM,
+  HOME_TWIN, LONG_RUN_MIN_MINUTES, baseWeeklyKm, blockType, buildWeeksTo, checkWeek, halfPlanWeeks,
+  paces, planWeek, splitWeek, staleDays, volumeRamp, weekChanges, weekKinds,
   type CurrentDay,
 } from '../training'
 
@@ -43,20 +43,34 @@ export default function WeekPlanCard() {
   const runsPerWeek = s.settings.runsPerWeek ?? DEFAULT_RUNS_PER_WEEK
 
   const view = useMemo(() => {
-    const f = runForecast(s)
-    const goal = f.items.find((i) => i.km >= 21)
-    const weeks = Math.max(4, goal?.weeks ?? 20)
     // הנפח מתחיל ממה שנרוץ בפועל — הגבוה מבין השבועות השלמים
     // האחרונים, ולא ממה שכתוב בתוכנית ולא מהשבוע החלקי שרץ עכשיו.
     const base = baseWeeklyKm(runWeeks(s), weekStart(todayISO()))
     const startKm = Math.max(6, base)
-    const ramp = volumeRamp({ startKm, weeks })
+    // **הארוכה שהגוף כבר עשה בחודש האחרון היא הרצפה של הארוכה בתוכנית.**
+    // בלי זה הסולם גוזר אותה כאחוז מנפח שבועי קטן ומציע פחות ממה שנרוץ —
+    // וזה בדיוק מה שקרה כאן: 4.4 ק״מ למי שרץ 7.
+    const startLongKm = longestRun(s, 30).km
+    // אורך התוכנית נגזר מהסולם עצמו: כמה שבועות לוקח לנפח ולארוכה להגיע למה
+    // שחצי מרתון דורש, ועוד התחדדות ומרוץ. לא מנוסחה נפרדת שאומרת מספר אחר.
+    const weeks = Math.max(4, halfPlanWeeks({ startKm, startLongKm }))
+    const ramp = volumeRamp({ startKm, weeks, startLongKm, capKm: HALF_WEEKLY_CAP_KM })
     const now = ramp[0]
     // הקצבים נגזרים מהריצה המהירה ביותר ב-60 הימים האחרונים. זו לא ריצת
     // מבחן ולכן היא מזלזלת ביכולת — כלומר הטווח הקל שיוצא ממנה שמרני,
     // וזה הכיוון הנכון לטעות בו.
     const v = fieldVdot(s, todayISO())
-    const days = planWeek({ weekKm: now.km, week: 1, weeks, gymDays, runsPerWeek, paces: v ? paces(v) : undefined })
+    const pc = v ? paces(v) : undefined
+    const days = planWeek({
+      weekKm: now.km, longKm: now.longKm, week: 1, weeks, gymDays, runsPerWeek, paces: pc,
+    })
+    const split = splitWeek(now.km, runsPerWeek, now.longKm)
+    // כמה דקות הארוכה הזו, ומה צריך כדי להגיע לרצפה של 70 דקות שקונה
+    // עמידוּת. זה מוצג ולא מוסתר: ארוכה של 54 דקות היא לא כישלון, היא שלב.
+    const longPace = pc ? (pc.easy[0] + pc.easy[1]) / 2 : 0
+    const longMinutes = longPace ? Math.round(split.long * longPace) : 0
+    const floorKm = longPace ? Math.round((LONG_RUN_MIN_MINUTES / longPace) * 10) / 10 : 0
+    const floorWeeks = floorKm > split.long ? buildWeeksTo({ longKm: floorKm }, { startKm, startLongKm }) : 0
 
     const current: CurrentDay[] = alive(s.workoutPlan ?? []).map((d) => ({
       dow: d.dow,
@@ -80,9 +94,10 @@ export default function WeekPlanCard() {
 
     return {
       weeks, startKm, ramp, now, days, changes, fixes, peak, broken, stale,
+      split, longMinutes, floorKm, floorWeeks, startLongKm,
       // מספר האיכויות **בפועל**, ולא מה שהנפח היה מאפשר: בשלוש ריצות
       // תמיד אחת, כי בלי ריצה קלה אחת לפחות חלוקת העצימות מתמוטטת.
-      quality: splitWeek(now.km, runsPerWeek).qualityDays,
+      quality: split.qualityDays,
       runs: runsPerWeek,
       block: blockType(1),
     }
@@ -119,7 +134,8 @@ export default function WeekPlanCard() {
         <div style={{ minWidth: 0 }}>
           <b>השבוע לפי תורת האימון</b>
           <div className="tiny faint">
-            נגזר מהנפח שלך ומהחוקים — <span className="ltr">{view.weeks}</span> שבועות לחצי מרתון
+            נגזר מהנפח שלך ומהחוקים — <span className="ltr">{view.weeks}</span> שבועות לחצי מרתון, עד ארוכה
+            של <span className="ltr">{HALF_TRAINING_LONG_KM}</span> ק״מ
           </div>
         </div>
         <button className="btn xs" onClick={() => setOpen(!open)}>
@@ -129,10 +145,11 @@ export default function WeekPlanCard() {
 
       <div className="route-facts" style={{ margin: '10px 0 4px' }}>
         <span>
-          השבוע <b className="ltr">{view.now.km}</b> ק״מ
+          השבוע <b className="ltr">{view.split.total}</b> ק״מ
         </span>
         <span>
-          ארוכה <b className="ltr">{view.days.find((d) => d.dow === 6)?.km}</b> ק״מ
+          ארוכה <b className="ltr">{view.split.long}</b> ק״מ
+          {view.longMinutes ? <span className="faint ltr"> ({view.longMinutes}׳)</span> : null}
         </span>
         <span>
           איכות <b className="ltr">{view.quality}</b>
@@ -141,6 +158,17 @@ export default function WeekPlanCard() {
           שיא מתוכנן <b className="ltr">{view.peak}</b> ק״מ
         </span>
       </div>
+
+      {view.floorKm > 0 && (
+        <div className="tiny faint">
+          הארוכה עומדת על <span className="ltr">{view.split.long}</span> ק״מ — כ-
+          <span className="ltr">{view.longMinutes}</span> דקות. הרצפה שקונה עמידוּת היא{' '}
+          <span className="ltr">{LONG_RUN_MIN_MINUTES}</span> דקות, שזה בקצב שלך{' '}
+          <span className="ltr">{view.floorKm}</span> ק״מ — הסולם מגיע לשם בעוד{' '}
+          <span className="ltr">{view.floorWeeks}</span> שבועות. עד אז היא לא גדלה יותר מ-10% בשבוע,
+          וגם לא קטנה מתחת למה שכבר רצת.
+        </div>
+      )}
 
       {view.quality === 1 && (
         <div className="tiny faint">
