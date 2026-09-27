@@ -171,6 +171,104 @@ export function longRunHow(km: number, paceMinPerKm = EASY_PACE_GUESS): string {
  */
 export const EASY_PACE_GUESS = 7
 
+/** קצב בדקות לקילומטר כמחרוזת mm:ss */
+export function mmss(m: number): string {
+  let mi = Math.floor(m)
+  let se = Math.round((m - mi) * 60)
+  if (se === 60) {
+    mi += 1
+    se = 0
+  }
+  return `${mi}:${String(se).padStart(2, '0')}`
+}
+
+/**
+ * החלק מאימון האיכות שהוא עבודה בקצב. השאר הוא חימום, שחרור והריצות
+ * הקלות שבין הקטעים — ובנפח נמוך זה רוב האימון, לא תוספת קטנה.
+ */
+export const QUALITY_WORK_SHARE = 0.55
+
+/**
+ * **אימון סף שיש בו פחות משמונה דקות עבודה הוא לא אימון סף.** זו הרצפה
+ * שמכריעה מול תקרת דניאלס: התקרה היא הנחיה על הנפח השבועי, והרצפה היא
+ * השאלה אם מה שנרשם ביום הזה הוא בכלל האימון שכתוב עליו.
+ */
+export const MIN_QUALITY_WORK_MIN = 8
+
+/**
+ * תקציב העבודה בקצב באימון האיכות, בקילומטרים. שתי תקרות, והנמוכה קובעת:
+ * תקרת דניאלס לעבודה עצימה מהנפח השבועי (`INTENSITY.thresholdShare`
+ * ל-סף, `intervalShare` לאינטרוולים), ומה שנשאר מהיום עצמו אחרי חימום
+ * ושחרור. אם התוצאה קטנה מ-`MIN_QUALITY_WORK_MIN` דקות והיום כן מחזיק
+ * שמונה דקות — הרצפה גוברת, כי אחרת היום נושא כותרת שהוא לא מקיים.
+ */
+export function qualityWorkKm(opts: {
+  km: number
+  weekKm: number
+  workPace: number
+  vo2?: boolean
+}): number {
+  const { km, weekKm, workPace } = opts
+  if (km <= 0 || workPace <= 0) return 0
+  const cap = weekKm * (opts.vo2 ? INTENSITY.intervalShare : INTENSITY.thresholdShare)
+  const dayCap = km * QUALITY_WORK_SHARE
+  const work = Math.min(dayCap, Math.max(0, cap))
+  const floorKm = MIN_QUALITY_WORK_MIN / workPace
+  if (work * workPace < MIN_QUALITY_WORK_MIN && dayCap >= floorKm) return floorKm
+  return work
+}
+
+/**
+ * מה כתוב על יום האיכות. אותו עיקרון בדיוק כמו `longRunHow`: הטקסט נגזר
+ * מהמרחק ומהקצב ולא מנוסח מראש.
+ *
+ * הבאג שזה סוגר (27.9.2026): על יום של 3.3 ק״מ היה כתוב "15 דקות חימום ·
+ * 5×5 דקות בקצב סף, דקה ריצה קלה ביניהן · 10 שחרור" — 54 דקות ריצה,
+ * כלומר כ-7.6 ק״מ. שלוש פעמים מהמרחק שכתוב על אותו יום, ובשבוע שתקציב
+ * הסף שלו הוא תשע דקות ולא עשרים וחמש. מספר ותיאור שלא מסתדרים הם לא
+ * הוראה — הם באג שהמשתמש קורא.
+ */
+export function qualityHow(opts: {
+  km: number
+  weekKm: number
+  workPace: number
+  easyPace?: number
+  vo2?: boolean
+}): string {
+  const { km, weekKm, vo2 } = opts
+  const easy = opts.easyPace && opts.easyPace > 0 ? opts.easyPace : EASY_PACE_GUESS
+  const workPace = opts.workPace > 0 ? opts.workPace : easy
+  const workKm = qualityWorkKm({ km, weekKm, workPace, vo2 })
+  const workMin = workKm * workPace
+  const totalMin = Math.round(workMin + Math.max(0, km - workKm) * easy)
+
+  // מתחת לרצפה אין אימון איכות — יש ריצה קלה עם ספרינטי עלייה, וזה מה
+  // שכתוב. גירוי מכני כמעט בלי עלות מטבולית, ולכן זה גם לא יום קשה.
+  if (workMin < MIN_QUALITY_WORK_MIN) {
+    return `כ-${totalMin} דקות קלות, ובסוף 6 ספרינטי עלייה של 10 שניות. הנפח השבועי (${r1(weekKm)} ק״מ) לא נותן שמונה דקות בקצב ${mmss(workPace)}, וזה המינימום לאימון איכות.`
+  }
+
+  // אורך הקטע נבחר כך שיצאו לפחות שלושה — קטע אחד ארוך הוא טמפו, וטמפו
+  // רצוף בקצב סף נחסם בנפח הזה.
+  let seg = 3
+  let reps = Math.max(2, Math.round(workMin / 3))
+  for (const candidate of [8, 6, 5, 4, 3]) {
+    const r = Math.round(workMin / candidate)
+    if (r >= 3) {
+      seg = candidate
+      reps = r
+      break
+    }
+  }
+  const rec = vo2 ? 2 : 1
+  const easyMin = Math.max(0, km - workKm) * easy
+  const rest = Math.max(4, easyMin - (reps - 1) * rec)
+  const warm = Math.max(2, Math.round(rest * 0.6))
+  const cool = Math.max(2, Math.round(rest - warm))
+  const what = vo2 ? `בקצב 5 ק״מ (${mmss(workPace)})` : `בקצב סף (${mmss(workPace)})`
+  return `${warm} דקות חימום קל · ${reps}×${seg} דקות ${what}, ${rec === 1 ? 'דקה' : `${rec} דקות`} ריצה קלה ביניהן · ${cool} דקות שחרור. סך הכול כ-${totalMin} דקות, ${r1(km)} ק״מ.`
+}
+
 /** קילומטרים בספרה אחת — עיגול לשלם בנפח נמוך מעוות את קצב הגידול */
 const r1 = (n: number) => Math.round(n * 10) / 10
 
@@ -598,8 +696,9 @@ export type DayKind = 'easy-run' | 'quality-run' | 'long-run' | 'legs' | 'upper'
  *     pubmed.ncbi.nlm.nih.gov/39921365/
  *   * **הריצה הארוכה לבד.** היא היחידה שלא מוגבלת ב-45 דקות, והיא היקרה
  *     ביותר מבחינת עייפות.
- *   * **לפחות ארבעה ימי ריצה**, וחמישה כשהנפח מצדיק — תדירות היא הדרך
- *     היחידה להעלות נפח מתחת לתקרת זמן.
+ *   * **מספר הריצות הוא `settings.runsPerWeek`, והוא תקרה ולא רצפה** —
+ *     נקבע 22.9.2026. תדירות היא הדרך היחידה להעלות נפח מתחת לתקרת זמן,
+ *     ולכן העלאת התקרה היא החלטה, לא ברירת מחדל.
  *   * **שני ימי סטטיים לא ברצף** — הגיד מסתגל לאט מהשריר.
  *     pmc.ncbi.nlm.nih.gov/articles/PMC4532714/
  */
@@ -707,7 +806,7 @@ export const TRAINING_DOCTRINE = {
     'סדר השינוי כשתקוע: קודם שבוע ירידה, אחר כך נפח, אחר כך טווח חזרות, אחר כך תדירות, ורק בסוף החלפת תרגיל.',
     'שינוי מבני אחד לתרגיל בשלושה שבועות, ולכל היותר שניים בכל התוכנית בשבוע — מערכת שמשנה שני דברים ביחד לא יכולה לדעת מה עבד.',
     'אימון שלא התקיים נמחק, לא נדחף קדימה, ובשום מצב לא מושלם על ידי הארכת ריצה אחרת.',
-    'רצפת השבוע: ריצה ארוכה אחת, אימון איכות אחד, שני אימוני כוח, ארבעה ימי ריצה.',
+    'רצפת השבוע: ריצה ארוכה אחת, אימון איכות אחד, שני אימוני כוח, וכל הריצות שנקבעו ב-settings.runsPerWeek. מספר הריצות הוא תקרה (שלוש, 22.9.2026) — הרצפה לא יכולה לדרוש יותר ממנה.',
     'שבוע ירידה כל 4–6 שבועות: חצי מהסטים, אותו משקל, ואותה תדירות. בריצה — 30% פחות נפח ואימון איכות אחד מקוצר בעצימות מלאה.',
   ],
   forbidden: [
@@ -903,15 +1002,6 @@ export function planWeek(opts: {
   const s = splitWeek(opts.weekKm, runs, opts.longest30Km ?? 0)
   const polar = blockType(opts.week) === 'polarized'
 
-  const mmss = (m: number) => {
-    let mi = Math.floor(m)
-    let se = Math.round((m - mi) * 60)
-    if (se === 60) {
-      mi += 1
-      se = 0
-    }
-    return `${mi}:${String(se).padStart(2, '0')}`
-  }
   const p = opts.paces
   const easyPace = p ? `${mmss(p.easy[0])}-${mmss(p.easy[1])}` : undefined
 
@@ -1023,9 +1113,15 @@ export function planWeek(opts: {
           focus: s.qualityDays === 1 ? 'האימון האיכותי היחיד בשבוע' : 'אימון הסף של השבוע',
           km: s.quality,
           pace: p ? mmss(vo2 ? p.interval : p.threshold) : undefined,
-          how: vo2
-            ? '15 דקות חימום · 5×3 דקות בקצב 5 ק״מ, שתי דקות ריצה קלה ביניהן · 10 שחרור.'
-            : '15 דקות חימום · 5×5 דקות בקצב סף, דקה ריצה קלה ביניהן · 10 שחרור.',
+          // **הטקסט נגזר מהמרחק ומהקצב, כמו בריצה הארוכה.** נוסח קבוע
+          // ("5×5 דקות סף") מתאר 54 דקות ריצה גם כשהיום הוא 3.3 ק״מ.
+          how: qualityHow({
+            km: s.quality,
+            weekKm: s.weekKm,
+            workPace: p ? (vo2 ? p.interval : p.threshold) : 0,
+            easyPace: p ? (p.easy[0] + p.easy[1]) / 2 : undefined,
+            vo2,
+          }),
           hard: true,
           exercises: runHomeBlock('quality'),
         })

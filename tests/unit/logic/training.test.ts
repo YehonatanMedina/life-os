@@ -20,6 +20,10 @@ import {
   checkWeek,
   longRunBand,
   longRunHow,
+  qualityHow,
+  qualityWorkKm,
+  MIN_QUALITY_WORK_MIN,
+  mmss,
   longShare,
   LONG_MAX_SHARE,
   paces,
@@ -364,6 +368,62 @@ describe('השבוע שהחוקים מייצרים', () => {
       .find((d) => d.dow === 6)!
     expect(day.km).toBeGreaterThanOrEqual(7)
     expect(day.how).not.toContain('70 דקות ומעלה')
+  })
+
+  // -- הטקסט של יום האיכות -----------------------------------------------
+  //
+  // הבאג שהתגלה 27.9.2026, אותה משפחה כמו הארוכה של 4.4: על יום של 3.3
+  // ק״מ היה כתוב "15 דקות חימום · 5×5 דקות סף · 10 שחרור" — 54 דקות
+  // ריצה, כלומר כ-7.6 ק״מ, ובשבוע שתקציב הסף שלו הוא תשע דקות.
+  it('תקציב עבודת האיכות לא עובר את תקרת דניאלס ולא את היום עצמו', () => {
+    const p = paces(29)
+    // 10% מ-13.5 ק״מ = 1.35, וזה פחות מ-55% מהיום (1.8)
+    const work = qualityWorkKm({ km: 3.3, weekKm: 13.5, workPace: p.threshold })
+    expect(work).toBeCloseTo(1.35, 2)
+    expect(work * p.threshold).toBeGreaterThanOrEqual(MIN_QUALITY_WORK_MIN)
+    // וכשהיום קטן, היום הוא שחוסם ולא השבוע
+    expect(qualityWorkKm({ km: 2, weekKm: 40, workPace: p.threshold })).toBeCloseTo(1.1, 2)
+  })
+
+  it('הטקסט של יום האיכות מסתכם למרחק שכתוב על אותו יום', () => {
+    const p = paces(29)
+    const how = qualityHow({
+      km: 3.3,
+      weekKm: 13.5,
+      workPace: p.threshold,
+      easyPace: (p.easy[0] + p.easy[1]) / 2,
+    })
+    expect(how).toContain(mmss(p.threshold))
+    // הנוסח הישן — 5×5 דקות על 3.3 ק״מ — לא יכול לחזור
+    expect(how).not.toContain('5×5')
+    const total = Number(how.match(/כ-(\d+) דקות/)![1])
+    // המרחק כפול הקצב הממוצע, בסובלנות של 15%
+    const implied = 3.3 * ((p.easy[0] + p.easy[1]) / 2)
+    expect(total).toBeLessThan(implied * 1.15)
+    expect(total).toBeGreaterThan(3.3 * p.threshold)
+  })
+
+  it('מתחת לשמונה דקות עבודה הטקסט לא מתחזה לאימון סף', () => {
+    const p = paces(29)
+    const how = qualityHow({ km: 1.2, weekKm: 4, workPace: p.threshold })
+    expect(how).toContain('ספרינטי עלייה')
+    expect(how).not.toContain('בקצב סף')
+  })
+
+  it('יום האיכות בתוכנית מתאר את המרחק שלו, לא נוסח קבוע', () => {
+    const day = planWeek({
+      weekKm: 10.5,
+      week: 1,
+      weeks: 14,
+      longest30Km: 7.01,
+      gymDays: [0, 1, 2, 3, 4],
+      paces: paces(29),
+    }).find((d) => /איכות/.test(d.title))!
+    expect(day.km).toBeGreaterThan(0)
+    const total = Number(day.how!.match(/כ-(\d+) דקות/)![1])
+    // 25 דקות ריצה הן לא 54, והמרחק הוא זה שקובע
+    expect(total).toBeLessThan(day.km! * 9)
+    expect(total).toBeGreaterThan(day.km! * 5)
   })
 
   it('התוכנית לא מייצרת ארוכה שהיא עצמה הייתה מסמנת כהפרה', () => {
