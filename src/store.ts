@@ -7,7 +7,7 @@ import { addDays, iso, logicalDate, parseISO, today, weekStart } from './dates'
 import {
   RUN_GOAL, RUN_MILESTONES, goalRank, isFocusGoal, laddersInOrder, matchesSkill, type SkillLadder,
 } from './skills'
-import { HABITS, RULES, SCHEMA_VERSION, TASKS, TRACKS, WEEKLY, EVENTS, DEFAULT_SETTINGS, seedState, newDeviceId, PHASES } from './seed'
+import { HABITS, NIGHT_STEPS, RULES, SCHEMA_VERSION, TASKS, TRACKS, WEEKLY, EVENTS, DEFAULT_SETTINGS, seedState, newDeviceId, PHASES } from './seed'
 
 const KEY = 'life-os-v1'
 const RESET_KEY = 'life-os-reset-at'
@@ -114,8 +114,15 @@ function mergeDayLogs(a: DayLog[], b: DayLog[]): DayLog[] {
       { map: x.steps, at: x.stepsAt, updatedAt: x.updatedAt },
       { map: y.steps, at: y.stepsAt, updatedAt: y.updatedAt },
     )
+    // היומן הכתוב נבחר לפי החותמת שלו — לא לפי מי נגע ברשומה אחרון
+    const jStamp = (d: DayLog) => d.journalAt ?? (d.journal ? d.updatedAt || 0 : 0)
+    const jWin = jStamp(x) >= jStamp(y) ? x : y
+    const nightAt = Math.max(x.nightAt ?? 0, y.nightAt ?? 0)
     map.set(y.id, {
       ...newer,
+      journal: jWin.journal,
+      journalAt: jWin.journalAt,
+      nightAt: nightAt || undefined,
       habits: h.map,
       habitsAt: h.at,
       steps: st.map,
@@ -338,7 +345,21 @@ const MIGRATIONS: Array<{ id: string; run: (s: AppState) => AppState }> = [
   // מהמאגר הציבורי — הוא הכיל תוכן אישי. המזהים נשארים כדי שלא ירוצו שוב.
   { id: 'no-easy-days-2026-08', run: (s) => s },
   { id: 'morning-news-2026-08', run: (s) => s },
+  // שגרת הערב הפכה למסלול של חלונות: כתיבה על היום, בניית מחר, צ׳קליסט וקריאה.
+  // שלבים שהמשתמש הוסיף בעצמו נשארים בצ׳קליסט, לפני הקריאה.
+  { id: 'night-flow-2026-09', run: migrateNightSteps },
 ]
+
+export function migrateNightSteps(s: AppState): AppState {
+  const h = s.habits.find((x) => x.id === 'hb-night' && !x.deleted)
+  if (!h || (h.steps ?? []).some((x) => x.flow)) return s
+  const seeded = new Set(['hn1', 'hn2', 'hn3', 'hn4'])
+  const extra = (h.steps ?? []).filter((x) => !seeded.has(x.id))
+  const read = NIGHT_STEPS[NIGHT_STEPS.length - 1]
+  const steps = [...NIGHT_STEPS.slice(0, -1), ...extra, read].map((x) => ({ ...x }))
+  const next = { ...h, steps, minutes: Math.max(h.minutes ?? 0, 40), updatedAt: Date.now() }
+  return { ...s, habits: s.habits.map((x) => (x === h ? next : x)) }
+}
 
 function applyMigrations(s: AppState): AppState {
   const done = new Set(s.migrations ?? [])
@@ -972,6 +993,21 @@ export const actions = {
       habitsAt: { ...backfillAt(cur?.habits, cur?.habitsAt, cur?.updatedAt ?? 0), [habitId]: Date.now() },
     })
   },
+  /** קובע שלב לערך מסוים (לא מחליף) — שלבי שגרת הערב נסגרים כשעוברים חלון */
+  setStep(date: ISODate, stepId: string, val: boolean) {
+    const cur = store.get().days.find((d) => d.date === date)
+    if (!!cur?.steps?.[stepId] === val) return
+    actions.patchDay(date, {
+      steps: { ...(cur?.steps ?? {}), [stepId]: val },
+      stepsAt: { ...backfillAt(cur?.steps, cur?.stepsAt, cur?.updatedAt ?? 0), [stepId]: Date.now() },
+    })
+  },
+  /** מה שכתבתי על היום — עם חותמת משלו למיזוג */
+  setJournal(date: ISODate, text: string) {
+    const cur = store.get().days.find((d) => d.date === date)
+    if ((cur?.journal ?? '') === text) return
+    actions.patchDay(date, { journal: text, journalAt: Date.now() })
+  },
   toggleStep(date: ISODate, stepId: string) {
     const cur = store.get().days.find((d) => d.date === date)
     const val = !(cur?.steps?.[stepId])
@@ -1493,6 +1529,14 @@ export function dayLog(s: AppState, date: ISODate): DayLog {
       steps: {},
     }
   )
+}
+
+/** מה שנכתב בשגרת הערב בין שני תאריכים (כולל), מהישן לחדש — רק ימים שכתבו בהם */
+export function journalBetween(s: AppState, from: ISODate, to: ISODate): Array<{ date: ISODate; text: string }> {
+  return alive(s.days)
+    .filter((d) => d.date >= from && d.date <= to && d.journal?.trim())
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((d) => ({ date: d.date, text: d.journal!.trim() }))
 }
 
 export function weekLog(s: AppState, ws: ISODate): WeekLog {

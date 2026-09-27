@@ -153,27 +153,33 @@ test.describe('שימוש אמיתי — בוקר', () => {
     s = await readState(page)
     expect(s.tasks.find((t) => t.title === 'לכתוב סיכום')?.status).toBe('done')
 
-    // --- תכנון מחר מהצעד "לארגן את מחר" בשגרת הערב ---------------------------
-    await habits.getByRole('button', { name: /שגרת ערב/ }).click()
-    await habits.getByRole('button', { name: /^(🌙 )?פתח$/ }).click()
-    const plan = page.getByRole('dialog', { name: 'תכנון מחר' })
+    // --- שגרת הערב: הכפתור בשורת ההרגל פותח את המסלול; החלון "בונים את מחר" --
+    await habits.locator('.item', { hasText: 'שגרת ערב' }).getByRole('button', { name: /^(🌙 )?פתח$/ }).click()
+    const plan = page.getByRole('dialog', { name: 'שגרת ערב' })
     await expect(plan).toBeVisible()
+    await plan.getByPlaceholder(/איך הלך היום/).fill('יום טוב, סגרתי שני דברים.')
+    await plan.getByRole('button', { name: /הבא/ }).click()
     await expect(plan).toContainText('יום חמישי, 10 בספטמבר')
-    const planInput = plan.getByPlaceholder('מה חייב לקרות מחר?')
+    const planInput = plan.getByPlaceholder('+ משימה חדשה למחר…')
     await planInput.fill('להגיש את תרגיל 5')
     await planInput.press('Enter')
     await planInput.fill('לקבוע תור לרופא')
     await planInput.press('Enter')
-    await expect(plan.locator('.item')).toHaveCount(2)
-    // משיכה מהמאגר: המשימה של היום מוצעת (עד שבוע קדימה / בלי תאריך / באיחור)
-    await plan.locator('.tag', { hasText: 'לקרוא את המאמר של כהן' }).click()
-    await expect(plan.locator('.item')).toHaveCount(3)
-    await plan.getByRole('button', { name: /^סגור/ }).click()
+    const forTomorrow = plan.locator('.card', { hasText: 'המשימות של מחר' }).locator('.list .item')
+    await expect(forTomorrow).toHaveCount(2)
+    // משיכה מהמשימות הפתוחות: המשימה של היום מוצעת עם "+ מחר"
+    await plan.getByRole('button', { name: 'למחר: לקרוא את המאמר של כהן' }).click()
+    await expect(forTomorrow).toHaveCount(3)
+    await plan.getByRole('button', { name: 'סגירה' }).click()
     await expect(plan).toHaveCount(0)
     s = await readState(page)
     expect(s.tasks.filter((t) => t.due === TOMORROW && !t.deleted).map((t) => t.title).sort()).toEqual(
       ['להגיש את תרגיל 5', 'לקבוע תור לרופא', 'לקרוא את המאמר של כהן'].sort(),
     )
+    // היומן הכתוב נשמר על היום, והשלב שלו נסגר
+    const today = s.days.find((d: any) => d.date === TODAY)
+    expect(today.journal).toBe('יום טוב, סגרתי שני דברים.')
+    expect(today.steps.hn5).toBe(true)
     // והמשימה שנמשכה כבר לא ברשימת היום
     await expect(tasks.getByText('לקרוא את המאמר של כהן')).toHaveCount(0)
 

@@ -176,7 +176,7 @@ for (const it of due) {
   try {
     await webpush.sendNotification(
       payload.sub,
-      JSON.stringify({ title: it.title, body: it.body, tag: it.id }),
+      JSON.stringify({ title: it.title, body: it.body, tag: it.id, ...(typeof it.url === 'string' ? { url: it.url } : {}) }),
       { TTL: 3600 },
     )
     sent[it.id] = now

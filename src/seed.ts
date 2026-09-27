@@ -6,7 +6,7 @@
 // הזרע נטען פעם אחת בלבד — בהתקנה חדשה. אחר כך הוא לא נוגע בשום דבר.
 // ---------------------------------------------------------------------------
 import type {
-  AppState, CalEvent, HabitDef, Phase, RecurRule, Settings, Task, Track, WeeklyDef,
+  AppState, CalEvent, HabitDef, HabitStep, Phase, RecurRule, Settings, Task, Track, WeeklyDef,
 } from './types'
 
 export const SCHEMA_VERSION = 1
@@ -82,6 +82,14 @@ export const TASKS: Task[] = []
 // ---------------------------------------------------------------------------
 // הרגלים יומיים
 // ---------------------------------------------------------------------------
+export const NIGHT_STEPS: HabitStep[] = [
+  { id: 'hn5', text: 'לכתוב על היום', flow: 'journal' },
+  { id: 'hn2', text: 'לבנות את מחר — יומן, מטרות ומשימות', flow: 'plan' },
+  { id: 'hn1', text: 'לסדר חדר' },
+  { id: 'hn3', text: 'לצחצח שיניים' },
+  { id: 'hn4', text: 'לקרוא — לפחות 5 עמודים', flow: 'read' },
+]
+
 export const HABITS: HabitDef[] = [
   rec({
     id: 'hb-morning', name: 'שגרת בוקר', emoji: '☀️', minutes: 20, order: 0,
@@ -93,14 +101,11 @@ export const HABITS: HabitDef[] = [
     ],
   }),
   rec({ id: 'hb-workout', name: 'אימון', emoji: '🏃', minutes: 40, order: 1, special: 'workout' as const }),
+  // שגרת הערב היא מסלול של חלונות (src/views/NightFlow.tsx): לכתוב על היום,
+  // לבנות את מחר, צ׳קליסט, ולקרוא. שלב עם flow הוא חלון; השאר — הצ׳קליסט.
   rec({
-    id: 'hb-night', name: 'שגרת ערב', emoji: '🌙', minutes: 20, order: 2,
-    steps: [
-      { id: 'hn1', text: 'לסדר איזור' },
-      { id: 'hn2', text: 'לארגן את מחר — מטרות ויומן' },
-      { id: 'hn3', text: 'לצחצח שיניים' },
-      { id: 'hn4', text: 'לקרוא' },
-    ],
+    id: 'hb-night', name: 'שגרת ערב', emoji: '🌙', minutes: 40, order: 2,
+    steps: NIGHT_STEPS,
   }),
 ]
 

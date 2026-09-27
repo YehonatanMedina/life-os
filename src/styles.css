@@ -1283,6 +1283,48 @@ label.field > span, .field > span {
 .steps i { flex: 1; height: 3px; border-radius: 2px; background: var(--line); transition: background .2s; }
 .steps i.on { background: var(--accent); }
 
+/* שגרת הערב — אותו מסלול כמו המעבר השבועי, עם יומן כתוב וסיום של לילה */
+.textarea.journal {
+  min-height: max(220px, 42dvh);
+  font-size: 16px;
+  line-height: 1.7;
+  padding: 14px;
+}
+.night-check .check { width: 30px; height: 30px; }
+/* בתוך שגרת הערב היומן חולק את המסך עם המטרות והמשימות שמתחתיו */
+.flow.night .wk { width: 100%; }
+.flow.night .wk-body { max-height: max(260px, min(46dvh, calc(100dvh - 300px))); }
+.night-end {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  padding: 18px 0 8px;
+}
+.night-end h2 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
+.night-moon { font-size: 56px; line-height: 1; }
+.night-pages {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 8px 18px;
+}
+.night-pages b { font-size: 30px; }
+.week-journal summary {
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style-position: inside;
+}
+.week-journal .list { border-top: 1px solid var(--line-soft); max-height: 50vh; overflow-y: auto; }
+.day-journal {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg-sunk);
+}
+
 /* מצב מיקוד — רק הזמן שנשאר */
 .focus {
   position: fixed;

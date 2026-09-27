@@ -11,6 +11,7 @@ import Projects from './views/Projects'
 import Review, { ReviewLock, reviewPending, reviewWeekOf } from './views/Review'
 import SettingsView from './views/Settings'
 import FocusTimer from './views/FocusTimer'
+import { NightHost, openNight } from './views/NightFlow'
 import AtlasView from './views/Atlas'
 import WorkoutsView from './views/Workouts'
 import { startAtlas } from './atlas'
@@ -237,6 +238,26 @@ function Shell() {
     return () => clearInterval(i)
   }, [s.timer])
 
+  // שגרת הערב נפתחת גם מבחוץ: מהתראת הערב (‎#night‎) — בפתיחה קרה דרך הכתובת,
+  // וכשהאפליקציה כבר פתוחה דרך הודעה מה-Service Worker
+  useEffect(() => {
+    const fromHash = () => {
+      if (location.hash !== '#night') return
+      history.replaceState(null, '', location.pathname + location.search)
+      openNight()
+    }
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'open' && String(e.data.url ?? '').includes('#night')) openNight()
+    }
+    fromHash()
+    window.addEventListener('hashchange', fromHash)
+    navigator.serviceWorker?.addEventListener('message', onMsg)
+    return () => {
+      window.removeEventListener('hashchange', fromHash)
+      navigator.serviceWorker?.removeEventListener('message', onMsg)
+    }
+  }, [])
+
   // מקשי קיצור במחשב
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -363,6 +384,7 @@ function Shell() {
       </nav>
 
       <FocusTimer />
+      <NightHost />
     </div>
   )
 }

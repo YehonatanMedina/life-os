@@ -60,7 +60,7 @@ async function encrypt(plain: string, keyB64: string): Promise<string> {
   return JSON.stringify({ enc: 1, iv: b64u(iv), ct: b64u(new Uint8Array(ct)) })
 }
 // -- לוח התזכורות ------------------------------------------------------------
-type NotifyItem = { id: string; at: number; title: string; body: string }
+type NotifyItem = { id: string; at: number; title: string; body: string; url?: string }
 
 function hhmmToMs(date: string, hhmm: string): number {
   return new Date(`${date}T${hhmm}:00`).getTime()
@@ -75,17 +75,18 @@ export function buildScheduleItems(s: AppState): NotifyItem[] {
   // כלל ברזל: שום התראה לפני שעת הקימה — לא מעירים אותו
   const floorOf = (d: string) => hhmmToMs(d, s.settings.wakeTime)
 
-  const add = (id: string, at: number, title: string, body: string) => {
+  const add = (id: string, at: number, title: string, body: string, url?: string) => {
     const day = id.slice(0, 10)
     if (at < floorOf(day)) return
-    if (at > now - 5 * 60_000 && at < horizon) items.push({ id, at, title, body })
+    if (at > now - 5 * 60_000 && at < horizon) items.push({ id, at, title, body, ...(url ? { url } : {}) })
   }
 
   for (const d of [today(), addDays(today(), 1)]) {
     // שגרות — לפי ההגדרות, לא לפי מופעי היומן, כדי שיעבדו גם אם היומן זז.
     // התראת הקימה כוללת את החדשות — פינג אחד, לא שניים.
     add(`${d}-wake`, hhmmToMs(d, s.settings.wakeTime), 'בוקר טוב ☀️', 'שגרת בוקר — וגיליון החדשות של הבוקר כבר מחכה באפליקציה.')
-    add(`${d}-night`, hhmmToMs(d, '23:00'), 'שגרת ערב 🌙', 'לסדר, לתכנן את מחר, ולישון בזמן.')
+    // נגיעה בהתראה פותחת ישר את שגרת הערב (App.tsx מאזין ל-#night)
+    add(`${d}-night`, hhmmToMs(d, '23:00'), 'שגרת ערב 🌙', 'לכתוב על היום, לבנות את מחר, לסדר — ו-5 עמודים לפני השינה.', './#night')
 
     // מה שקורה היום בלי שעה — יום הולדת, חג, טיסה. פינג אחד, אחרי הקימה.
     const evs = eventsOn(s, d)

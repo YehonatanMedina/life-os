@@ -18,6 +18,7 @@ import NewsCard from './NewsCard'
 import { GoalsCard, WeeklyFlow, reviewPending } from './Review'
 import { Icon } from '../icons'
 import { awaitingReply, nextSweepAt, todayNote, useAtlas } from '../atlas'
+import { NIGHT_STAGES, nightHabit, nightProgress, openNight, resumeStage, stageOfStep } from './NightFlow'
 
 export default function Today({ goto }: { goto: (v: string, arg?: any) => void }) {
   const s = useApp()
@@ -85,6 +86,7 @@ export default function Today({ goto }: { goto: (v: string, arg?: any) => void }
           </div>
         )}
         <Reminders date={date} />
+        <NightNudge date={date} hour={hour} />
       </div>
       <PhaseStrip />
 
@@ -1142,12 +1144,43 @@ function TasksToday({
 }
 
 // ---------------------------------------------------------------------------
+// שגרת הערב — מהשעה שמונה בערב (ואחרי חצות, כל עוד היום הלוגי לא התחלף)
+// כרטיס אחד שפותח את כל המסלול: לכתוב, לבנות את מחר, לסדר, לקרוא.
+// ---------------------------------------------------------------------------
+function NightNudge({ date, hour }: { date: string; hour: number }) {
+  const s = useApp()
+  const h = nightHabit(s)
+  const evening = hour >= 20 || isAfterMidnight()
+  if (!h || !evening) return null
+  const p = nightProgress(s, date)
+  if (p.finished) return null
+  const started = p.done > 0 || !!dayLog(s, date).journal?.trim()
+  const at = resumeStage(s, date)
+  return (
+    <div className="card rail alert" style={{ ['--rail' as any]: 'var(--accent)' }}>
+      <div className="txt">
+        <b>🌙 שגרת ערב</b>
+        <div className="tiny faint">
+          {started
+            ? `ממשיכים מ"${NIGHT_STAGES[at]}" · ${p.done}/${p.total} שלבים`
+            : 'לכתוב על היום, לבנות את מחר שעה־שעה, לסדר — ו-5 עמודים לפני השינה.'}
+        </div>
+      </div>
+      <button className="btn primary sm" onClick={() => openNight()}>
+        {started ? 'להמשיך' : 'להתחיל'}
+      </button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 function DailyHabits({ date }: { date: string }) {
   const s = useApp()
   const log = dayLog(s, date)
   const habits = alive(s.habits).sort((a, b) => a.order - b.order)
   const [openSteps, setOpenSteps] = useState<ID | null>(null)
   const [plan, setPlan] = useState<string | null>(null)
+  const night = nightHabit(s)
 
   return (
     <div className="card">
@@ -1206,6 +1239,12 @@ function DailyHabits({ date }: { date: string }) {
                     ))}
                   </div>
                 )}
+                {/* שגרת הערב היא מסלול של חלונות — הכפתור פותח אותו מהחלון שעוד לא נסגר */}
+                {night?.id === h.id && !on && (
+                  <button className="btn xs primary" onClick={() => openNight()}>
+                    <Icon name="moon" sm /> פתח
+                  </button>
+                )}
                 {steps.length > 0 && (
                   <span className="faint" style={{ fontSize: 13 }}>
                     {expanded ? '▾' : '◂'}
@@ -1235,8 +1274,14 @@ function DailyHabits({ date }: { date: string }) {
                     >
                       {st.text}
                     </div>
-                    {/* השלב "לארגן את מחר" — קיצור ישיר לכתיבת המשימות של מחר */}
-                    {st.text.includes('מחר') && (
+                    {/* שלב שהוא חלון בשגרת הערב — נפתח ישר בחלון שלו */}
+                    {night?.id === h.id && (st.flow || st.text.includes('מחר')) && (
+                      <button className="btn xs" onClick={() => openNight(st.flow ? stageOfStep(st) : 1)}>
+                        <Icon name="moon" sm /> פתח
+                      </button>
+                    )}
+                    {/* שגרה ישנה בלי חלונות: "לארגן את מחר" פותח את תכנון מחר */}
+                    {night?.id !== h.id && st.text.includes('מחר') && (
                       <button className="btn xs" onClick={() => setPlan(addDays(date, 1))}>
                         <Icon name="moon" sm /> פתח
                       </button>

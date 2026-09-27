@@ -13,7 +13,7 @@ import {
   HE_DAYS, addDays, diffDays, minutesToHM, parseISO, shortDate, today, weekDates, weekStart,
 } from './dates'
 import {
-  alive, dayCapacity, dayLog, habitPct, minutesByTrack, minutesOn, periodicDue, trackById,
+  alive, dayCapacity, dayLog, habitPct, journalBetween, minutesByTrack, minutesOn, periodicDue, trackById,
   weekLog, weekMinutes, weekSessions,
 } from './store'
 
@@ -54,6 +54,10 @@ export type WeekStats = {
   daysAtGoal: number
   zeroDays: number
   bestDay?: { date: ISODate; minutes: number }
+  /** כמה ערבים נכתב בהם משהו ביומן של שגרת הערב */
+  journalDays: number
+  /** מתוך כמה ימים שכבר עברו */
+  pastDays: number
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -185,6 +189,8 @@ export function buildWeekStats(s: AppState, ws: ISODate): WeekStats {
     daysAtGoal,
     zeroDays,
     bestDay: best && best.minutes > 0 ? { date: best.date, minutes: best.minutes } : undefined,
+    journalDays: journalBetween(s, ws, addDays(ws, 6)).length,
+    pastDays: past.length,
   }
 }
 
@@ -298,6 +304,15 @@ export function buildInsights(s: AppState, st: WeekStats): Insight[] {
     push('wake', 'warn', `קמת בזמן ב-${st.wakeOnTime} מתוך ${st.wakeAnswered} ימים`, 'שעת הקימה היא העוגן שקובע את היום כולו. אם היא זזה, הכל זז אחריה.')
   }
 
+  // היומן של שגרת הערב — רק כשכבר כותבים בו, כדי לא לנדנד על משהו שלא התחיל
+  if (st.pastDays >= 5 && st.journalDays > 0) {
+    if (st.journalDays >= st.pastDays - 1) {
+      push('journal', 'good', `כתבת ביומן ${st.journalDays} מתוך ${st.pastDays} ערבים`, 'שגרת הערב מחזיקה. הפסקאות האלה הן חומר הגלם של הסקירה — שווה לקרוא אותן לפני שעונים על השאלות.')
+    } else if (st.journalDays < st.pastDays / 2) {
+      push('journal', 'info', `היומן נכתב רק ב-${st.journalDays} מתוך ${st.pastDays} ערבים`, 'ערב בלי כתיבה הוא בדרך כלל ערב שבו שגרת הערב לא התחילה בכלל. פסקה של שלוש שורות מספיקה.')
+    }
+  }
+
   // ---- 7. אנשים ------------------------------------------------------------
   if (st.missedWeekly.length > 0 && st.totalWeekly > 0) {
     push(
@@ -367,6 +382,12 @@ export function digestForClaude(
     L.push(`ממוצע עבודה אחרי לילה טוב: ${round1(st.minutesAfterGood / 60)} שעות; אחרי לילה גרוע: ${round1(st.minutesAfterBad / 60)} שעות.`)
   }
   if (st.missedWeekly.length) L.push(`פריטים שבועיים שלא קרו: ${st.missedWeekly.join(', ')}.`)
+  const journal = journalBetween(s, st.ws, addDays(st.ws, 6))
+  if (journal.length) {
+    L.push('')
+    L.push('### מה כתבתי ביומן בשגרת הערב')
+    for (const j of journal) L.push(`**${HE_DAYS[parseISO(j.date).getDay()]} ${shortDate(j.date)}**\n${j.text}`)
+  }
   if (wl.goals?.length) {
     L.push('')
     L.push('### מטרות־העל שהוגדרו לשבוע הזה')
