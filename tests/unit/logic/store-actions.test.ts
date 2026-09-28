@@ -961,6 +961,34 @@ describe('מיומנויות — זיהוי אוטומטי מהתוכנית', ()
     expect(lad.stages[S.currentStage(get(), lad)].id).toBe('base')
   })
 
+  // 28.9.2026 — שלב חדש נפתח, והאימון שפתח אותו עוד נמדד מולו. 4×45 שניות
+  // סגרו את "עמידה פנים לקיר", ואותן 4×45 עוברות גם את התנאי של השלב הבא
+  // — כלומר המסך היה כותב "עברת" על תנוחה שלא נגעו בה.
+  it('שלב חדש נמדד מהיום שנפתח, ולא מהאימון שסגר את הקודם', async () => {
+    // L-Sit הוא המקרה החד: "הרמת ישבן" ו-Tuck שניהם 3×20 שניות, ולכן
+    // אותם שני אימונים שסוגרים את הראשון עוברים גם את השני.
+    const lad = SKILL_LADDERS.find((x) => x.id === 'sk-lsit')!
+    const at = (date: string, sec: number) =>
+      workout({ date, sets: { 'ex-lsit': [{ sec }, { sec }, { sec }] } })
+    S = await freshStore(blankState({
+      workoutPlan: plan,
+      skills: [{ id: 'sk-lsit', updatedAt: 1, done: ['pseudo'] }],
+      workouts: [at('2026-09-15', 20), at('2026-09-17', 20)],
+    }))
+    const { index, since } = S.currentStageAt(get(), lad)
+    const here = lad.stages[index]
+    expect(here.id).toBe('tuck')
+    expect(since).toBe('2026-09-18')
+    const exIds = S.skillExIds(get(), lad)
+    // בלי `since` האימונים שסגרו את השלב הקודם נספרים גם לשלב החדש
+    expect(S.stageProgress(get(), exIds, here.target)?.ok).toBeGreaterThan(0)
+    // ואיתו — אין עדיין שום אימון שמדד את התנוחה הזו
+    const p = S.stageProgress(get(), exIds, here.target, since)!
+    expect(p.ok).toBe(0)
+    expect(p.met).toBe(false)
+    expect(p.metTwice).toBe(false)
+  })
+
   // 27.9.2026 — "דחיפות על כיסא (מקבילים ביתיים)" נתפסו על ידי המילה
   // "מקבילים" וסגרו את 3×15 של סולם המקבילים. הרגליים על הרצפה נושאות
   // חלק מהמשקל, ולכן זו מדידה של תרגיל אחר.

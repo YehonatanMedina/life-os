@@ -205,6 +205,29 @@ describe('runForecast', () => {
     expect(half.weeks).toBeGreaterThan(12)
   })
 
+  it('תאריך מרוץ מוצג לצד התאריך שהסולם נותן, ולא במקומו', () => {
+    // הפער בין השניים הוא המידע. תחזית שמחביאה אותו היא הבטחה.
+    const s = blankState({ workouts: runs })
+    s.settings.raceDate = '2027-02-26'
+    s.settings.raceName = 'חצי מרתון תל אביב'
+    const f = runForecast(s, '2026-09-19')
+    expect(f.race?.date).toBe('2027-02-26')
+    expect(f.race?.name).toBe('חצי מרתון תל אביב')
+    expect(f.race?.weeks).toBeGreaterThan(20)
+    expect(f.goalDate).toBeTruthy()
+    // וכשהמרוץ מוקדם מהתחזית, האיחור נמדד בשבועות ולא נעלם
+    const near = blankState({ workouts: runs })
+    near.settings.raceDate = '2026-11-06'
+    const g = runForecast(near, '2026-09-19')
+    expect(g.race?.ready).toBe(false)
+    expect(g.race?.late).toBeGreaterThan(0)
+  })
+
+  it('בלי תאריך מרוץ אין שדה מרוץ — ולא תאריך שהומצא', () => {
+    const f = runForecast(blankState({ workouts: runs }), '2026-09-19')
+    expect(f.race).toBeUndefined()
+  })
+
   it('בלי ריצות בכלל יש עדיין כיוון, לא חלוקה באפס', () => {
     const f = runForecast(blankState({ workouts: [] }), '2026-09-19')
     expect(f.items.length).toBe(7)

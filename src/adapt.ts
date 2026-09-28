@@ -25,7 +25,7 @@
 // ---------------------------------------------------------------------------
 import type { AppState, Exercise, ExMetric, ID, ISODate, SetLog, WorkoutDay } from './types'
 import { addDays, diffDays, logicalDate, today as todayISO } from './dates'
-import { alive, currentStage, exerciseHistory, runWeeks, workoutDayOn } from './store'
+import { alive, currentStageAt, exerciseHistory, runWeeks, workoutDayOn } from './store'
 import { SKILL_LADDERS, matchesSkill } from './skills'
 import type { SkillLadder, SkillStage } from './skills'
 import { TENDON_BUDGET, paces, vdot } from './training'
@@ -251,8 +251,15 @@ export function callFor(
   // -- אחיזה סטטית: המדרגה היא התנוחה, לא השעון
   if (ex.metric === 'time') {
     const lad = SKILL_LADDERS.find((l) => matchesSkill(l, ex.name))
-    const stage = lad ? currentStage(s, lad) : undefined
+    const at = lad ? currentStageAt(s, lad) : undefined
+    const stage = at?.index
     const here = lad && stage !== undefined ? lad.stages[stage] : undefined
+    // **רק אימונים שמדדו את התנוחה הזו** (נתפס 28.9.2026). האימון שסגר את
+    // השלב הקודם מדד תנוחה קלה יותר, ו-3×20 שניות ב-Tuck עוברות גם את
+    // התנאי של רגל אחת ישרה — כלומר שלב חדש היה נפתח ומיד נסגר, על
+    // אימונים שלא נגעו בו. `since` הוא היום שאחרי האימון שסגר.
+    const hist2 = at?.since ? hist.filter((h) => h.date >= at.since!) : hist
+    const lastHold = hist2[hist2.length - 1]
     // **"מקסימום זמן" הוא לא יעד.** כשאין מספר בתוכנית אין מול מה למדוד,
     // והאחיזה נתקעת על "הטווח עוד לא נסגר" לנצח — גם כשהיא נסגרה. במקרה
     // כזה המדידה היא תנאי המעבר של השלב הנוכחי בסולם.
@@ -261,11 +268,11 @@ export function callFor(
     // וכשהיעד מגיע מהשלב, גם מספר הסטים מגיע ממנו: שלב שדורש 4 סטים לא
     // נסגר על 3, גם אם ביום הזה מתוכננים 3.
     const hold = range ? need : Math.max(need, staged?.sets ?? need)
-    const hit = sets.filter((x) => (x.sec ?? 0) >= target).length
+    const hit = (lastHold?.sets ?? []).filter((x) => (x.sec ?? 0) >= target).length
     if (target && hit >= hold) {
       // תנאי המעבר נסגר. שלב חדש הוא שינוי מבני, ולכן הוא דורש גם
       // אימון שני שסוגר אותו — לא קופצים שלב על אימון אחד.
-      const prev = hist[hist.length - 2]
+      const prev = hist2[hist2.length - 2]
       const twice = !!prev && prev.sets.filter((x) => (x.sec ?? 0) >= target).length >= hold
       const next = lad && stage !== undefined ? lad.stages[stage + 1] : undefined
       if (twice && next && canChange(ex, date)) {

@@ -16,7 +16,7 @@ import React, { useMemo, useState } from 'react'
 import { actions, useApp } from '../store'
 import { useToast } from '../ui'
 import type { WorkoutDay } from '../types'
-import { HE_DAYS, HE_DAYS_SHORT } from '../dates'
+import { HE_DAYS, HE_DAYS_SHORT, diffDays, niceDate } from '../dates'
 
 import { longestRun, runWeeks } from '../store'
 import { weekStart } from '../dates'
@@ -25,7 +25,8 @@ import { alive } from '../store'
 import { fieldVdot } from '../adapt'
 import {
   DEFAULT_GYM_DAYS, DEFAULT_RUNS_PER_WEEK, HALF_ANCHORS, HOME_TWIN, baseWeeklyKm, blockType,
-  HALF_WEEKLY_CAP_KM, checkWeek, halfPlanWeeks, paces, planWeek, splitWeek, staleDays, volumeRamp,
+  HALF_TRAINING_LONG_KM,
+  HALF_WEEKLY_CAP_KM, checkWeek, halfPlanWeeks, paces, planWeek, raceFit, splitWeek, staleDays, volumeRamp,
   weekChanges, weekForLong,
   weekKinds,
   type CurrentDay,
@@ -43,6 +44,9 @@ export default function WeekPlanCard() {
   // התוכנית בלי לכתוב אותה מחדש.
   const gymDays = s.settings.gymDays ?? DEFAULT_GYM_DAYS
   const runsPerWeek = s.settings.runsPerWeek ?? DEFAULT_RUNS_PER_WEEK
+  // תאריך המרוץ, כשיש אחד. הוא הופך את השאלה: לא "כמה שבועות ייקח" אלא
+  // "מה נספיק עד התאריך" (`raceFit` ב-training.ts).
+  const raceDate = s.settings.raceDate
 
   const view = useMemo(() => {
     // הנפח מתחיל ממה שנרוץ בפועל — הגבוה מבין השבועות השלמים
@@ -57,7 +61,14 @@ export default function WeekPlanCard() {
     // **אורך התוכנית נגזר מהסולם עצמו, לא מתחזית שרצה מודל אחר.**
     // `halfPlanWeeks` מריץ את אותם שבועות ירידה ואת אותה פתיחה שמרנית,
     // ולכן מסך "הדרך" והכרטיס הזה כבר לא נותנים שני תאריכים לאותה שאלה.
-    const weeks = Math.max(4, halfPlanWeeks({ startKm, startLongKm: longest30 }))
+    // **כשיש תאריך מרוץ, הוא זה שקובע את אורך התוכנית.** בלעדיו הכרטיס ענה
+    // על השאלה ההפוכה — כמה שבועות הסולם צריך — וזו תשובה שתמיד מסתדרת,
+    // כי היא נגזרת מעצמה. עם תאריך אמיתי הסולם נמתח על מה שיש, והפער
+    // נאמר בגלוי במקום לתקן את המספר בשקט.
+    const needed = Math.max(4, halfPlanWeeks({ startKm, startLongKm: longest30 }))
+    const toRace = raceDate ? Math.floor(diffDays(todayISO(), raceDate) / 7) + 1 : 0
+    const fit = raceDate && toRace >= 3 ? raceFit({ startKm, startLongKm: longest30 }, toRace) : null
+    const weeks = fit ? fit.weeks : needed
     const ramp = volumeRamp({ startKm, weeks, startLongKm: longest30, capKm: HALF_WEEKLY_CAP_KM })
     const now = ramp[0]
     // הקצבים נגזרים מהריצה המהירה ביותר ב-60 הימים האחרונים. זו לא ריצת
@@ -91,7 +102,7 @@ export default function WeekPlanCard() {
     const stale = staleDays(alive(s.workoutPlan ?? []), days, twinTitle)
 
     return {
-      weeks, startKm, ramp, now, days, changes, fixes, peak, broken, stale, longest30,
+      weeks, startKm, ramp, now, days, changes, fixes, peak, broken, stale, longest30, fit, needed,
       // הנפח שהימים באמת מסתכמים בו — הוא יכול להיות גבוה משורת הסולם
       // כשהארוכה גררה אותו למעלה
       weekKm: split.weekKm,
@@ -101,7 +112,7 @@ export default function WeekPlanCard() {
       runs: runsPerWeek,
       block: blockType(1),
     }
-  }, [s.workouts, s.workoutPlan, gymDays, runsPerWeek])
+  }, [s.workouts, s.workoutPlan, gymDays, runsPerWeek, raceDate])
 
   /** מה שנשלח לחנות: שבעת הימים, ואחריהם התאומים הביתיים של ימי הכושר */
   const toPlan = () => {
@@ -134,7 +145,9 @@ export default function WeekPlanCard() {
         <div style={{ minWidth: 0 }}>
           <b>השבוע לפי תורת האימון</b>
           <div className="tiny faint">
-            נגזר מהנפח שלך ומהחוקים — <span className="ltr">{view.weeks}</span> שבועות לחצי מרתון
+            {raceDate
+              ? `נגזר מהנפח שלך ומהחוקים — ${view.weeks} שבועות עד ${s.settings.raceName || 'המרוץ'}, ${niceDate(raceDate)}`
+              : `נגזר מהנפח שלך ומהחוקים — ${view.weeks} שבועות לחצי מרתון`}
           </div>
         </div>
         <button className="btn xs" onClick={() => setOpen(!open)}>
@@ -156,6 +169,28 @@ export default function WeekPlanCard() {
           שיא מתוכנן <b className="ltr">{view.peak}</b> ק״מ
         </span>
       </div>
+
+      {view.fit && !view.fit.ready && (
+        <div className="run-warn" style={{ margin: '8px 0' }}>
+          <b>הסולם לא מספיק עד התאריך.</b> כדי להגיע למה שחצי מרתון דורש —{' '}
+          <span className="ltr">{HALF_TRAINING_LONG_KM}</span> ק״מ בארוכה ו-
+          <span className="ltr">{HALF_ANCHORS.weeklyKm}</span> בשבוע — צריך{' '}
+          <span className="ltr">{view.needed}</span> שבועות, ויש{' '}
+          <span className="ltr">{view.fit.weeks}</span>. עד המרוץ הסולם מגיע לארוכה של{' '}
+          <span className="ltr">{view.fit.longKm}</span> ק״מ ולנפח של{' '}
+          <span className="ltr">{view.fit.weekKm}</span> ק״מ בשבוע. זה עדיין מרוץ שמסיימים — זה לא
+          המרוץ שרצים בו בכוח. אף חוק כאן לא מוסר כדי שהתאריך יסתדר: תקרת ה-110% לאימון בודד היא
+          הדבר היחיד בריצה עם דוז-רספונס נמדד על פציעות.
+        </div>
+      )}
+
+      {view.fit && view.fit.ready && (
+        <div className="tiny faint" style={{ margin: '8px 0' }}>
+          הסולם מגיע למה שחצי מרתון דורש בתוך <span className="ltr">{view.needed}</span> שבועות, ויש{' '}
+          <span className="ltr">{view.fit.weeks}</span> — <span className="ltr">{view.fit.weeks - view.needed}</span>{' '}
+          שבועות מרווח לשבוע ירידה נוסף או לאימון שלא התקיים.
+        </div>
+      )}
 
       {view.longest30 > 0 && view.weekKm > view.startKm + 0.05 && (
         <div className="tiny faint">

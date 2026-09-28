@@ -138,6 +138,10 @@ export function buildAtlasContext(s: AppState) {
       runsPerWeek: s.settings.runsPerWeek ?? 3,
       capMinutes: s.settings.capMinutes ?? 45,
       capRuns: !!s.settings.capRuns,
+      // המרוץ שהתוכנית בונה אליו. התאריך הוא נתון, והפער בינו לבין הסולם
+      // יושב ב-forecast.run.race.
+      raceDate: s.settings.raceDate,
+      raceName: s.settings.raceName,
     },
     tracks: alive(s.tracks)
       .sort((a, b) => a.order - b.order)

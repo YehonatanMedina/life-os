@@ -466,6 +466,56 @@ export function halfPlanWeeks(from: { startKm: number; startLongKm?: number }, o
 }
 
 /**
+ * **המרוץ הוא תאריך, לא תוצאה של הסולם.** עד 28.9.2026 האפליקציה ידעה רק
+ * לענות "כמה שבועות ייקח" — כלומר היא הסיקה את התאריך מהנפח. מהרגע שיש
+ * מרוץ אמיתי ביומן (חצי מרתון תל אביב, 26.2.2027) השאלה מתהפכת: התאריך
+ * נתון, ומה שנמדד הוא מה שהסולם מספיק להביא עד אליו.
+ *
+ * הפונקציה הזו לא מזיזה שום חוק כדי לגרום לתאריך להסתדר — זה בדיוק מה
+ * שמייצר פציעה. היא מריצה את אותו סולם על מספר השבועות שיש, ומחזירה את
+ * הפער בגלוי: מה הסולם דורש, מה יש, ולאיפה מגיעים בפועל. תוכנית שלא
+ * מספיקה היא מידע, לא באג — והמספר שמתוקן בשקט הוא מה שהופך אותה לכזה.
+ */
+export interface RaceFit {
+  /** שבועות התוכנית שיש עד המרוץ, כולל ההתחדדות ושבוע המרוץ */
+  weeks: number
+  /** מה שהסולם צריך כדי להגיע לעוגני החצי (`halfPlanWeeks`) */
+  needed: number
+  /** האם מה שיש מספיק למה שצריך */
+  ready: boolean
+  /** הריצה הארוכה שהסולם מגיע אליה עד ההתחדדות, בקילומטרים */
+  longKm: number
+  /** הנפח השבועי בשיא הבנייה */
+  weekKm: number
+  /** כמה שבועות חסרים (0 כשמספיק) */
+  short: number
+}
+
+export function raceFit(
+  from: { startKm: number; startLongKm?: number },
+  weeksToRace: number,
+  opts?: { capKm?: number },
+): RaceFit {
+  const weeks = Math.max(3, Math.round(weeksToRace))
+  const needed = halfPlanWeeks(from, opts)
+  const ramp = volumeRamp({
+    startKm: from.startKm,
+    weeks,
+    startLongKm: from.startLongKm,
+    capKm: opts?.capKm ?? HALF_WEEKLY_CAP_KM,
+  })
+  const builds = ramp.filter((w) => w.kind === 'build')
+  return {
+    weeks,
+    needed,
+    ready: needed <= weeks,
+    longKm: builds.length ? r1(Math.max(...builds.map((w) => w.longKm))) : 0,
+    weekKm: builds.length ? r1(Math.max(...builds.map((w) => w.km))) : 0,
+    short: Math.max(0, needed - weeks),
+  }
+}
+
+/**
  * כמה מהשבוע יהיה בריצה הארוכה. תוכניות מפורסמות בנפח הזה נותנות ~46%
  * (pubmed.ncbi.nlm.nih.gov/38695978/), ותוכניות למתחילים אפילו 43–52%.
  * ה"כלל" של 20–30% הוא פולקלור בלי מקור, ובנפח נמוך הוא פשוט לא ישים.

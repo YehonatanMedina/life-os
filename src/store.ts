@@ -1966,6 +1966,12 @@ export function stageProgress(
   s: AppState,
   exIds: ID[] | undefined,
   target: { metric: string; value: number; sets: number; kg?: number } | undefined,
+  /**
+   * היום שממנו השלב הזה התחיל (`currentStageAt().since`). אימון שקדם לו
+   * מדד תנוחה אחרת, ולכן אסור לו לסגור גם את השלב שהוא עצמו פתח — 3×20
+   * שניות ב-Tuck עוברות גם את התנאי של רגל אחת ישרה. (נתפס 28.9.2026.)
+   */
+  since?: ISODate,
 ): { ok: number; need: number; best: number; date?: ISODate; met: boolean; metTwice: boolean } | null {
   if (!target || !exIds?.length) return null
   const need = Math.max(1, target.sets)
@@ -1975,7 +1981,9 @@ export function stageProgress(
   const heavy = (v: SetLog) => (v.kg ?? 0) >= (target.kg ?? 0)
   const okOf = (sets: SetLog[]) => sets.filter((v) => heavy(v) && value(v) >= target.value).length
 
-  const sessions = skillSessions(s, exIds).map((x) => [x.date, x.sets] as const)
+  const sessions = skillSessions(s, exIds)
+    .filter((x) => !since || x.date >= since)
+    .map((x) => [x.date, x.sets] as const)
   const best = Math.max(0, ...sessions.flatMap(([, sets]) => sets.filter(heavy).map(value)))
   const last = sessions[sessions.length - 1]
   const prev = sessions[sessions.length - 2]

@@ -27,7 +27,8 @@ import { addDays, diffDays, today as todayISO, weekStart } from './dates'
 import {
   currentStage, exerciseHistory, lastSkillDate, longestRun, runWeeks, skillDaysPerWeek, skillExIds,
 } from './store'
-import { HALF_ANCHORS, HALF_TRAINING_LONG_KM, baseWeeklyKm, buildWeeksTo } from './training'
+import { HALF_ANCHORS, HALF_TRAINING_LONG_KM, baseWeeklyKm, buildWeeksTo, raceFit, weekForLong } from './training'
+import type { RaceFit } from './training'
 import {
   PRIOR_TOUCHES_PER_WEEK, RUN_MILESTONES, RUN_WEEKLY_GROWTH, focusLadders, stageWeeks,
 } from './skills'
@@ -353,6 +354,12 @@ export interface RunForecast {
   weekKm: number
   items: RunEta[]
   goalDate?: ISODate
+  /**
+   * המרוץ שנקבע ביומן, כשיש אחד. **שני התאריכים מוצגים ביחד בכוונה** —
+   * מתי הסולם מגיע למרחק, ומתי המרוץ קורה. תחזית שמסתירה את הפער הזו
+   * תחזית שמבטיחה.
+   */
+  race?: RaceFit & { date: ISODate; name?: string; late: number }
 }
 
 /**
@@ -397,7 +404,11 @@ export function runForecast(s: AppState, from: ISODate = todayISO()): RunForecas
   // התקרה: 10% מהנפח השבועי, ולעולם לא יותר מק״מ בשבוע
   const cap = Math.min(1, Math.max(0.5, (weekKm || best) * RUN_WEEKLY_GROWTH))
   const growth = clamp(measured ?? DEFAULT_KM_WEEK, 0.25, cap)
-  const start = { startKm: weekKm || best, startLongKm }
+  // **אותו בסיס שהכרטיס בונה ממנו** (`weekForLong`): ארוכה שהגוף כבר עשה
+  // מחייבת נפח שבועי שמחזיק אותה, ובלי זה התחזית והתוכנית נותנות שני
+  // תאריכים לאותה שאלה.
+  const startKm = Math.max(6, weekForLong(weekKm || best, startLongKm))
+  const start = { startKm, startLongKm }
   const items = RUN_MILESTONES.filter((m) => m.km > best).map((m) => {
     // לחצי מרתון אין צורך לרוץ 21 באימון — היעד הוא 18, ואחריו התחדדות
     // ושבוע מרוץ.
@@ -406,12 +417,24 @@ export function runForecast(s: AppState, from: ISODate = todayISO()): RunForecas
     const w = Math.round(clamp(build + (race ? 2 : 0), 1, MAX_WEEKS))
     return { km: m.km, name: m.name, weeks: w, date: addDays(from, w * 7) }
   })
+  const goalDate = items.length ? items[items.length - 1].date : undefined
+  // המרוץ עצמו: מה שהסולם מספיק להביא עד התאריך, ובכמה שבועות התחזית
+  // מאחרת אליו אם היא מאחרת.
+  const raceDate = s.settings?.raceDate
+  let race: RunForecast['race']
+  if (raceDate && diffDays(from, raceDate) > 0) {
+    const toRace = Math.floor(diffDays(from, raceDate) / 7) + 1
+    const fit = raceFit(start, toRace)
+    const late = goalDate ? Math.max(0, Math.round(diffDays(raceDate, goalDate) / 7)) : 0
+    race = { ...fit, date: raceDate, name: s.settings?.raceName, late }
+  }
   return {
     best,
     growth: Math.round(growth * 100) / 100,
     weekKm,
     items,
-    goalDate: items.length ? items[items.length - 1].date : undefined,
+    goalDate,
+    race,
   }
 }
 

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import {
-  actions, alive, currentStage, exerciseHistory, fitnessProgress, ladderFraction, longestRun,
+  actions, alive, currentStage, currentStageAt, exerciseHistory, fitnessProgress, ladderFraction, longestRun,
   runWeeks, skillExIds, skillOf, stageProgress, useApp, workoutDayOn, workoutHasData,
   homeMinutes, workoutMinutes, workoutOn,
 } from '../store'
@@ -365,7 +365,7 @@ function ForecastCard() {
         <div className="item" style={{ minHeight: 40 }}>
           <span style={{ width: 22, flex: '0 0 22px', fontSize: 15 }} aria-hidden="true">🏃</span>
           <div className="txt">
-            <div className="ttl">חצי מרתון</div>
+            <div className="ttl">{run.race?.name || 'חצי מרתון'}</div>
             <div className="tiny faint">
               {nextRun
                 ? `הבא: ${nextRun.name} ${etaText(nextRun.weeks)} · +${run.growth} ק״מ לשבוע`
@@ -373,10 +373,30 @@ function ForecastCard() {
             </div>
           </div>
           <div className="tiny faint ltr" style={{ flexShrink: 0, minWidth: 52, textAlign: 'end' }}>
-            {run.goalDate ? shortDate(run.goalDate) : '—'}
+            {run.race ? shortDate(run.race.date) : run.goalDate ? shortDate(run.goalDate) : '—'}
           </div>
         </div>
       </div>
+      {/* המרוץ הוא תאריך שנקבע, והסולם הוא מה שמספיקים עד אליו. כששניהם
+          קיימים מוצגים שניהם — הפער הוא המידע. */}
+      {run.race && (
+        <div className={run.race.ready ? 'tiny faint' : 'run-warn'} style={{ marginTop: 8 }}>
+          {run.race.ready ? (
+            <>
+              הסולם מגיע לעוגני החצי ב-<span className="ltr">{run.race.needed}</span> שבועות, ויש{' '}
+              <span className="ltr">{run.race.weeks}</span> עד המרוץ.
+            </>
+          ) : (
+            <>
+              <b>המרוץ מקדים את הסולם ב-<span className="ltr">{run.race.short}</span> שבועות.</b> עד{' '}
+              {shortDate(run.race.date)} הסולם מגיע לארוכה של <span className="ltr">{run.race.longKm}</span> ק״מ
+              ולנפח של <span className="ltr">{run.race.weekKm}</span> ק״מ בשבוע, במקום{' '}
+              <span className="ltr">18</span> ו-<span className="ltr">32</span>. זה מספיק לסיים ולא לרוץ —
+              והדרך היחידה לסגור את הפער היא להתחיל את הבנייה עכשיו, לא להאיץ אותה אחר כך.
+            </>
+          )}
+        </div>
+      )}
       {cold.length > 0 && (
         <div className="alert warn tiny" style={{ marginTop: 8 }}>
           {cold.map((f) => f.name).join(', ')} — במוקד, אבל בלי תרגיל בתוכנית
@@ -597,7 +617,9 @@ function StageBlock({
   onGoto?: () => void
 }) {
   const s = useApp()
-  const p = useMemo(() => stageProgress(s, exIds, st.target), [s.workouts, exIds, st.target])
+  // המדידה מתחילה ביום שהשלב נפתח, ולא ביומן כולו
+  const since = useMemo(() => currentStageAt(s, lad).since, [s.workouts, s.skills, lad])
+  const p = useMemo(() => stageProgress(s, exIds, st.target, since), [s.workouts, exIds, st.target, since])
 
   return (
     <div className={`mstone ${state}`}>

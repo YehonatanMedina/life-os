@@ -48,6 +48,7 @@ import {
   splitWeek,
   weekChanges,
   weekForLong,
+  raceFit,
   type DayKind,
 } from '../../../src/training'
 
@@ -774,5 +775,53 @@ describe('מה משתנה מול התוכנית הקיימת', () => {
     const good = proposeWeek({ weekKm: 24, week: 9, weeks: 20 }).map((d) => ({ dow: d.dow, kind: d.kind, title: d.title, km: d.km }))
     const { fixes } = weekChanges(good, proposeWeek({ weekKm: 24, week: 9, weeks: 20 }))
     expect(fixes).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// המרוץ כתאריך. עד 28.9.2026 האפליקציה ידעה לענות רק "כמה שבועות ייקח" —
+// תשובה שנגזרת מהנפח ולכן תמיד מסתדרת. עם מרוץ אמיתי ביומן השאלה הפוכה,
+// והבדיקות כאן שומרות על הדבר היחיד שחשוב בהיפוך הזה: **שאף חוק לא מוסר
+// כדי שהתאריך יסתדר.**
+// ---------------------------------------------------------------------------
+describe('מרוץ בתאריך קבוע', () => {
+  const from = { startKm: weekForLong(10.5, 7.01), startLongKm: 7.01 }
+
+  it('מחזיר את הפער בין מה שהסולם דורש למה שהתאריך נותן', () => {
+    const needed = halfPlanWeeks(from)
+    const fit = raceFit(from, needed - 1)
+    expect(fit.weeks).toBe(needed - 1)
+    expect(fit.needed).toBe(needed)
+    expect(fit.ready).toBe(false)
+    expect(fit.short).toBe(1)
+    const loose = raceFit(from, needed + 3)
+    expect(loose.ready).toBe(true)
+    expect(loose.short).toBe(0)
+  })
+
+  it('תוכנית שלא מספיקה לא מאיצה את הסולם — היא מגיעה לפחות', () => {
+    const tight = raceFit(from, 10)
+    expect(tight.ready).toBe(false)
+    expect(tight.longKm).toBeLessThan(HALF_TRAINING_LONG_KM)
+    expect(tight.weekKm).toBeLessThanOrEqual(HALF_WEEKLY_CAP_KM + 0.05)
+    // והחוק היחיד עם דוז-רספונס נמדד נשמר גם בתוכנית הדחוקה: הארוכה לא
+    // גדלה יותר מ-10% משבוע בנייה לשבוע בנייה.
+    const r = volumeRamp({ startKm: from.startKm, weeks: 10, startLongKm: from.startLongKm })
+    const builds = r.filter((w) => w.kind === 'build')
+    for (let i = 1; i < builds.length; i++) {
+      expect(builds[i].longKm).toBeLessThanOrEqual(builds[i - 1].longKm * (1 + LONG_RUN_WEEKLY_GROWTH) + 0.05)
+    }
+  })
+
+  it('מרוץ ארוך דיו מגיע לשני העוגנים של החצי', () => {
+    const fit = raceFit(from, halfPlanWeeks(from) + 2)
+    expect(fit.longKm).toBeCloseTo(HALF_TRAINING_LONG_KM, 1)
+    expect(fit.weekKm).toBeGreaterThanOrEqual(HALF_ANCHORS.weeklyKm)
+  })
+
+  it('מרוץ קרוב מדי לא מחזיר תוכנית ריקה', () => {
+    const fit = raceFit(from, 1)
+    expect(fit.weeks).toBe(3)
+    expect(fit.longKm).toBeGreaterThan(0)
   })
 })

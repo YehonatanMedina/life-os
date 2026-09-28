@@ -941,7 +941,7 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
     }
     case 'setSettings': {
       const patch = strip(c.patch)
-      const allowed = ['wakeTime', 'bedTime', 'dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'name', 'reviewDow', 'gymDays', 'gymOff', 'runsPerWeek', 'capMinutes', 'capRuns']
+      const allowed = ['wakeTime', 'bedTime', 'dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'name', 'reviewDow', 'gymDays', 'gymOff', 'runsPerWeek', 'capMinutes', 'capRuns', 'raceDate', 'raceName']
       const NUM = ['dailyTokenGoal', 'weeklyTokenGoal', 'tokenMinutes', 'reviewDow', 'runsPerWeek', 'capMinutes']
       // רק מפתחות מותרים, ורק מהטיפוס הנכון — "6" או NaN היו הופכים את הקיבולת ל-NaN
       const RANGE: Record<string, [number, number]> = { dailyTokenGoal: [1, 24], weeklyTokenGoal: [1, 168], tokenMinutes: [10, 240], reviewDow: [0, 6], runsPerWeek: [1, 6], capMinutes: [20, 180] }
@@ -951,6 +951,8 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
       const okVal = (k: string, v: unknown) =>
         k === 'capRuns'
           ? typeof v === 'boolean'
+          : k === 'raceDate'
+          ? isDate(v)
           : k === 'gymDays'
           ? Array.isArray(v) && v.length > 0 && v.every((x) => int(x, 0, 6)) && new Set(v).size === v.length
           : k === 'gymOff'

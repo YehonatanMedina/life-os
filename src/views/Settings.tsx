@@ -99,6 +99,33 @@ export default function SettingsView() {
           {s.settings.weeklyTokenGoal} בשבוע.
         </div>
 
+        <div className="section-title" style={{ margin: '16px 0 4px' }}>המרוץ</div>
+        <div className="tiny faint" style={{ marginBottom: 10 }}>
+          התאריך שהתוכנית בונה אליו. בלעדיו האפליקציה עונה רק "כמה שבועות ייקח" — תשובה שנגזרת
+          מעצמה ולכן תמיד מסתדרת. עם תאריך, הסולם נמתח על מה שיש, והפער נאמר במקום להיעלם.
+        </div>
+        <div className="row" style={{ marginBottom: 12 }}>
+          <div className="grow">
+            <Field label="שם המרוץ">
+              <input
+                value={s.settings.raceName ?? ''}
+                placeholder="חצי מרתון תל אביב"
+                onChange={(e) => set({ raceName: e.target.value })}
+              />
+            </Field>
+          </div>
+          <div className="grow">
+            <Field label="תאריך" htmlFor="">
+              <DateField
+                value={s.settings.raceDate}
+                allowEmpty
+                placeholder="ללא מרוץ"
+                onChange={(v) => set({ raceDate: v })}
+              />
+            </Field>
+          </div>
+        </div>
+
         <div className="section-title" style={{ margin: '16px 0 4px' }}>
           מתי הקיבולת יורדת
         </div>
