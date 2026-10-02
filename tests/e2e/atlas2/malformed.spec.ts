@@ -41,7 +41,10 @@ test('תשובה מרושלת: פקודות חסרות/שגויות מסומנו
   await waitSynced(A.page)
   await openAtlas(A.page)
   await expect(A.page.locator('.bubble.atlas', { hasText: 'עשיתי הרבה' })).toBeVisible({ timeout: 15_000 })
-  await expect.poll(async () => Object.keys((await readState(A.page)).atlasApplied ?? {}).length, { timeout: 15_000 }).toBe(16)
+  // 15 ולא 16: b-op ('teleport') הוא op שאינו מוכר לבנייה הזאת ולכן נשאר ממתין
+  // ולא מסומן כבוצע — ייתכן שבנייה חדשה יותר כן תכיר אותו. b-noop, שאין לו op
+  // בכלל, הוא פקודה פגומה ונסגרת כאן.
+  await expect.poll(async () => Object.keys((await readState(A.page)).atlasApplied ?? {}).length, { timeout: 15_000 }).toBe(15)
 
   const s = await readState(A.page)
   // הטובות

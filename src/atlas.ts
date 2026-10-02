@@ -660,6 +660,13 @@ function applyWhenSafe(messages: AtlasMessage[]) {
 function flushDeferred() {
   if (deferred && (!cloudConfigured() || hasPulledOnce())) applyWhenSafe(cache.messages)
 }
+/**
+ * op שהבנייה שרצה כאן לא מכירה. אטלס כותב פקודות מול הקוד שבמאגר, והמכשיר
+ * יכול להיות על בנייה ישנה (לשונית שנפתחה לפני הפריסה). זה לא כישלון של
+ * הפקודה אלא של התזמון, ולכן היא נשארת ממתינה ולא מסומנת כבוצעה.
+ */
+class UnknownOp extends Error {}
+
 /** מזהה רשומה שנגזר ממזהה הפקודה — אותו מזהה בכל מכשיר */
 const derived = (prefix: string, cmd: AtlasCommand) => `${prefix}-${cmd.id}`
 
@@ -678,6 +685,9 @@ function applyPending(messages: AtlasMessage[]) {
         if (u) undo[c.id] = u
         applied[c.id] = Date.now()
       } catch (e) {
+        // הבנייה כאן לא מכירה את ה-op. לא מסמנים ולא מכריזים על כישלון:
+        // הפקודה תרוץ אחרי שהדף ייטען מחדש, במקום להיעלם לתמיד.
+        if (e instanceof UnknownOp) continue
         console.error('atlas command failed', c, e)
         // מסמנים כבוצעה כדי שלא תרוץ שוב ושוב בכל משיכה
         applied[c.id] = Date.now()
@@ -1117,7 +1127,10 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
       return { kind: 'habit', id: c.habitId, prev }
     }
     default:
-      throw new Error('unknown op ' + c.op)
+      // op שהוא מחרוזת אבל לא מוכר כאן — ייתכן שהוא מוכר בבנייה חדשה יותר.
+      // op חסר או שאינו מחרוזת הוא פקודה פגומה, והיא נכשלת כאן ועכשיו.
+      if (typeof c.op === 'string' && c.op.trim()) throw new UnknownOp('unknown op ' + c.op)
+      throw new Error('unknown op ' + String(c.op))
   }
 }
 
@@ -1311,8 +1324,9 @@ export function describeCommand(c: AtlasCommand): string {
       return `הרגל עודכן: ${hb(c.habitId)}`
     case 'deleteHabit':
       return `הרגל הוסר: ${hb(c.habitId)}`
+    // op שהבנייה הזאת לא מכירה — היא תרוץ אחרי רענון, וכך גם כתוב
     default:
-      return c.op
+      return `${c.op} — ממתין לעדכון האפליקציה`
   }
 }
 

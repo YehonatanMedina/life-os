@@ -229,12 +229,35 @@ describe('ביצוע פקודות — עדכון ומחיקה', () => {
     ])
     expect(await At.pollAtlas()).toBe(true)
     const s = get()
-    expect(Object.keys(s.atlasApplied ?? {}).sort()).toEqual(['bad-1', 'bad-2', 'bad-3', 'bad-4', 'bad-5', 'ok-1'])
+    // bad-1 הוא op לא מוכר ולכן נשאר ממתין — ראה המבחן הבא
+    expect(Object.keys(s.atlasApplied ?? {}).sort()).toEqual(['bad-2', 'bad-3', 'bad-4', 'bad-5', 'ok-1'])
     expect(s.tasks.find((t) => t.id === 't-ok-1')?.title).toBe('אחרי הכשלונות')
     expect(s.tasks.some((t) => t.title === 'בלי מזהה')).toBe(false)
     expect(At.canUndo('bad-1')).toBe(false)
-    expect(At.describeCommand({ id: 'bad-1', op: 'teleport' })).toBe('teleport')
+    expect(At.describeCommand({ id: 'bad-1', op: 'teleport' })).toContain('ממתין לעדכון')
     expect(err).toHaveBeenCalled()
+  })
+
+  // 2.10.2026: אטלס רשם שני אימונים שעברו ב-logWorkout, הלשונית הפתוחה אצלו
+  // הייתה על בנייה מלפני הפריסה, הפקודות סומנו "לא בוצע" — ונעלמו לתמיד, כי
+  // פקודה שסומנה כבוצעה לא רצה שוב. op לא מוכר חייב להישאר ממתין.
+  it('op שהבנייה לא מכירה נשאר ממתין ולא מסומן כבוצע או כנכשל', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await boot(seeded())
+    await thread([
+      atlasMsg('a1', '2026-09-11T09:00:00+03:00', [
+        { id: 'new-1', op: 'opFromTheFuture', date: '2026-09-30' },
+        { id: 'old-1', op: 'addTask', task: { title: 'שרצה כרגיל' } },
+      ]),
+    ])
+    expect(await At.pollAtlas()).toBe(true)
+    const s = get()
+    // הפקודה המוכרת רצה; החדשה לא נגעה בכלום ולא נסגרה
+    expect(s.tasks.find((t) => t.id === 't-old-1')?.title).toBe('שרצה כרגיל')
+    expect(Object.keys(s.atlasApplied ?? {})).toEqual(['old-1'])
+    // ולא מוצג לו "לא בוצע" על משהו שעוד יבוצע
+    expect(At.commandFailed('new-1')).toBe('')
+    expect(err).not.toHaveBeenCalled()
   })
 })
 
