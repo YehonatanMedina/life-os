@@ -440,6 +440,52 @@ describe('undoCommand', () => {
     expect(get().workouts.find((w) => w.date === '2026-09-13' && !w.deleted)).toBeUndefined()
   })
 
+  it('logWorkout מסמן יום שעבר כבוצע, והביטול מוחק אותו', async () => {
+    await boot(blankState({}))
+    await thread([atlasMsg('a1', '2026-10-02T09:00:00+03:00', [
+      { id: 'c-log', op: 'logWorkout', date: '2026-10-01', kind: 'hike', title: 'טיול', km: 14, note: 'הליכה' },
+    ])])
+    await At.pollAtlas()
+    const log = () => get().workouts.find((w) => w.date === '2026-10-01' && !w.deleted)
+    expect(log()?.kind).toBe('hike')
+    expect(log()?.km).toBe(14)
+    expect(!!log()?.finishedAt).toBe(true)
+    // לא היה רישום קודם ולא נרשמו סטים — הביטול מוחק את היום כולו
+    At.undoCommand('c-log')
+    expect(log()).toBeUndefined()
+  })
+
+  it('logWorkout על יום שכבר נרשם שומר את הסטים, והביטול מחזיר רק את מה שנכתב', async () => {
+    const plan = [{ id: 'wd-home', updatedAt: 1, dow: 4, title: 'בבית — ליבה', kind: 'home' as const, exercises: [{ id: 'x1', name: 'מתח', metric: 'bodyweight' as const }] }]
+    await boot(blankState({
+      workoutPlan: plan,
+      workouts: [{ id: 'w-1', updatedAt: 1, date: '2026-10-01', dayId: 'wd-home', title: 'בבית — ליבה', kind: 'home', sets: { x1: [{ reps: 6 }] } }],
+    }))
+    await thread([atlasMsg('a1', '2026-10-02T09:00:00+03:00', [
+      { id: 'c-log2', op: 'logWorkout', date: '2026-10-01', kind: 'hike', title: 'טיול', km: 14 },
+    ])])
+    await At.pollAtlas()
+    const log = () => get().workouts.find((w) => w.date === '2026-10-01' && !w.deleted)
+    expect(log()?.kind).toBe('hike')
+    expect(log()?.sets.x1).toEqual([{ reps: 6 }])
+    At.undoCommand('c-log2')
+    expect(log()?.kind).toBe('home')
+    expect(log()?.km).toBeUndefined()
+    expect(log()?.sets.x1).toEqual([{ reps: 6 }])
+  })
+
+  it('logWorkout עם תאריך או מרחק פסולים נדחה', async () => {
+    await boot(blankState({}))
+    await thread([atlasMsg('a1', '2026-10-02T09:00:00+03:00', [
+      { id: 'c-bad-date', op: 'logWorkout', date: '1.10.2026', kind: 'hike', km: 14 },
+      { id: 'c-bad-km', op: 'logWorkout', date: '2026-10-01', kind: 'hike', km: 900 },
+    ])])
+    await At.pollAtlas()
+    expect((get().workouts ?? []).filter((w) => !w.deleted)).toEqual([])
+    const failed = JSON.parse(localStorage.getItem(CACHE_KEY) ?? '{}').failed ?? {}
+    expect(Object.keys(failed).sort()).toEqual(['c-bad-date', 'c-bad-km'])
+  })
+
   it('setSkill קובע שלב ותרגילים מודדים, והביטול מחזיר את הקודם', async () => {
     await boot(blankState({ skills: [{ id: 'sk-lsit', updatedAt: 1, stageId: 'pseudo' }] }))
     await thread([atlasMsg('a1', '2026-09-13T09:00:00+03:00', [

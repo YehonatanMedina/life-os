@@ -28,6 +28,7 @@ import {
   type RunSummary,
 } from '../runLive'
 import { routeById } from '../runRoutes'
+import { isDistanceKind } from '../types'
 import RunMap from './RunMap'
 
 /** כמה זמן צריך להחזיק כדי לסיים, וכמה כדי לשחרר נעילה */
@@ -63,7 +64,7 @@ export default function RunLive({ onDone }: { onDone: (sum: RunSummary | null) =
   const r = live.run
   const route = routeById(live.routeId)
   const day = (s.workoutPlan ?? []).find((d) => !d.deleted && d.dow === new Date(todayISO() + 'T12:00:00').getDay())
-  const target = day?.kind === 'run' || day?.kind === 'walk' ? day.target : undefined
+  const target = isDistanceKind(day?.kind) ? day!.target : undefined
   const range = target?.pace ? parsePaceRange(target.pace) : null
 
   // השעון רץ בין קריאות GPS לפי השעון עצמו, לא לפי מספר הקריאות

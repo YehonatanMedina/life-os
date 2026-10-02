@@ -241,15 +241,23 @@ export interface HabitDef extends Rec {
 // ---------------------------------------------------------------------------
 // אימונים — התוכנית השבועית, ומה שבאמת בוצע
 // ---------------------------------------------------------------------------
-export type WorkoutKind = 'gym' | 'run' | 'walk' | 'home' | 'rest'
+export type WorkoutKind = 'gym' | 'run' | 'walk' | 'hike' | 'home' | 'rest'
 
 export const WORKOUT_KIND_LABEL: Record<WorkoutKind, string> = {
   gym: 'חדר כושר',
   run: 'ריצה',
   walk: 'הליכה',
+  hike: 'טיול',
   home: 'בית',
   rest: 'מנוחה',
 }
+
+/**
+ * ימים שנמדדים במרחק ובזמן ולא בסטים — ריצה, הליכה וטיול. טיול הוא אימון
+ * לכל דבר: יום של עשרה קילומטרים ברגל הוא נפח אירובי ועומס על הרגליים, גם
+ * אם אף סט לא נרשם בו. הוא לא נספר כקילומטרים של ריצה — ראה `runWeeks`.
+ */
+export const isDistanceKind = (k?: WorkoutKind): boolean => k === 'run' || k === 'walk' || k === 'hike'
 
 /**
  * איך מודדים את התרגיל:

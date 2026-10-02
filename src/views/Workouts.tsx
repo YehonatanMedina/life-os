@@ -22,7 +22,7 @@ import type { SkillLadder, SkillStage } from '../skills'
 import { basisText, etaText, fitnessForecast, runForecast, skillForecast } from '../forecast'
 import type { SkillForecast } from '../forecast'
 import type { ID, WorkoutLog } from '../types'
-import { WORKOUT_KIND_LABEL } from '../types'
+import { WORKOUT_KIND_LABEL, isDistanceKind } from '../types'
 
 /**
  * מעבר לכמה ימים בלי סט נרשם מיומנות נחשבת מוזנחת. שבועיים, כי שבוע
@@ -73,7 +73,7 @@ export default function Workouts() {
             {/* ריצה: כפתור ההתחלה, המסלולים, והריצה האחרונה שנמדדה */}
             <section className="sec">
               <div className="sec-h"><h2>ריצה</h2></div>
-              <RunCard date={date} target={day?.kind === 'run' || day?.kind === 'walk' ? day.target : undefined} />
+              <RunCard date={date} target={isDistanceKind(day?.kind) ? day!.target : undefined} />
             </section>
 
             <section className="sec">

@@ -3,6 +3,7 @@ import type {
   AppState, CalEvent, DayLog, Exercise, ID, ISODate, NewsRating, Rec, RecurRule, Session, SetLog,
   HabitStep, SkillProgress, Task, WeekGoal, WeekLog, WorkoutDay, WorkoutLog,
 } from './types'
+import { isDistanceKind } from './types'
 import { addDays, diffDays, iso, logicalDate, parseISO, today, weekStart } from './dates'
 import {
   RUN_GOAL, RUN_MILESTONES, goalRank, isFocusGoal, laddersInOrder, matchesSkill, type SkillLadder,
@@ -1854,10 +1855,10 @@ export function noGymOn(s: AppState, date: ISODate): boolean {
  * תרגילים נראה בו כמו יום של 38 דקות.
  *
  * מספר גס בכוונה: הוא עונה על "זה נכנס לי לבלוק?", לא חוזה שניות.
- * בריצה והליכה אין סטים — שם היעד הוא המספר, ומחזירים 0.
+ * בריצה, בהליכה ובטיול אין סטים — שם היעד הוא המספר, ומחזירים 0.
  */
 export function workoutMinutes(day?: WorkoutDay): number {
-  if (!day || day.kind === 'run' || day.kind === 'walk') return 0
+  if (!day || isDistanceKind(day.kind)) return 0
   return blockMinutes((day.exercises ?? []).filter((e) => !e.home))
 }
 

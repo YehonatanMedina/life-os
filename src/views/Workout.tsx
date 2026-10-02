@@ -9,7 +9,7 @@ import {
 } from '../dates'
 import { Confirm, useToast, vibrate } from '../ui'
 import type { Exercise, ExMetric, ID, RunTarget, SetLog, WorkoutDay, WorkoutKind, WorkoutLog } from '../types'
-import { WORKOUT_KIND_LABEL } from '../types'
+import { WORKOUT_KIND_LABEL, isDistanceKind } from '../types'
 import { exerciseTutorial, gradePace, paceText, parsePaceRange } from '../skills'
 
 // ---------------------------------------------------------------------------
@@ -25,6 +25,7 @@ export const KIND_EMOJI: Record<WorkoutKind, string> = {
   gym: '🏋️',
   run: '🏃',
   walk: '🚶',
+  hike: '🥾',
   home: '🤸',
   rest: '😌',
 }
@@ -133,7 +134,7 @@ export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => v
     actions.patchWorkout(date, { finishedAt: Date.now() })
     // סימון ההרגל "אימון" של אותו יום — כדי שלא צריך לסמן פעמיים.
     // אם ההרגל נמחק, היום עדיין מסומן כיום אימון — הרישום ביומן לא תלוי בהרגל.
-    const w = day?.kind === 'run' || day?.kind === 'walk' ? 'run' : 'strength'
+    const w = isDistanceKind(day?.kind) ? 'run' : 'strength'
     const hb = alive(s.habits).find((h) => h.special === 'workout')
     if (hb) actions.setHabit(date, hb.id, true, { workout: w })
     else actions.patchDay(date, { workout: w })
@@ -222,7 +223,7 @@ export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => v
 
           {day && (
             <>
-              {(day.kind === 'run' || day.kind === 'walk') && (
+              {isDistanceKind(day.kind) && (
                 <CardioCard date={date} day={day} log={log} onTouch={() => ensure()} />
               )}
 
@@ -246,7 +247,7 @@ export function WorkoutSheet({ date, onClose }: { date: string; onClose: () => v
                 </>
               )}
 
-              {!edit && day.exercises.length === 0 && day.kind !== 'run' && day.kind !== 'walk' && (
+              {!edit && day.exercises.length === 0 && !isDistanceKind(day.kind) && (
                 <div className="card pad">
                   <div className="empty" style={{ padding: '8px 0' }}>
                     אין תרגילים ביום הזה.
@@ -318,7 +319,7 @@ function CardioCard({
   // הריצה הקודמת — כדי לדעת מול מה אתה מתמודד
   const prev = (s.workouts ?? [])
     .filter(
-      (w) => !w.deleted && w.date < date && (w.kind === 'run' || w.kind === 'walk') && (w.km || w.minutes),
+      (w) => !w.deleted && w.date < date && isDistanceKind(w.kind) && (w.km || w.minutes),
     )
     .sort((a, b) => a.date.localeCompare(b.date))
     .pop()
@@ -331,7 +332,7 @@ function CardioCard({
   return (
     <div className="card pad">
       <div className="spread" style={{ marginBottom: 10 }}>
-        <b>{day.kind === 'run' ? 'הריצה' : 'ההליכה'}</b>
+        <b>{day.kind === 'run' ? 'הריצה' : day.kind === 'hike' ? 'הטיול' : 'ההליכה'}</b>
         {prev && (
           <span className="tiny faint">
             קודם: {prev.km ? `${prev.km} ק״מ` : ''}
@@ -1040,7 +1041,7 @@ export function PlanSheet({ onClose }: { onClose: () => void }) {
                       />
                     </label>
 
-                    {(day.kind === 'run' || day.kind === 'walk') && <TargetEditor day={day} />}
+                    {isDistanceKind(day.kind) && <TargetEditor day={day} />}
 
                     <ExerciseEditor day={day} />
 
@@ -1237,7 +1238,7 @@ function RunProgress() {
   const runs = useMemo(
     () =>
       (s.workouts ?? [])
-        .filter((w) => !w.deleted && (w.kind === 'run' || w.kind === 'walk') && (w.km || w.minutes))
+        .filter((w) => !w.deleted && isDistanceKind(w.kind) && (w.km || w.minutes))
         .sort((a, b) => a.date.localeCompare(b.date)),
     [s.workouts],
   )

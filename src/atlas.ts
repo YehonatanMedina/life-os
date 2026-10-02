@@ -28,6 +28,7 @@ import { cloudConfigured, hasPulledOnce, nudgePush } from './cloud'
 import { today } from './dates'
 import type { CalEvent, Exercise, HabitDef, HabitStep, ID, RecurRule, SkillProgress, Task, Track, WeeklyDef, WeekGoal, WorkoutDay, WorkoutLog } from './types'
 import { ladder } from './skills'
+import { WORKOUT_KIND_LABEL } from './types'
 
 const TOKEN_KEY = 'life-os-gh-token'
 const LOGIN_KEY = 'life-os-gh-login'
@@ -80,7 +81,7 @@ interface AtlasCache {
 type UndoEntry =
   | { kind: 'event' | 'task' | 'rule' | 'workoutDay' | 'track' | 'weekly' | 'habit'; id: ID; prev: any | null; patch?: Record<string, unknown> }
   | { kind: 'exercise'; dayId: ID; id: ID; prev: Exercise | null; index?: number }
-  | { kind: 'workoutLog'; date: string; prev: Partial<WorkoutLog> | null }
+  | { kind: 'workoutLog'; date: string; prev: Partial<WorkoutLog> | null; wipe?: boolean }
   | { kind: 'weekGoals'; ws: string; prev: WeekGoal[] | undefined }
   | { kind: 'settings'; prev: Record<string, unknown>; patch?: Record<string, unknown> }
   | { kind: 'skill'; id: string; prev: SkillProgress | null; patch: Record<string, unknown> }
@@ -894,6 +895,41 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
       actions.patchWorkout(c.date, { dayId: day.id, title: day.title, kind: day.kind })
       return { kind: 'workoutLog', date: c.date, prev }
     }
+    // אימון שנעשה בפועל ולא נרשם — טיול, ריצה בחו״ל, אימון מאולתר. זה מה
+    // שקורה כשסוגרים אימון במסך האימון, רק שאטלס יכול לרשום יום שעבר: הוא
+    // שומע "עשיתי אתמול 14 ק״מ הליכה" ומסמן את היום ירוק במקום לבקש ממנו
+    // למלא טופס על משהו שכבר קרה.
+    case 'logWorkout': {
+      if (!isDate(c.date)) throw new Error('logWorkout: bad date')
+      const cur = (s.workouts ?? []).find((w) => w.date === c.date && !w.deleted)
+      const patch: Record<string, any> = {}
+      if (txt(c.title)) patch.title = String(c.title)
+      if (typeof c.kind === 'string' && c.kind in WORKOUT_KIND_LABEL) patch.kind = c.kind
+      if (c.dayId !== undefined) {
+        const day = alive(s.workoutPlan ?? []).find((d) => d.id === c.dayId)
+        if (!day) throw new Error('day not found')
+        patch.dayId = day.id
+        if (!patch.title) patch.title = day.title
+        if (!patch.kind) patch.kind = day.kind
+      }
+      // מרחק וזמן בטווח שאפשר באמת ללכת או לרוץ ביום אחד — מספר שגוי כאן
+      // נכנס לחישוב הקצבים ולתחזית חצי המרתון
+      if (c.km !== undefined) {
+        if (typeof c.km !== 'number' || !Number.isFinite(c.km) || c.km <= 0 || c.km > 200) throw new Error('logWorkout: bad km')
+        patch.km = Math.round(c.km * 100) / 100
+      }
+      if (c.minutes !== undefined) {
+        if (typeof c.minutes !== 'number' || !Number.isFinite(c.minutes) || c.minutes <= 0 || c.minutes > 1440) throw new Error('logWorkout: bad minutes')
+        patch.minutes = Math.round(c.minutes)
+      }
+      if (txt(c.note)) patch.note = String(c.note)
+      if (c.finished !== false) patch.finishedAt = cur?.finishedAt ?? Date.now()
+      if (!Object.keys(patch).length) throw new Error('logWorkout: nothing to log')
+      // הביטול מחזיר רק את השדות שנכתבו. לא היה רישום בכלל — הוא נמחק.
+      const prev = cur ? Object.fromEntries(Object.keys(patch).map((k) => [k, (cur as any)[k]])) : null
+      actions.patchWorkout(c.date, patch)
+      return { kind: 'workoutLog', date: c.date, prev, wipe: !cur }
+    }
     case 'addExercise': {
       const day = (s.workoutPlan ?? []).find((d) => d.id === c.dayId)
       if (!day) throw new Error('day not found')
@@ -1108,7 +1144,12 @@ export function undoCommand(cmdId: string): boolean {
     case 'workoutLog': {
       // אם לא היה רישום קודם ולא נרשם מאז כלום — מוחקים. נרשמו סטים בינתיים,
       // הם לא הולכים לאיבוד: רק ההצמדה לתוכנית חוזרת למה שהייתה.
-      if (u.prev) actions.patchWorkout(u.date, u.prev)
+      if (u.wipe) {
+        const cur = (store.get().workouts ?? []).find((w) => w.date === u.date && !w.deleted)
+        const touched = Object.values(cur?.sets ?? {}).some((arr) => arr.some((x) => x && (x.kg || x.reps || x.sec)))
+        if (touched) actions.patchWorkout(u.date, { km: undefined, minutes: undefined, note: undefined, finishedAt: undefined })
+        else actions.deleteWorkout(u.date)
+      } else if (u.prev) actions.patchWorkout(u.date, u.prev)
       else if (!workoutHasData((store.get().workouts ?? []).find((w) => w.date === u.date && !w.deleted)))
         actions.deleteWorkout(u.date)
       break
@@ -1218,6 +1259,10 @@ export function describeCommand(c: AtlasCommand): string {
       return `יום אימון הוסר: ${wd(c.dayId)}`
     case 'setWorkoutFor':
       return `האימון של ${c.date ?? ''} הוחלף ל: ${wd(c.dayId)}`
+    case 'logWorkout': {
+      const bits = [c.km ? `${c.km} ק״מ` : '', c.minutes ? `${c.minutes} דק׳` : ''].filter(Boolean).join(' · ')
+      return `נרשם אימון ב-${c.date ?? ''}: ${c.title ?? (c.dayId ? wd(c.dayId) : 'אימון')}${bits ? ` · ${bits}` : ''}`
+    }
     case 'addExercise':
       return `תרגיל נוסף: ${c.exercise?.name ?? ''}`
     case 'patchExercise':
