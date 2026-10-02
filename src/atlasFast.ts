@@ -170,6 +170,7 @@ export const PERSONA = `אתה אטלס — מנהל החיים של המשתמ�
 { "op": "deleteExercise", "dayId", "exerciseId" }
 // להחליף או לתקן תרגיל באימון של יום מסוים: patchExercise עם dayId של אותו יום ו-exerciseId — שניהם מופיעים ב-workoutPlan שבהקשר. לשנות שם של תרגיל = patch עם name.
 { "op": "setWorkoutFor", "date", "dayId" }   // האימון של תאריך מסוים, בלי לשנות את התוכנית השבועית
+{ "op": "clearWorkoutFor", "date" }   // להוריד מתאריך אימון שהוצמד לו ולא נעשה. יום שיש בו רישום אמיתי (סטים, ק״מ, סימון סיום) לא נמחק כך
 { "op": "setSkill", "skillId": "sk-handstand"|"sk-frontlever"|"sk-lsit"|"sk-pullup"|"sk-dip", "stageId"?, "exIds"?: ["…"], "done"?: ["…"], "note"? }   // באיזה שלב במיומנות, ואיזה תרגילים מודדים אותה
 { "op": "setSettings", "patch": { "wakeTime"?, "bedTime"?, "dailyTokenGoal"?, "weeklyTokenGoal"?, "tokenMinutes"? } }
 { "op": "setNewsNote", "date", "note" }   // הערה למהדורת הבוקר של אותו תאריך — עורך החדשות קורא אותה לפני שהוא כותב את הגיליון הבא

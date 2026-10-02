@@ -895,6 +895,19 @@ function applyCommand(c: AtlasCommand): UndoEntry | null {
       actions.patchWorkout(c.date, { dayId: day.id, title: day.title, kind: day.kind })
       return { kind: 'workoutLog', date: c.date, prev }
     }
+    // לבטל הצמדה של תאריך: אימון שהוצמד מראש ולא נעשה. בלי זה הדרך היחידה
+    // "להוריד" אימון מיום היא להצמיד לו יום אחר, וזה לא אותו דבר.
+    case 'clearWorkoutFor': {
+      if (!isDate(c.date)) throw new Error('clearWorkoutFor: bad date')
+      const cur = (s.workouts ?? []).find((w) => w.date === c.date && !w.deleted)
+      if (!cur) return null
+      // רישום אמיתי לא נמחק דרך הפקודה הזאת — סטים, קילומטרים או סימון סיום
+      // הם מה שהוא עשה, ולא תכנון.
+      if (workoutHasData(cur)) throw new Error('clearWorkoutFor: יש רישום אמיתי ביום הזה')
+      const prev = { dayId: cur.dayId, title: cur.title, kind: cur.kind }
+      actions.deleteWorkout(c.date)
+      return { kind: 'workoutLog', date: c.date, prev }
+    }
     // אימון שנעשה בפועל ולא נרשם — טיול, ריצה בחו״ל, אימון מאולתר. זה מה
     // שקורה כשסוגרים אימון במסך האימון, רק שאטלס יכול לרשום יום שעבר: הוא
     // שומע "עשיתי אתמול 14 ק״מ הליכה" ומסמן את היום ירוק במקום לבקש ממנו
@@ -1259,6 +1272,8 @@ export function describeCommand(c: AtlasCommand): string {
       return `יום אימון הוסר: ${wd(c.dayId)}`
     case 'setWorkoutFor':
       return `האימון של ${c.date ?? ''} הוחלף ל: ${wd(c.dayId)}`
+    case 'clearWorkoutFor':
+      return `האימון של ${c.date ?? ''} הוסר מהיום`
     case 'logWorkout': {
       const bits = [c.km ? `${c.km} ק״מ` : '', c.minutes ? `${c.minutes} דק׳` : ''].filter(Boolean).join(' · ')
       return `נרשם אימון ב-${c.date ?? ''}: ${c.title ?? (c.dayId ? wd(c.dayId) : 'אימון')}${bits ? ` · ${bits}` : ''}`
