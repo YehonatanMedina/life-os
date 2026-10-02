@@ -142,7 +142,7 @@ export async function auditScreen(page: Page, screen: string, opts: { root?: str
       const seen = new Set<string>()
       // מותר: אימוג׳י של מסלול/הרגל/פריט שבועי של המשתמש, ואייקון סוג האימון
       const USER_EMOJI = /^[📘🔭🚀🌿☀️🏃📚🌙🕯️🫂📞🧺🎸🎯🧪🎨🛠️🎓💡📈🧭🧘💧🥗🚿📝🎹🌱🧹🪥📵🛏️]/u
-      const WORKOUT_KIND = /^[🏋️🏃🚶🤸😌]/u
+      const WORKOUT_KIND = /^[🏋️🏃🚶🤸😌🥾]/u
       const allowed = (el: Element, t: string) =>
         (USER_EMOJI.test(t) && !!el.closest('.focus-track, .card.rail, .tag, .item, .kcard, .chip.tinted, .sheet, .flow-head, .bubble')) ||
         (WORKOUT_KIND.test(t) && !!el.closest('.card, .flow-head') && !/אימונים/.test(t))
