@@ -212,7 +212,7 @@ describe('atlasCheckin — הפינג של אטלס בבלוק עמוק בלי �
 describe('atlasReminders — תזכורות בשעה מדויקת מ-reminders.json', () => {
   const rem = (hhmm: string, id = 'r1', date = TODAY) => ({ id, at: `${date}T${hhmm}:00+03:00`, title: 'אטלס', body: 'תזכורת: הרצאה' })
 
-  it('תזכורת שהגיע זמנה (בתוך 45 דקות) נשלחת עם המזהה atlas-<id>', async () => {
+  it('תזכורת שהגיע זמנה נשלחת עם המזהה atlas-<id>', async () => {
     const r = await run({ reminders: [rem('09:20')] }, at('09:25'))
     expect(r.sends).toHaveLength(1)
     expect(r.sends[0].payload).toEqual({ title: 'אטלס', body: 'תזכורת: הרצאה', tag: 'atlas-r1' })
@@ -229,11 +229,26 @@ describe('atlasReminders — תזכורות בשעה מדויקת מ-reminders.j
     expect(r.sends).toHaveLength(1)
   })
 
-  it('גבול החלון: 44 דקות — כן, 45 ומעלה — לא; עתיד — לא', async () => {
-    expect((await run({ reminders: [rem('08:41')] }, at('09:25'))).sends).toHaveLength(1)
-    expect((await run({ reminders: [rem('08:40')] }, at('09:25'))).sends).toHaveLength(0)
+  // החלון היה 45 דקות וזה הפיל שמונה מעשר תזכורות ב-7-9.10: הקרון של GitHub מגיע
+  // באיחור של עשרות דקות. עכשיו הגבול הוא ארבע שעות ואותו יום בשעון ישראל.
+  it('גבול האיחור: שעתיים — כן, מעל ארבע שעות — לא; עתיד — לא', async () => {
+    expect((await run({ reminders: [rem('07:25')] }, at('09:25'))).sends).toHaveLength(1)
+    expect((await run({ reminders: [rem('08:40')] }, at('09:25'))).sends).toHaveLength(1)
+    expect((await run({ reminders: [rem('05:24')] }, at('09:25'))).sends).toHaveLength(0)
     expect((await run({ reminders: [rem('09:26')] }, at('09:25'))).sends).toHaveLength(0)
     expect((await run({ reminders: [rem('09:25')] }, at('09:25'))).sends).toHaveLength(1)
+  })
+
+  it('תזכורת של אתמול לא קמה לתחייה — גם אם המזהה שלה נוקה מ-notify-sent', async () => {
+    const y = new Date(Date.parse(`${TODAY}T00:00:00+03:00`) - 86_400_000).toLocaleDateString('en-CA')
+    expect((await run({ reminders: [rem('23:50', 'old', y)] }, at('01:30'))).sends).toHaveLength(0)
+  })
+
+  it('תזכורת שמאחרת ביותר מעשר דקות אומרת לאיזו שעה היא הייתה', async () => {
+    const r = await run({ reminders: [rem('08:40')] }, at('09:25'))
+    expect(r.sends[0].payload.body).toBe('תזכורת: הרצאה\n(התזכורת הייתה ל-08:40)')
+    const onTime = await run({ reminders: [rem('09:20')] }, at('09:25'))
+    expect(onTime.sends[0].payload.body).toBe('תזכורת: הרצאה')
   })
 
   it('אזור זמן: ISO ב-UTC מתורגם נכון (06:20Z = 09:20 בישראל)', async () => {
@@ -263,10 +278,17 @@ describe('atlasReminders — תזכורות בשעה מדויקת מ-reminders.j
 describe('שליחה, מנוי מת וניקוי', () => {
   const item = (id: string, hhmm: string) => ({ id, at: Date.parse(at(hhmm)), title: 'בוקר טוב ☀️', body: 'שגרת בוקר' })
 
+  // "עתיק" הוא מעל ארבע שעות. 08:00 מול 09:25 הוא איחור של שעה וחצי והוא כן נשלח —
+  // זו בדיוק ההקלה שהוחזרה אחרי שחלון 45 הדקות הפיל תזכורות בגלל איחור הקרון.
   it('פריטי notify.json שהגיע זמנם נשלחים; עתידיים ועתיקים לא', async () => {
-    const r = await run({ notify: { items: [item('due', '09:20'), item('future', '09:30'), item('old', '08:00')] } }, at('09:25'))
+    const r = await run({ notify: { items: [item('due', '09:20'), item('future', '09:30'), item('old', '05:00')] } }, at('09:25'))
     expect(r.sends.map((s) => s.payload.tag)).toEqual(['due'])
     expect(r.logs.at(-1)).toBe('sent 1/1')
+  })
+
+  it('פריט notify.json באיחור של שעה וחצי כן נשלח', async () => {
+    const r = await run({ notify: { items: [item('late', '08:00')] } }, at('09:25'))
+    expect(r.sends.map((s) => s.payload.tag)).toEqual(['late'])
   })
 
   it('מנוי מת (410/404) מסומן כנשלח כדי לא לנסות שוב; כשל אחר (500) לא', async () => {

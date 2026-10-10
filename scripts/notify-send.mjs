@@ -22,7 +22,15 @@ if (!GIST_TOKEN || !GIST_ID || !NOTIFY_KEY || !VAPID_PUBLIC || !VAPID_PRIVATE) {
 
 const FILE = 'notify.json'
 const SENT_FILE = 'notify-sent.json'
-const WINDOW_MS = 45 * 60_000 // לא שולחים דבר שהתאחר ביותר מ-45 דקות
+// כמה אפשר לאחר ועוד לשלוח. היה 45 דקות, וזה היה צר מדי: הקרון של GitHub
+// (*/10) מגיע באיחור של עשרות דקות, ומתוך עשר תזכורות ב-7-9.10 רק שתיים נשלחו —
+// אחת מהן באיחור של 31 דקות, כלומר ממש על גבול החלון. תזכורת שמאחרת בשעה עדיין
+// שווה משהו; תזכורת שנעלמת בשקט לא. הגבול האמיתי הוא סוף היום, ולכן יש גם
+// שמירה על אותו יום בשעון ישראל (למטה) — בלעדיה תזכורת של אתמול הייתה יכולה
+// לקום לתחייה אחרי שהמזהה שלה נוקה מ-notify-sent.json.
+const MAX_LATE_MS = 4 * 3600_000
+// מעל זה אומרים בגוף ההתראה לאיזו שעה היא הייתה, כדי שאיחור לא ייראה כמו עכשיו
+const LATE_NOTE_MS = 10 * 60_000
 
 const api = (path, init = {}) =>
   fetch('https://api.github.com' + path, {
@@ -125,6 +133,14 @@ async function atlasCheckin(gist, now) {
   return out
 }
 
+/** גוף ההתראה. אם היא מאחרת בהרבה — אומרים לאיזו שעה היא הייתה. */
+function lateBody(it, now) {
+  const body = String(it.body ?? '')
+  if (now - it.at < LATE_NOTE_MS) return body
+  const note = `התזכורת הייתה ל-${ilTime(it.at)}`
+  return body ? `${body}\n(${note})` : note
+}
+
 const res = await api(`/gists/${GIST_ID}`)
 if (!res.ok) {
   console.log('gist fetch failed', res.status)
@@ -161,7 +177,7 @@ try {
   console.log('atlas items failed:', e.message)
 }
 const due = [...(payload.items ?? []), ...extra].filter(
-  (it) => it.at <= now && it.at > now - WINDOW_MS && !sent[it.id],
+  (it) => it.at <= now && it.at > now - MAX_LATE_MS && ilDate(it.at) === ilDate(now) && !sent[it.id],
 )
 
 if (!due.length) {
@@ -176,7 +192,7 @@ for (const it of due) {
   try {
     await webpush.sendNotification(
       payload.sub,
-      JSON.stringify({ title: it.title, body: it.body, tag: it.id, ...(typeof it.url === 'string' ? { url: it.url } : {}) }),
+      JSON.stringify({ title: it.title, body: lateBody(it, now), tag: it.id, ...(typeof it.url === 'string' ? { url: it.url } : {}) }),
       { TTL: 3600 },
     )
     sent[it.id] = now
