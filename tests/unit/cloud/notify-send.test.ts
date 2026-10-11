@@ -229,8 +229,8 @@ describe('atlasReminders — תזכורות בשעה מדויקת מ-reminders.j
     expect(r.sends).toHaveLength(1)
   })
 
-  // החלון היה 45 דקות וזה הפיל שמונה מעשר תזכורות ב-7-9.10: הקרון של GitHub מגיע
-  // באיחור של עשרות דקות. עכשיו הגבול הוא ארבע שעות ואותו יום בשעון ישראל.
+  // החלון היה 45 דקות וזה הפיל שמונה מעשר תזכורות ב-7-9.10: הקרון כתוב */10 אבל
+  // GitHub מריץ אותו חמש-שש פעמים ביום. עכשיו הגבול הוא ארבע שעות בלבד.
   it('גבול האיחור: שעתיים — כן, מעל ארבע שעות — לא; עתיד — לא', async () => {
     expect((await run({ reminders: [rem('07:25')] }, at('09:25'))).sends).toHaveLength(1)
     expect((await run({ reminders: [rem('08:40')] }, at('09:25'))).sends).toHaveLength(1)
@@ -239,9 +239,21 @@ describe('atlasReminders — תזכורות בשעה מדויקת מ-reminders.j
     expect((await run({ reminders: [rem('09:25')] }, at('09:25'))).sends).toHaveLength(1)
   })
 
-  it('תזכורת של אתמול לא קמה לתחייה — גם אם המזהה שלה נוקה מ-notify-sent', async () => {
+  // תזכורת של אתמול לא קמה לתחייה גם בלי גבול יום: חלון ארבע השעות הוא מה שמונע
+  // את זה, גם אחרי שהמזהה נוקה מ-notify-sent (הניקוי הוא ב-48 שעות).
+  it('תזכורת מאתמול לא קמה לתחייה — חלון ארבע השעות, לא גבול היום', async () => {
     const y = new Date(Date.parse(`${TODAY}T00:00:00+03:00`) - 86_400_000).toLocaleDateString('en-CA')
-    expect((await run({ reminders: [rem('23:50', 'old', y)] }, at('01:30'))).sends).toHaveLength(0)
+    expect((await run({ reminders: [rem('09:20', 'old', y)] }, at('09:25'))).sends).toHaveLength(0)
+  })
+
+  // השלמה מאוחרת לא מצפצפת בלילה. זה מה שבאמת חוסם תזכורת של 21:30 שהקרון הגיע
+  // אליה רק ב-00:32 (10.10) — היא בתוך החלון, אבל עדיף שתיפול מאשר שתעיר אותו.
+  it('שקט לילי: לפני 06:00 לא נשלחת אפילו תזכורת בתוך החלון', async () => {
+    const y = new Date(Date.parse(`${TODAY}T00:00:00+03:00`) - 86_400_000).toLocaleDateString('en-CA')
+    expect((await run({ reminders: [rem('21:30', 'last-night', y)] }, at('00:32'))).sends).toHaveLength(0)
+    expect((await run({ reminders: [rem('02:30')] }, at('02:35'))).sends).toHaveLength(0)
+    const ok = await run({ reminders: [rem('05:50')] }, at('06:01'))
+    expect(ok.sends.map((s) => s.payload.tag)).toEqual(['atlas-r1'])
   })
 
   it('תזכורת שמאחרת ביותר מעשר דקות אומרת לאיזו שעה היא הייתה', async () => {
